@@ -1,0 +1,21 @@
+# environment
+.env
+.env.local
+.env.*.local
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# deployment
+.vercel/
+
+# editor / os
+.idea/
+.vscode/
+*.swp
+.DS_Store

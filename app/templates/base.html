@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}GAL{% endblock %} — Global Achievement List</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">GAL</a>
+      <nav class="nav">
+        <a class="nav-link" href="/achievements">Achievements</a>
+        <a class="nav-link" href="/players">Players</a>
+        <a class="nav-link" href="/reports">Reports</a>
+      </nav>
+    </div>
+  </header>
+  <main class="container main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">
+    <div class="container">
+      <span>Global Achievement List</span>
+    </div>
+  </footer>
+</body>
+</html>

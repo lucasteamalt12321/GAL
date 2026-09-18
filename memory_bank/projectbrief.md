@@ -42,7 +42,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 
 | ID  | Deliverable                       | Status       | Вес |
 |-----|-----------------------------------|--------------|-----|
-| D1  | Foundation + Memory Bank          | in_progress  | 5   |
+| D1  | Foundation + Memory Bank          | completed    | 5   |
 | D2  | Database Schema + RLS             | pending      | 10  |
 | D3  | Authentication                    | pending      | 10  |
 | D4  | Achievements CRUD                 | pending      | 10  |

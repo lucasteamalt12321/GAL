@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Global Achievement List</h1>
+  <p class="lead">Глобальная платформа рейтинга человеческих достижений.</p>
+  <p class="sub">Сложность достижения определяется теми, кто его уже выполнил.</p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="/achievements">Leaderboard</a>
+    <a class="btn" href="/achievements/create">Предложить достижение</a>
+  </div>
+</section>
+<section class="placeholder">
+  <p>MVP находится в разработке. Каркас FastAPI + Supabase уже развёрнут.</p>
+</section>
+{% endblock %}
