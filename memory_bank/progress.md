@@ -38,4 +38,4 @@
 
 ## last_checked_commit
 
-`9882598 docs: AGENTS.md, docs/README.md, memory_bank initialization` (обновить после коммита D1).
+`5c3b62d feat(d1): FastAPI foundation + Supabase integration + initial migration`
