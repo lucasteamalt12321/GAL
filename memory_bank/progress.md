@@ -47,4 +47,4 @@
 
 ## last_checked_commit
 
-`6633afe docs(memory_bank): sync last_checked_commit after D1`
+`eb3a23d feat(d2): RLS policies migration, applied to production Supabase`
