@@ -60,4 +60,4 @@
 
 ## last_checked_commit
 
-`eb3a23d feat(d2): RLS policies migration, applied to production Supabase`
+`d558552 feat(d3): cookie-session authentication (login/register/logout/recover/me)`
