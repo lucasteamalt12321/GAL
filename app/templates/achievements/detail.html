@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}{{ achievement.title }}{% endblock %}
+
+{% block content %}
+<article class="detail">
+  <div class="detail-head">
+    <h1>{{ achievement.title }}</h1>
+    <div class="detail-badges">
+      {% if achievement.category %}<span class="tag">{{ achievement.category.name }}</span>{% endif %}
+      {% if achievement.status != 'published' %}
+        <span class="badge badge-{{ achievement.status }}">{{ achievement.status }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="detail-stats">
+    <div class="stat">
+      <span class="stat-label">Global rank</span>
+      <span class="stat-value">{% if achievement.rank %}#{{ achievement.rank }}{% else %}?{% endif %}</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Average position</span>
+      <span class="stat-value">
+        {% if achievement.average_position %}{{ "%.2f"|format(achievement.average_position) }}{% else %}?{% endif %}
+      </span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Evaluations</span>
+      <span class="stat-value">{{ achievement.evaluation_count }}</span>
+    </div>
+  </div>
+
+  {% if is_creator and achievement.status == 'pending' %}
+    <div class="flash flash-info">
+      Достижение на модерации. Публикация произойдёт после проверки доказательства собственного выполнения.
+    </div>
+  {% endif %}
+
+  {% if achievement.description %}
+    <section class="prose">
+      <h2>Description</h2>
+      <p>{{ achievement.description }}</p>
+    </section>
+  {% endif %}
+
+  {% if achievement.requirements %}
+    <section class="prose">
+      <h2>Requirements</h2>
+      <p>{{ achievement.requirements }}</p>
+    </section>
+  {% endif %}
+
+  {% if achievement.creator %}
+    <p class="muted">
+      Автор:
+      <a href="/users/{{ achievement.creator.username }}">
+        {{ achievement.creator.display_name or achievement.creator.username }}
+      </a>
+    </p>
+  {% endif %}
+
+  <div class="detail-actions">
+    <button class="btn" type="button" disabled title="Доступно на следующем этапе">Я выполнил это</button>
+  </div>
+</article>
+{% endblock %}

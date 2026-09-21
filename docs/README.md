@@ -66,6 +66,22 @@ Browser (Jinja2/JS/CSS)
 - `UserContextMiddleware` резолвит пользователя на каждый запрос; при истёкшем access-токене делает refresh и обновляет cookie. `/static` и `/health` пропускаются.
 - Профиль читается из `profiles` (роль, username, avatar).
 
+## Достижения и профили (D4)
+
+- `GET /achievements` — публичный список опубликованных достижений; фильтры `?category=<slug>`, `?sort=rank|new`.
+- `GET /achievements/{id}` — карточка достижения (публичная; автор видит свои `pending`).
+- `GET/POST /achievements/create` — форма и создание достижения (`pending`); требуется вход.
+- `GET /users/{username}` — профиль: опубликованные достижения + свои `pending`.
+- Чтение публичных данных — anon-клиент; для записей и просмотра собственного используется user-JWT клиент (`set_session` → PostgREST переключается на JWT пользователя, RLS применяется).
+- `app/services/achievements.py` — доступ к данным; эмбеддинги `category` и `creator` (профиль) в одном запросе.
+- Идентификатор категории для фильтра резолвится отдельным запросом по `slug` (надёжнее фильтра по embedded-ресурсу).
+
+## Миграции
+
+- `001_init.sql` — схема и seed категорий.
+- `002_rls.sql` — RLS-политики, grants, helper-функции.
+- `003_fix_handle_new_user.sql` — `handle_new_user` помечен `security definer` (иначе вставка в `profiles` под RLS ломает регистрацию).
+
 ## Данные
 
 ```text
@@ -115,4 +131,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение D3: каркас FastAPI, клиенты Supabase, миграции `001_init.sql` + `002_rls.sql` (применены к проду), health-эндпоинты, аутентификация (cookie-сессия, login/register/logout/recover/me, `UserContextMiddleware`), деплой на Vercel. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение D4: каркас FastAPI, клиенты Supabase, миграции `001`–`003` (применены к проду), аутентификация (cookie-сессия), достижения (список/карточка/создание) и профили, деплой на Vercel. Обновлять при изменениях архитектуры, маршрутов и модулей.

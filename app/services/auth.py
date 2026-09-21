@@ -44,6 +44,21 @@ def new_user_client(access_token: str, refresh_token: str) -> Client:
     return client
 
 
+def user_client_from_request(request: Request) -> Client | None:
+    access = request.cookies.get(SESSION_COOKIE)
+    refresh = request.cookies.get(REFRESH_COOKIE)
+    if not access or not refresh:
+        return None
+    try:
+        return new_user_client(access, refresh)
+    except AUTH_ERRORS:
+        return None
+
+
+def client_for_request(request: Request) -> Client:
+    return user_client_from_request(request) or new_anon_client()
+
+
 def _cookie_kwargs() -> dict:
     settings = get_settings()
     return {
@@ -75,9 +90,11 @@ def _fetch_profile(client: Client, user_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return row.data
     except PROFILE_ERRORS:
         return None
+    if row is None:
+        return None
+    return row.data
 
 
 def _build_user(resp_user, profile: dict | None) -> CurrentUser | None:

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Achievements{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <h1>Achievements</h1>
+  <div class="page-head-actions">
+    <a class="btn {% if sort == 'rank' %}btn-active{% endif %}"
+       href="/achievements?sort=rank{% if active_category %}&category={{ active_category.slug }}{% endif %}">By rank</a>
+    <a class="btn {% if sort == 'new' %}btn-active{% endif %}"
+       href="/achievements?sort=new{% if active_category %}&category={{ active_category.slug }}{% endif %}">Newest</a>
+    {% if request.state.user %}
+      <a class="btn btn-primary" href="/achievements/create">Предложить</a>
+    {% endif %}
+  </div>
+</section>
+
+<div class="chips">
+  <a class="chip {% if not active_category %}chip-active{% endif %}"
+     href="/achievements?sort={{ sort }}">All</a>
+  {% for c in categories %}
+    <a class="chip {% if active_category and active_category.slug == c.slug %}chip-active{% endif %}"
+       href="/achievements?category={{ c.slug }}&sort={{ sort }}">{{ c.name }}</a>
+  {% endfor %}
+</div>
+
+{% if achievements %}
+  <div class="cards">
+    {% for a in achievements %}
+      <a class="card" href="/achievements/{{ a.id }}">
+        <div class="card-rank">
+          {% if a.rank %}#{{ a.rank }}{% else %}?{% endif %}
+        </div>
+        <div class="card-body">
+          <h2 class="card-title">{{ a.title }}</h2>
+          <div class="card-meta">
+            {% if a.category %}<span class="tag">{{ a.category.name }}</span>{% endif %}
+            <span class="muted">{{ a.evaluation_count }} оценок</span>
+          </div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <section class="placeholder">
+    <p>Пока нет опубликованных достижений{% if active_category %} в категории «{{ active_category.name }}»{% endif %}.</p>
+  </section>
+{% endif %}
+{% endblock %}

@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **25%** (D1–D3 completed; D4–D10 pending).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **35%** (D1–D4 completed; D5–D10 pending).
 
 ## Deliverables статус
 
@@ -11,7 +11,7 @@
 | D1  | Foundation + Memory Bank          | completed   |
 | D2  | Database Schema + RLS             | completed   |
 | D3  | Authentication                    | completed   |
-| D4  | Achievements CRUD                 | pending     |
+| D4  | Achievements CRUD                 | completed   |
 | D5  | Proofs + Moderation               | pending     |
 | D6  | Evaluation Engine + Creator Eval  | pending     |
 | D7  | Ranking Engine (тесты)            | pending     |
@@ -24,10 +24,22 @@
 - StarletteDeprecationWarning от `starlette.testclient` — warning из библиотеки, не от нашего кода.
 - PAT `SUPABASE_ACCESS_TOKEN` хранится в локальном `.env` (не коммитится); в `.env.example` — пустой плейсхолдер.
 - Storage bucket `proofs` и `avatars` ещё не созданы (фаза D5).
-- Уникальность `username`: проверяется только `profiles_username_key` на уровне БД (Supabase Auth не валидирует); коллизия при регистрации → ошибка `handle_new_user` (обработать в D10).
-- `/auth/recover` использует `reset_password_for_email` без `redirect_to` — письмо ведёт на дефолтный URL Supabase; настроить в D10.
+- Уникальность `username`: только БД-индекс `profiles_username_unique(lower(username))`; при коллизии регистрация падает на `handle_new_user` (обработать в D10).
+- `/auth/recover` вызывается без `redirect_to` — письма ведут на дефолтный URL Supabase (настроить в D10).
+- Supabase отклоняет зарезервированные email-домены (`example.com`, `test.com`) и лимитирует письма (email rate limit) — важно для тестов регистрации.
+- Email-конфирмация включена: зарегистрированный пользователь входит только после подтверждения письма.
 
 ## Changelog
+
+### 2026-09-21 — D4 Achievements CRUD completed (+ критический фикс регистрации)
+- **Критический баг найден и исправлен:** `handle_new_user` был `security invoker`, из-за чего вставка в `public.profiles` блокировалась RLS и регистрация падала с `Database error creating new user`. Миграция `003_fix_handle_new_user.sql` помечает функцию `security definer` (owner `postgres`); применена к проду.
+- **Баг совместимости исправлен:** `maybe_single().execute()` в новом postgrest возвращает `None` при отсутствии строки — все вызовы (`_fetch_profile`, `get_achievement`, `get_profile`, `_category_id_by_slug`) проверяют `None`.
+- `app/services/achievements.py` — `list_categories`, `list_achievements` (фильтр по `slug`, сортировка `rank`/`new`), `get_achievement`, `list_achievements_by_creator`, `get_profile`, `create_achievement`; эмбеддинги `category` и `creator` в одном запросе.
+- `app/services/auth.py` — добавлены `user_client_from_request` и `client_for_request` (публичное чтение anon, запись/свой pending — user JWT); `user_client_from_request` устойчив к невалидной сессии.
+- `app/routers/achievements.py` — `GET /achievements` (фильтры), `GET /achievements/create` (нужен вход), `POST /achievements/create`, `GET /achievements/{id}`; `app/routers/users.py` — `GET /users/{username}`.
+- Шаблоны `achievements/list.html`, `achievements/detail.html`, `achievements/create.html`, `users/profile.html`; CSS (карточки, чипы, бейджи статусов, метрики).
+- `tests/test_achievements.py` — 8 тестов (моки сервисного слоя); итого `pytest` — 18 passed, `ruff check` — чисто.
+- Интеграционная проверка (с самоочисткой данных): регистрация + автосоздание профиля, insert достижения под RLS user-JWT, владелец видит свой `pending`, свежий anon — нет (RLS подтверждён), E2E create через веб-роут (`303 → карточка`), anon на pending → 404, публичный список пуст.
 
 ### 2026-09-21 — D3 Authentication completed
 - `app/templating.py` — общий `Jinja2Templates` (используется в `main.py` и роутерах).
