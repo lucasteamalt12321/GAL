@@ -44,7 +44,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 |-----|-----------------------------------|--------------|-----|
 | D1  | Foundation + Memory Bank          | completed    | 5   |
 | D2  | Database Schema + RLS             | completed    | 10  |
-| D3  | Authentication                    | pending      | 10  |
+| D3  | Authentication                    | completed    | 10  |
 | D4  | Achievements CRUD                 | pending      | 10  |
 | D5  | Proofs + Moderation               | pending      | 15  |
 | D6  | Evaluation Engine + Creator Eval  | pending      | 15  |

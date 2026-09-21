@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Recover password{% endblock %}
+
+{% block content %}
+<section class="auth-card">
+  <h1>Recover password</h1>
+  <form method="post" action="/auth/recover" class="stack">
+    <label class="field">
+      <span class="field-label">Email</span>
+      <input type="email" name="email" value="{{ email }}" required autocomplete="email">
+    </label>
+    <button type="submit" class="btn btn-primary">Send reset link</button>
+  </form>
+  <p class="muted"><a href="/auth/login">Back to sign in</a></p>
+</section>
+{% endblock %}

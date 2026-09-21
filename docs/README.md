@@ -37,14 +37,34 @@ Browser (Jinja2/JS/CSS)
 | `reports.py`    | Жалобы                                       |
 | `moderation.py` | Очередь модерации, решения                   |
 
+### `app/` (инфраструктура)
+| Модуль             | Назначение                                                    |
+|--------------------|---------------------------------------------------------------|
+| `main.py`          | Сборка FastAPI, подключение роутеров, middleware, статики     |
+| `config.py`        | Настройки (pydantic-settings), флаги `supabase_configured`    |
+| `templating.py`    | Общий `Jinja2Templates`                                       |
+| `middleware.py`    | `UserContextMiddleware` — кладёт текущего пользователя в `request.state` |
+| `dependencies.py`  | `get_current_user` / `get_current_moderator` / `get_current_admin` |
+| `database/`        | Ленивые клиенты Supabase (anon + service role)                |
+
 ### `app/services/`
 | Модуль          | Назначение                                   |
 |-----------------|----------------------------------------------|
+| `auth.py`       | Cookie-сессия Supabase Auth, `resolve_user`, refresh токена |
 | `ranking.py`    | Ядро: среднее, сортировка, tie-break, rank   |
 | `scoring.py`    | `1000 / rank`, суммарные очки, вычисляемые  |
 | `evaluation.py` | Personal scale, locking                      |
 | `moderation.py` | Правила approve/reject                       |
 | `achievements.py`| Жизненный цикл достижений                   |
+
+## Аутентификация (D3)
+
+- `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `secure` в проде).
+- `POST /auth/logout` — `sign_out` + удаление cookie.
+- `POST /auth/recover` — письмо для сброса пароля.
+- `GET /auth/me` — JSON текущего пользователя (401 без сессии).
+- `UserContextMiddleware` резолвит пользователя на каждый запрос; при истёкшем access-токене делает refresh и обновляет cookie. `/static` и `/health` пропускаются.
+- Профиль читается из `profiles` (роль, username, avatar).
 
 ## Данные
 
@@ -95,4 +115,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение D2: каркас FastAPI, клиенты Supabase, миграции `001_init.sql` + `002_rls.sql` (применены к проду), health-эндпоинты, деплой на Vercel. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение D3: каркас FastAPI, клиенты Supabase, миграции `001_init.sql` + `002_rls.sql` (применены к проду), health-эндпоинты, аутентификация (cookie-сессия, login/register/logout/recover/me, `UserContextMiddleware`), деплой на Vercel. Обновлять при изменениях архитектуры, маршрутов и модулей.

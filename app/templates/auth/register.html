@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<section class="auth-card">
+  <h1>Register</h1>
+  <form method="post" action="/auth/register" class="stack">
+    <label class="field">
+      <span class="field-label">Username</span>
+      <input type="text" name="username" value="{{ username }}" required
+             minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.-]+" autocomplete="username">
+    </label>
+    <label class="field">
+      <span class="field-label">Display name</span>
+      <input type="text" name="display_name" value="{{ display_name }}" maxlength="64">
+    </label>
+    <label class="field">
+      <span class="field-label">Email</span>
+      <input type="email" name="email" value="{{ email }}" required autocomplete="email">
+    </label>
+    <label class="field">
+      <span class="field-label">Password</span>
+      <input type="password" name="password" required minlength="6" autocomplete="new-password">
+    </label>
+    <button type="submit" class="btn btn-primary">Register</button>
+  </form>
+  <p class="muted">Already have an account? <a href="/auth/login">Sign in</a></p>
+</section>
+{% endblock %}

@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **15%** (D1, D2 completed; D3–D10 pending).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **25%** (D1–D3 completed; D4–D10 pending).
 
 ## Deliverables статус
 
@@ -10,7 +10,7 @@
 |-----|-----------------------------------|-------------|
 | D1  | Foundation + Memory Bank          | completed   |
 | D2  | Database Schema + RLS             | completed   |
-| D3  | Authentication                    | pending     |
+| D3  | Authentication                    | completed   |
 | D4  | Achievements CRUD                 | pending     |
 | D5  | Proofs + Moderation               | pending     |
 | D6  | Evaluation Engine + Creator Eval  | pending     |
@@ -24,8 +24,21 @@
 - StarletteDeprecationWarning от `starlette.testclient` — warning из библиотеки, не от нашего кода.
 - PAT `SUPABASE_ACCESS_TOKEN` хранится в локальном `.env` (не коммитится); в `.env.example` — пустой плейсхолдер.
 - Storage bucket `proofs` и `avatars` ещё не созданы (фаза D5).
+- Уникальность `username`: проверяется только `profiles_username_key` на уровне БД (Supabase Auth не валидирует); коллизия при регистрации → ошибка `handle_new_user` (обработать в D10).
+- `/auth/recover` использует `reset_password_for_email` без `redirect_to` — письмо ведёт на дефолтный URL Supabase; настроить в D10.
 
 ## Changelog
+
+### 2026-09-21 — D3 Authentication completed
+- `app/templating.py` — общий `Jinja2Templates` (используется в `main.py` и роутерах).
+- `app/services/auth.py` — `CurrentUser`, `new_anon_client`/`new_user_client`, cookie-хелперы (`gal_session`/`gal_refresh`, httpOnly, SameSite=Lax, `secure` в проде, 30 дней), `resolve_user` с авто-refresh access-токена; обработка конкретных исключений (`AuthError`, `httpx.HTTPError`, `APIError`).
+- `app/dependencies.py` — `get_optional_user`, `get_current_user` (401), `get_current_moderator`/`get_current_admin` (403).
+- `app/middleware.py` — `UserContextMiddleware`: `request.state.user`, дозапись обновлённых cookie, пропуск `/static` и `/health`.
+- `app/routers/auth.py` — `GET/POST /auth/login`, `/auth/register`, `/auth/recover`, `POST /auth/logout`, `GET /auth/me` (JSON).
+- Шаблоны `auth/login.html`, `auth/register.html`, `auth/recover.html`; в `base.html` — состояние пользователя (username/sign out либо sign in/register) и flash-сообщения.
+- CSS: `.auth-card`, `.stack`, `.field`, `.flash`, `.btn-link`, `.nav-user`.
+- `tests/test_auth.py` — 6 тестов (страницы, 401 на `/auth/me`, logout 303, гостевая навигация). Итого `pytest` — 10 passed; `ruff check` — чисто.
+- Живая проверка против Supabase: неверные креды → graceful error-страница; bogus cookie → 401; logout → 303.
 
 ### 2026-09-20 — D2 Database Schema + RLS completed
 - Создан Supabase-проект `wiwyitafoprxmlyndkwe` (GlobalAchievmentsList).

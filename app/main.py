@@ -3,10 +3,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
-from app.routers import health
+from app.middleware import UserContextMiddleware
+from app.routers import auth, health
+from app.templating import templates
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -22,10 +23,10 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+app.add_middleware(UserContextMiddleware)
 
 app.include_router(health.router)
+app.include_router(auth.router)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

@@ -14,10 +14,21 @@
         <a class="nav-link" href="/achievements">Achievements</a>
         <a class="nav-link" href="/players">Players</a>
         <a class="nav-link" href="/reports">Reports</a>
+        {% if request.state.user %}
+          <a class="nav-link nav-user" href="/users/{{ request.state.user.username }}">{{ request.state.user.username }}</a>
+          <form method="post" action="/auth/logout" class="inline-form">
+            <button type="submit" class="nav-link btn-link">Sign out</button>
+          </form>
+        {% else %}
+          <a class="nav-link" href="/auth/login">Sign in</a>
+          <a class="nav-link" href="/auth/register">Register</a>
+        {% endif %}
       </nav>
     </div>
   </header>
   <main class="container main">
+    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+    {% if info %}<div class="flash flash-info">{{ info }}</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
   <footer class="site-footer">

@@ -1,0 +1,180 @@
+import logging
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
+from app.dependencies import get_current_user
+from app.services import auth as auth_service
+from app.templating import templates
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+AUTH_REDIRECT = "/"
+
+
+def _error_message(exc: Exception) -> str:
+    raw = getattr(exc, "message", None) or getattr(exc, "msg", None)
+    if not raw:
+        raw = str(exc)
+    if not raw or len(raw) > 300:
+        raw = "Не удалось выполнить запрос. Проверьте данные и попробуйте ещё раз."
+    return raw
+
+
+def _page(request: Request, name: str, **ctx) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name=name,
+        context={
+            "error": ctx.pop("error", None),
+            "info": ctx.pop("info", None),
+            **ctx,
+        },
+    )
+
+
+@router.get("/login", response_class=HTMLResponse, include_in_schema=False)
+def login_page(request: Request) -> HTMLResponse:
+    if request.state.user:
+        return RedirectResponse(AUTH_REDIRECT, status_code=303)
+    return _page(request, "auth/login.html", email="")
+
+
+@router.post("/login", response_class=HTMLResponse, include_in_schema=False)
+def login(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+) -> HTMLResponse:
+    try:
+        client = auth_service.new_anon_client()
+        res = client.auth.sign_in_with_password(
+            {"email": email.strip(), "password": password}
+        )
+    except auth_service.AUTH_ERRORS as exc:
+        return _page(request, "auth/login.html", error=_error_message(exc), email=email)
+    session = res.session
+    if session is None:
+        return _page(
+            request, "auth/login.html", error="Не удалось получить сессию.", email=email
+        )
+    response = RedirectResponse(AUTH_REDIRECT, status_code=303)
+    auth_service.set_auth_cookies(response, session)
+    return response
+
+
+@router.get("/register", response_class=HTMLResponse, include_in_schema=False)
+def register_page(request: Request) -> HTMLResponse:
+    if request.state.user:
+        return RedirectResponse(AUTH_REDIRECT, status_code=303)
+    return _page(request, "auth/register.html", username="", display_name="", email="")
+
+
+@router.post("/register", response_class=HTMLResponse, include_in_schema=False)
+def register(
+    request: Request,
+    username: str = Form(...),
+    display_name: str = Form(""),
+    email: str = Form(...),
+    password: str = Form(...),
+) -> HTMLResponse:
+    username = username.strip()
+    display_name = (display_name or "").strip()
+    email = email.strip()
+    if not username:
+        return _page(
+            request,
+            "auth/register.html",
+            error="Имя пользователя обязательно.",
+            username=username,
+            display_name=display_name,
+            email=email,
+        )
+    try:
+        client = auth_service.new_anon_client()
+        res = client.auth.sign_up(
+            {
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {"username": username, "display_name": display_name}
+                },
+            }
+        )
+    except auth_service.AUTH_ERRORS as exc:
+        return _page(
+            request,
+            "auth/register.html",
+            error=_error_message(exc),
+            username=username,
+            display_name=display_name,
+            email=email,
+        )
+    session = res.session
+    if session is not None:
+        response = RedirectResponse(AUTH_REDIRECT, status_code=303)
+        auth_service.set_auth_cookies(response, session)
+        return response
+    return _page(
+        request,
+        "auth/register.html",
+        info="Регистрация завершена. Подтвердите email, перейдя по ссылке из письма.",
+        username=username,
+        display_name=display_name,
+        email=email,
+    )
+
+
+@router.get("/recover", response_class=HTMLResponse, include_in_schema=False)
+def recover_page(request: Request) -> HTMLResponse:
+    return _page(request, "auth/recover.html", email="")
+
+
+@router.post("/recover", response_class=HTMLResponse, include_in_schema=False)
+def recover(request: Request, email: str = Form(...)) -> HTMLResponse:
+    try:
+        client = auth_service.new_anon_client()
+        client.auth.reset_password_for_email(email.strip())
+    except auth_service.AUTH_ERRORS as exc:
+        return _page(
+            request, "auth/recover.html", error=_error_message(exc), email=email
+        )
+    return _page(
+        request,
+        "auth/recover.html",
+        info="Если такой email зарегистрирован, мы отправили ссылку для сброса пароля.",
+        email="",
+    )
+
+
+@router.post("/logout", include_in_schema=False)
+def logout(request: Request) -> RedirectResponse:
+    access = request.cookies.get(auth_service.SESSION_COOKIE)
+    refresh = request.cookies.get(auth_service.REFRESH_COOKIE)
+    if access and refresh:
+        try:
+            auth_service.new_user_client(access, refresh).auth.sign_out()
+        except auth_service.AUTH_ERRORS:
+            logger.debug("Supabase sign_out failed during logout", exc_info=True)
+    response = RedirectResponse(AUTH_REDIRECT, status_code=303)
+    auth_service.clear_auth_cookies(response)
+    return response
+
+
+@router.get("/me", response_class=JSONResponse)
+def me(
+    user: Annotated[auth_service.CurrentUser, Depends(get_current_user)],
+) -> JSONResponse:
+    return JSONResponse(
+        content={
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "display_name": user.display_name,
+            "role": user.role,
+            "avatar_url": user.avatar_url,
+        }
+    )
