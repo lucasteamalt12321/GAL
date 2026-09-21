@@ -72,4 +72,4 @@
 
 ## last_checked_commit
 
-`d558552 feat(d3): cookie-session authentication (login/register/logout/recover/me)`
+`c3ddae6 feat(d4): achievements CRUD, profiles, and fix handle_new_user under RLS`
