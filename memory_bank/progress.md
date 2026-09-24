@@ -24,7 +24,7 @@
 - StarletteDeprecationWarning от `starlette.testclient` — warning из библиотеки, не от нашего кода.
 - PAT `SUPABASE_ACCESS_TOKEN` хранится в локальном `.env` (не коммитится); в `.env.example` — пустой плейсхолдер.
 - Storage bucket `proofs` создан и настроен (D5). Bucket `avatars` не создавался (в MVP аватары не используются).
-- Live-проверка файловой части D5 (загрузка файла proof через приложение + signed URL) откладывалась из-за нестабильной сети (ReadTimeout/SSL к Supabase) — unit-тесты маршрутов зелёные, декор proofs через signed URL протестирован на уровне API; перепроверить при восстановлении сети.
+- Storage upload под RLS подтверждён live: загрузка файла user-JWT в `proofs/{uid}/1/...` создаёт объект (повторный POST → `409 KeyAlreadyExists`). Проверка fetch по signed URL и «anon не видит чужой папки» не завершилась из-за нестабильной сети (ReadTimeout на чтение тела ответа storage) — повторить при восстановлении сети. Unit-тесты маршрутов зелёные.
 - Возможно остались осиротевшие e2e-данные (username `gal-e2e-*`) от прерванных live-прогонов — очистить при восстановлении сети.
 - Уникальность `username`: только БД-индекс `profiles_username_unique(lower(username))`; при коллизии регистрация падает на `handle_new_user` (обработать в D10).
 - `/auth/recover` вызывается без `redirect_to` — письма ведут на дефолтный URL Supabase (настроить в D10).
