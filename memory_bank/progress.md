@@ -85,4 +85,4 @@
 
 ## last_checked_commit
 
-`c3ddae6 feat(d4): achievements CRUD, profiles, and fix handle_new_user under RLS`
+`3849479 feat(d5): proofs (storage bucket) and moderation queue/decisions`
