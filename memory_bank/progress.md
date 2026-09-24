@@ -24,14 +24,19 @@
 - StarletteDeprecationWarning от `starlette.testclient` — warning из библиотеки, не от нашего кода.
 - PAT `SUPABASE_ACCESS_TOKEN` хранится в локальном `.env` (не коммитится); в `.env.example` — пустой плейсхолдер.
 - Storage bucket `proofs` создан и настроен (D5). Bucket `avatars` не создавался (в MVP аватары не используются).
-- Storage upload под RLS подтверждён live: загрузка файла user-JWT в `proofs/{uid}/1/...` создаёт объект (повторный POST → `409 KeyAlreadyExists`). Проверка fetch по signed URL и «anon не видит чужой папки» не завершилась из-за нестабильной сети (ReadTimeout на чтение тела ответа storage) — повторить при восстановлении сети. Unit-тесты маршрутов зелёные.
-- Возможно остались осиротевшие e2e-данные (username `gal-e2e-*`) от прерванных live-прогонов — очистить при восстановлении сети.
+- Storage RLS live-проверка завершена (см. Changelog): upload под user-JWT, signed URL (относительный от API, storage3 джойнит в absolute), fetch по подписи 200, anon заблокирован (bucket невидим). Bucket `avatars` не создавался (в MVP аватары не используются).
+- Осиротевшие e2e-данные от прерванных live-прогонов удалены (4 профиля `gal-e2e-*` + каскадные зависимости + auth-пользователи).
 - Уникальность `username`: только БД-индекс `profiles_username_unique(lower(username))`; при коллизии регистрация падает на `handle_new_user` (обработать в D10).
 - `/auth/recover` вызывается без `redirect_to` — письма ведут на дефолтный URL Supabase (настроить в D10).
 - Supabase отклоняет зарезервированные email-домены (`example.com`, `test.com`) и лимитирует письма (email rate limit) — важно для тестов регистрации.
 - Email-конфирмация включена: зарегистрированный пользователь входит только после подтверждения письма.
 
 ## Changelog
+
+### 2026-09-24 — D5 live-проверка завершена (Storage + прод)
+- Storage RLS подтверждён live через прямой REST: upload файла под user-JWT в `proofs/{uid}/1/...` → 200; `create_signed_url` возвращает относительный путь `/object/sign/...`, storage3 при использовании джойнит его с base URL в absolute (баг в приложении отсутствует); fetch по signed URL → 200 с корректным содержимым; анонимный прямой fetch и list → 400/404 (bucket невидим), список недоступен.
+- Очищены 4 осиротевших `gal-e2e-*` профиля от прерванных прогонов (в т.ч. каскад: moderation_reviews → proofs → completions → achievements; достижений в БД не осталось — `achievements` пуст).
+- Прод проверен: `/health` 200, `/` 200, `/achievements` 200, `/achievements/create` anon → 303.
 
 ### 2026-09-21 — D5 Proofs + Moderation completed
 - `migrations/004_storage_proofs.sql` — bucket `proofs` (private, `file_size_limit` 50 МБ) + политики `storage.objects`: insert/delete владельца по `(storage.foldername(name))[1] = auth.uid()::text`, select владельца и модератора (`public.is_moderator()`). Применена к проду через Management API; bucket + 4 политики подтверждены запросом.
