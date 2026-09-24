@@ -15,6 +15,9 @@
         <a class="nav-link" href="/players">Players</a>
         <a class="nav-link" href="/reports">Reports</a>
         {% if request.state.user %}
+          {% if request.state.user.role in ('moderator', 'admin') %}
+            <a class="nav-link" href="/moderation">Moderation</a>
+          {% endif %}
           <a class="nav-link nav-user" href="/users/{{ request.state.user.username }}">{{ request.state.user.username }}</a>
           <form method="post" action="/auth/logout" class="inline-form">
             <button type="submit" class="nav-link btn-link">Sign out</button>

@@ -46,7 +46,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D2  | Database Schema + RLS             | completed    | 10  |
 | D3  | Authentication                    | completed    | 10  |
 | D4  | Achievements CRUD                 | completed    | 10  |
-| D5  | Proofs + Moderation               | pending      | 15  |
+| D5  | Proofs + Moderation               | completed    | 15  |
 | D6  | Evaluation Engine + Creator Eval  | pending      | 15  |
 | D7  | Ranking Engine (тесты)            | pending      | 15  |
 | D8  | Player Score + Leaderboard        | pending      | 10  |

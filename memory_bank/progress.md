@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **35%** (D1–D4 completed; D5–D10 pending).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **50%** (D1–D5 completed; D6–D10 pending).
 
 ## Deliverables статус
 
@@ -12,7 +12,7 @@
 | D2  | Database Schema + RLS             | completed   |
 | D3  | Authentication                    | completed   |
 | D4  | Achievements CRUD                 | completed   |
-| D5  | Proofs + Moderation               | pending     |
+| D5  | Proofs + Moderation               | completed   |
 | D6  | Evaluation Engine + Creator Eval  | pending     |
 | D7  | Ranking Engine (тесты)            | pending     |
 | D8  | Player Score + Leaderboard        | pending     |
@@ -23,13 +23,26 @@
 
 - StarletteDeprecationWarning от `starlette.testclient` — warning из библиотеки, не от нашего кода.
 - PAT `SUPABASE_ACCESS_TOKEN` хранится в локальном `.env` (не коммитится); в `.env.example` — пустой плейсхолдер.
-- Storage bucket `proofs` и `avatars` ещё не созданы (фаза D5).
+- Storage bucket `proofs` создан и настроен (D5). Bucket `avatars` не создавался (в MVP аватары не используются).
+- Live-проверка файловой части D5 (загрузка файла proof через приложение + signed URL) откладывалась из-за нестабильной сети (ReadTimeout/SSL к Supabase) — unit-тесты маршрутов зелёные, декор proofs через signed URL протестирован на уровне API; перепроверить при восстановлении сети.
+- Возможно остались осиротевшие e2e-данные (username `gal-e2e-*`) от прерванных live-прогонов — очистить при восстановлении сети.
 - Уникальность `username`: только БД-индекс `profiles_username_unique(lower(username))`; при коллизии регистрация падает на `handle_new_user` (обработать в D10).
 - `/auth/recover` вызывается без `redirect_to` — письма ведут на дефолтный URL Supabase (настроить в D10).
 - Supabase отклоняет зарезервированные email-домены (`example.com`, `test.com`) и лимитирует письма (email rate limit) — важно для тестов регистрации.
 - Email-конфирмация включена: зарегистрированный пользователь входит только после подтверждения письма.
 
 ## Changelog
+
+### 2026-09-21 — D5 Proofs + Moderation completed
+- `migrations/004_storage_proofs.sql` — bucket `proofs` (private, `file_size_limit` 50 МБ) + политики `storage.objects`: insert/delete владельца по `(storage.foldername(name))[1] = auth.uid()::text`, select владельца и модератора (`public.is_moderator()`). Применена к проду через Management API; bucket + 4 политики подтверждены запросом.
+- `app/services/completions.py` — `submit_completion`, `create_completion` (unique-ошибка 23505 → `AlreadyCompletedError`), `attach_proof` (файл ≤50МБ → upload в `{uid}/{achievement_id}/{uuid}-{file}` и строка в `proofs`, при сбое — best-effort `storage.remove`; либо link-proof), `proof_view`/`decorate_proofs` (signed URL TTL 3600, не падает при сетевых ошибках), `PROOFS_BUCKET`, `COMPLETION_ERRORS`.
+- `app/services/moderation.py` — `list_pending_achievements`/`list_pending_completions` (с embedded `category`/`creator`/`user`/`proofs` и `proof_views`), `decide_achievement`/`decide_completion` (update по `status=pending`, запись в `moderation_reviews`, `approved_at` на approve), авто-approve completion создателя (`_approve_creator_completion`) при approve достижения.
+- `app/routers/completions.py` — `POST /achievements/{id}/complete` (аноним → login; не-published → 404; ошибки → redirect `?error=`).
+- `app/routers/moderation.py` — `GET /moderation` + `POST /moderation/achievements/{id}` и `POST /moderation/completions/{id}`; аноним → login, не-модератор → 403.
+- Create-флоу достижения требует proof создателя (файл или ссылка), после создания вызывается `submit_completion` (проверки + ошибки). `achievements/detail.html` — форма подачи доказательства, статус своей заявки, список proofs; `moderation/queue.html`; ссылка «Moderation» в nav для модераторов/админов.
+- Фикс: `File(None)` в defaults → `Annotated[UploadFile | None, File()]` (ruff B008); `upsert` на Storage-upload — булевым (`"false"` трактуется storage3 как truthy).
+- `tests/test_moderation.py` — 11 тестов (аноним/403, очередь, решения, авто-вход через monkeypatch `resolve_user`). Итого `pytest` — 29 passed; `ruff check`/`format` — чисто.
+- Live E2E (частично, сеть нестабильна): create с link-proof → pending (+ completion создателя + proof), очередь показывает, submit на pending → 404, approve → published + creator completion auto-approved + `moderation_reviews` записана; user submit на published → 303. Файловая часть проверки прервана из-за сети (см. Known Issues).
 
 ### 2026-09-21 — D4 Achievements CRUD completed (+ критический фикс регистрации)
 - **Критический баг найден и исправлен:** `handle_new_user` был `security invoker`, из-за чего вставка в `public.profiles` блокировалась RLS и регистрация падала с `Database error creating new user`. Миграция `003_fix_handle_new_user.sql` помечает функцию `security definer` (owner `postgres`); применена к проду.

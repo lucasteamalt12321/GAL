@@ -5,7 +5,7 @@
 {% block content %}
 <section class="auth-card auth-card-wide">
   <h1>Предложить достижение</h1>
-  <form method="post" action="/achievements/create" class="stack">
+  <form method="post" action="/achievements/create" class="stack" enctype="multipart/form-data">
     <label class="field">
       <span class="field-label">Название</span>
       <input type="text" name="title" value="{{ title }}" required maxlength="200">
@@ -27,6 +27,12 @@
       <span class="field-label">Требования / критерии выполнения</span>
       <textarea name="requirements" rows="3" maxlength="4000">{{ requirements }}</textarea>
     </label>
+    <fieldset class="field proof-field">
+      <legend class="field-label">Ваше доказательство</legend>
+      <p class="muted">Приложите файл (фото, видео, документ — до 50 МБ) или ссылку.</p>
+      <input type="file" name="file">
+      <input type="url" name="external_url" value="{{ external_url }}" placeholder="https://...">
+    </fieldset>
     <button type="submit" class="btn btn-primary">Отправить на модерацию</button>
   </form>
   <p class="muted">Достижение публикуется только после проверки модератором доказательства вашего собственного выполнения.</p>

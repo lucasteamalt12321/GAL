@@ -1,0 +1,77 @@
+﻿{% extends "base.html" %}
+
+{% block title %}Moderation{% endblock %}
+
+{% block content %}
+<section class="moderation">
+  <h1>РњРѕРґРµСЂР°С†РёСЏ</h1>
+
+  <h2>Р”РѕСЃС‚РёР¶РµРЅРёСЏ РЅР° РїСЂРѕРІРµСЂРєРµ</h2>
+  {% if pending_achievements %}
+    <ul class="mod-list">
+      {% for a in pending_achievements %}
+        <li class="mod-card">
+          <div class="mod-card-head">
+            <a class="card-title" href="/achievements/{{ a.id }}">{{ a.title }}</a>
+            {% if a.category %}<span class="tag">{{ a.category.name }}</span>{% endif %}
+          </div>
+          {% if a.creator %}
+            <p class="muted">РђРІС‚РѕСЂ: {{ a.creator.display_name or a.creator.username }}</p>
+          {% endif %}
+          {% if a.description %}<p class="prose">{{ a.description }}</p>{% endif %}
+          <form method="post" action="/moderation/achievements/{{ a.id }}" class="stack">
+            <input type="text" name="reason" placeholder="РџСЂРёС‡РёРЅР° (РґР»СЏ РѕС‚РєР»РѕРЅРµРЅРёСЏ)" maxlength="500">
+            <div class="row">
+              <button type="submit" class="btn btn-primary" name="decision" value="approved">РћРґРѕР±СЂРёС‚СЊ</button>
+              <button type="submit" class="btn btn-danger" name="decision" value="rejected">РћС‚РєР»РѕРЅРёС‚СЊ</button>
+            </div>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">РќРµС‚ РґРѕСЃС‚РёР¶РµРЅРёР№ РЅР° РїСЂРѕРІРµСЂРєРµ.</p>
+  {% endif %}
+
+  <h2>Р—Р°СЏРІРєРё Рѕ РІС‹РїРѕР»РЅРµРЅРёРё</h2>
+  {% if pending_completions %}
+    <ul class="mod-list">
+      {% for c in pending_completions %}
+        <li class="mod-card">
+          <div class="mod-card-head">
+            <a class="card-title" href="/achievements/{{ c.achievement_id }}">
+              {{ c.achievement.title if c.achievement else c.achievement_id }}
+            </a>
+            <span class="badge badge-pending">pending</span>
+          </div>
+          {% if c.user %}
+            <p class="muted">Р—Р°СЏРІРёС‚РµР»СЊ: {{ c.user.display_name or c.user.username }}</p>
+          {% endif %}
+          {% if c.proof_views %}
+            <ul class="proof-list">
+              {% for p in c.proof_views %}
+                <li>
+                  <span class="tag">{{ p.proof_type }}</span>
+                  {% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">РґРѕРєР°Р·Р°С‚РµР»СЊСЃС‚РІРѕ</a>{% else %}<span class="muted">РЅРµРґРѕСЃС‚СѓРїРЅРѕ</span>{% endif %}
+                  {% if p.description %}<span class="muted"> вЂ” {{ p.description }}</span>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">Р‘РµР· РґРѕРєР°Р·Р°С‚РµР»СЊСЃС‚РІ.</p>
+          {% endif %}
+          <form method="post" action="/moderation/completions/{{ c.id }}" class="stack">
+            <input type="text" name="reason" placeholder="РџСЂРёС‡РёРЅР° (РґР»СЏ РѕС‚РєР»РѕРЅРµРЅРёСЏ)" maxlength="500">
+            <div class="row">
+              <button type="submit" class="btn btn-primary" name="decision" value="approved">РћРґРѕР±СЂРёС‚СЊ</button>
+              <button type="submit" class="btn btn-danger" name="decision" value="rejected">РћС‚РєР»РѕРЅРёС‚СЊ</button>
+            </div>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">РќРµС‚ Р·Р°СЏРІРѕРє РЅР° РїСЂРѕРІРµСЂРєРµ.</p>
+  {% endif %}
+</section>
+{% endblock %}

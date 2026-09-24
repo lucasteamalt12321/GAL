@@ -76,11 +76,22 @@ Browser (Jinja2/JS/CSS)
 - `app/services/achievements.py` — доступ к данным; эмбеддинги `category` и `creator` (профиль) в одном запросе.
 - Идентификатор категории для фильтра резолвится отдельным запросом по `slug` (надёжнее фильтра по embedded-ресурсу).
 
+## Доказательства и модерация (D5)
+
+- `POST /achievements/{id}/complete` — подача заявки о выполнении: создание `achievement_completions` (`pending`) + один proof (файл ≤50 МБ или ссылка). При создании достижения создатель обязан приложить proof своего выполнения.
+- Proof файловый: загрузка в приватный bucket `proofs` по пути `{user_id}/{achievement_id}/{uuid}-{filename}`, затем строка в `proofs`. Proof-ссылка: строка в `proofs` со `proof_type=link` и URL в `storage_path`.
+- `GET /moderation` — очередь `pending` достижений и заявок (только модератор/админ; иначе 403, аноним → login).
+- `POST /moderation/achievements/{id}` и `POST /moderation/completions/{id}` — решение `approved`/`rejected`; решение фиксируется с `moderator_id` и `reason`.
+- При approve достижения completion создателя помечается `approved` автоматически (без новой модерации).
+- Просмотр файловых доказательств через signed URL (TTL 1 час); бакет не публичный. RLS `storage.objects`: владелец по первой части пути `(storage.foldername(name))[1] = auth.uid()`, модератор — через `public.is_moderator()`.
+- `app/services/completions.py` — submit/attach/декор proofs; `app/services/moderation.py` — очередь и решения; `app/routers/completions.py`, `app/routers/moderation.py`.
+
 ## Миграции
 
 - `001_init.sql` — схема и seed категорий.
 - `002_rls.sql` — RLS-политики, grants, helper-функции.
 - `003_fix_handle_new_user.sql` — `handle_new_user` помечен `security definer` (иначе вставка в `profiles` под RLS ломает регистрацию).
+- `004_storage_proofs.sql` — bucket `proofs` (private, лимит 50 МБ) + политики `storage.objects` (insert/delete владельца, select владельца и модератора).
 
 ## Данные
 
@@ -131,4 +142,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение D4: каркас FastAPI, клиенты Supabase, миграции `001`–`003` (применены к проду), аутентификация (cookie-сессия), достижения (список/карточка/создание) и профили, деплой на Vercel. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение D5: каркас FastAPI, клиенты Supabase, миграции `001`–`004` (применены к проду), аутентификация (cookie-сессия), достижения (список/карточка/создание), профили, доказательства выполнения (файлы/ссылки в Storage) и модерация (очередь и решения). Обновлять при изменениях архитектуры, маршрутов и модулей.

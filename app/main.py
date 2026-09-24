@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.middleware import UserContextMiddleware
-from app.routers import achievements, auth, health, users
+from app.routers import achievements, auth, completions, health, moderation, users
 from app.templating import templates
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,6 +28,8 @@ app.add_middleware(UserContextMiddleware)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(achievements.router)
+app.include_router(completions.router)
+app.include_router(moderation.router)
 app.include_router(users.router)
 
 

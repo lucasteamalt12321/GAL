@@ -60,8 +60,48 @@
     </p>
   {% endif %}
 
-  <div class="detail-actions">
-    <button class="btn" type="button" disabled title="Доступно на следующем этапе">Я выполнил это</button>
-  </div>
+  {% if own_completion %}
+    <section class="prose">
+      <h2>Ваше доказательство</h2>
+      <p>
+        Статус заявки:
+        <span class="badge badge-{{ own_completion.status }}">{{ own_completion.status }}</span>
+      </p>
+      {% if proofs %}
+        <ul class="proof-list">
+          {% for p in proofs %}
+            <li>
+              <span class="tag">{{ p.proof_type }}</span>
+              {% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">открыть доказательство</a>{% else %}<span class="muted">недоступно</span>{% endif %}
+              {% if p.description %}<span class="muted"> — {{ p.description }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+  {% elif can_submit %}
+    <section class="prose">
+      <h2>Я выполнил это</h2>
+      <form method="post" action="/achievements/{{ achievement.id }}/complete" class="stack" enctype="multipart/form-data">
+        <fieldset class="field proof-field">
+          <legend class="field-label">Доказательство</legend>
+          <p class="muted">Приложите файл (до 50 МБ) или ссылку.</p>
+          <input type="file" name="file">
+          <input type="url" name="external_url" placeholder="https://...">
+        </fieldset>
+        <label class="field">
+          <span class="field-label">Комментарий</span>
+          <textarea name="description" rows="3" maxlength="2000"></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary">Отправить на модерацию</button>
+      </form>
+    </section>
+  {% elif not request.state.user %}
+    <div class="detail-actions">
+      <a class="btn btn-primary" href="/auth/login">Войдите, чтобы отправить доказательство</a>
+    </div>
+  {% elif achievement.status == 'published' %}
+    <p class="muted">Вы уже отправили доказательство по этому достижению.</p>
+  {% endif %}
 </article>
 {% endblock %}
