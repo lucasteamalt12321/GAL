@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services import achievements as achievements_service
 from app.services import completions as completions_service
+from app.services import evaluation as evaluation_service
 from app.templating import templates
 
 router = APIRouter(prefix="/achievements", tags=["achievements"])
@@ -175,6 +176,9 @@ def detail(
 
     own_completion = None
     proof_views: list[dict] = []
+    my_evaluation = None
+    can_evaluate = False
+    eval_reason: str | None = None
     if user is not None:
         own_completion = completions_service.get_user_completion(
             request, achievement_id
@@ -182,11 +186,17 @@ def detail(
         if own_completion is not None:
             proofs = completions_service.list_proofs(request, own_completion["id"])
             proof_views = completions_service.decorate_proofs(request, proofs)
+        can_evaluate, eval_reason, my_evaluation = evaluation_service.evaluate_context(
+            request, item
+        )
 
     can_submit = (
         user is not None and own_completion is None and item["status"] == "published"
     )
-    info_messages = {"submitted": "Доказательство отправлено на модерацию."}
+    info_messages = {
+        "submitted": "Доказательство отправлено на модерацию.",
+        "evaluated": "Оценка сохранена.",
+    }
     return templates.TemplateResponse(
         request=request,
         name="achievements/detail.html",
@@ -196,6 +206,9 @@ def detail(
             "own_completion": own_completion,
             "proofs": proof_views,
             "can_submit": can_submit,
+            "my_evaluation": my_evaluation,
+            "can_evaluate": can_evaluate,
+            "eval_reason": eval_reason,
             "error": error,
             "info": info_messages.get(info, info),
         },

@@ -86,12 +86,24 @@ Browser (Jinja2/JS/CSS)
 - Просмотр файловых доказательств через signed URL (TTL 1 час); бакет не публичный. RLS `storage.objects`: владелец по первой части пути `(storage.foldername(name))[1] = auth.uid()`, модератор — через `public.is_moderator()`.
 - `app/services/completions.py` — submit/attach/декор proofs; `app/services/moderation.py` — очередь и решения; `app/routers/completions.py`, `app/routers/moderation.py`.
 
+## Оценки (D6)
+
+- `POST /achievements/{id}/evaluate` — оценка сложности в личной шкале: `p_harder_count` = сколько своих уже оценённых достижений ОБЩЕ сложнее. Позиция = `p_harder_count + 1`, существующие позиции сдвигаются (двухпроходный `submit_evaluation` в БД).
+- Первая оценка (нет личной шкалы) — «якорь №1» (позиция 1).
+- Оценка доступна только с `approved` completion; одно достижение = одна оценка (upsert до перехода).
+- При 3+ оценках достижение переходит `unknown → ranked`: оценки `locked`, фиксируется ти-брейкер `rank_order`, присваивается `rank=max(rank)+1`, затем `recompute_ranks()` компактно перенумеровывает все `ranked` по `average_position asc, rank_order asc, id asc`.
+- Ошибки RPC: `AUTH_REQUIRED` / `NOT_APPROVED` / `LOCKED` → маппятся в `EvaluationError` и показываются как flash.
+- Атомарная логика — security definer функция `public.submit_evaluation` (директива `#variable_conflict use_column` обязательна: `RETURNS TABLE` создаёт OUT-переменные, конфликтующие с колонками — см. миграцию 006).
+- `app/services/evaluation.py` — сервис; `app/routers/evaluations.py` — GET/POST; шаблон `evaluations/evaluate.html`.
+
 ## Миграции
 
 - `001_init.sql` — схема и seed категорий.
 - `002_rls.sql` — RLS-политики, grants, helper-функции.
 - `003_fix_handle_new_user.sql` — `handle_new_user` помечен `security definer` (иначе вставка в `profiles` под RLS ломает регистрацию).
 - `004_storage_proofs.sql` — bucket `proofs` (private, лимит 50 МБ) + политики `storage.objects` (insert/delete владельца, select владельца и модератора).
+- `005_evaluation_rpc.sql` — движок оценок: `rank_order`, `recompute_ranks()`, `submit_evaluation()`, grants.
+- `006_fix_evaluation_rpc.sql` — фикс `42702 ambiguous` (OUT-параметры `RETURNS TABLE` vs колонки): `#variable_conflict use_column` + алиасы.
 
 ## Данные
 
@@ -142,4 +154,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение D5: каркас FastAPI, клиенты Supabase, миграции `001`–`004` (применены к проду), аутентификация (cookie-сессия), достижения (список/карточка/создание), профили, доказательства выполнения (файлы/ссылки в Storage) и модерация (очередь и решения). Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение D6: каркас FastAPI, клиенты Supabase, миграции `001`–`006` (применены к проду), аутентификация (cookie-сессия), достижения + профили, доказательства + модерация, движок оценок (личная шкала, `locked`, переход в `ranked`, `recompute_ranks()`). Обновлять при изменениях архитектуры, маршрутов и модулей.

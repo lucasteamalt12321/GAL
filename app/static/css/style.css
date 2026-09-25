@@ -523,3 +523,37 @@ body {
 .mod-card .stack {
   margin-top: 0.75rem;
 }
+
+.evaluation-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: rgba(76, 141, 255, 0.08);
+  border: 1px solid rgba(76, 141, 255, 0.4);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.evaluation-box p {
+  margin: 0;
+}
+
+.eval-form {
+  max-width: 420px;
+  margin-top: 1.25rem;
+}
+
+.scale-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.scale-list a {
+  color: var(--text);
+}

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Оценка: {{ achievement.title }}{% endblock %}
+
+{% block content %}
+<article class="detail">
+  <div class="detail-head">
+    <h1>Оценка сложности</h1>
+    <div class="detail-badges">
+      <a class="btn" href="/achievements/{{ achievement.id }}">← {{ achievement.title }}</a>
+    </div>
+  </div>
+
+  <p class="lead">
+    Насколько сложным оказалось для вас достижение
+    <strong>{{ achievement.title }}</strong>?
+  </p>
+
+  {% if scale %}
+    <section class="prose">
+      <h2>Ваша личная шкала</h2>
+      <p class="muted">От самого сложного (№1) к более простому. Новое достижение встанет в верх списка по соседству с теми, чей уровень сложности оно повторяет.</p>
+      <ol class="scale-list">
+        {% for e in scale %}
+          <li>
+            <span class="tag">№{{ e.position }}</span>
+            <a href="/achievements/{{ e.achievement_id }}">{{ e.achievement.title }}</a>
+            {% if e.achievement.category %}<span class="muted">— {{ e.achievement.category.name }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    </section>
+  {% else %}
+    <section class="prose">
+      <p class="muted">Это ваша первая оценка — личная шкала ещё пуста, поэтому достижение станет вашей точкой отсчёта (позиция №1).</p>
+    </section>
+  {% endif %}
+
+  <form method="post" action="/achievements/{{ achievement.id }}/evaluate" class="stack eval-form">
+    <label class="field">
+      <span class="field-label">Позиция в вашем личном топе (№1 — самое сложное из сделанного вами)</span>
+      <select name="harder_count" required>
+        <option value="" selected disabled>— выберите —</option>
+        {% if scale %}
+          {% for i in range(scale|length + 1) %}
+            <option value="{{ i }}">№{{ i + 1 }}</option>
+          {% endfor %}
+        {% else %}
+          <option value="0">№1</option>
+        {% endif %}
+      </select>
+    </label>
+    <div class="row">
+      <button type="submit" class="btn btn-primary">Сохранить оценку</button>
+      <a class="btn" href="/achievements/{{ achievement.id }}">Отмена</a>
+    </div>
+  </form>
+
+  {% if my_evaluation and not my_evaluation.locked %}
+    <p class="muted">Ваша текущая оценка — позиция №{{ my_evaluation.position }}. Вы можете изменить её, пока достижение не ранжировано.</p>
+  {% endif %}
+</article>
+{% endblock %}

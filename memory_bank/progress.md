@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **50%** (D1–D5 completed; D6–D10 pending).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **65%** (D1–D6 completed; D7–D10 pending).
 
 ## Deliverables статус
 
@@ -13,7 +13,7 @@
 | D3  | Authentication                    | completed   |
 | D4  | Achievements CRUD                 | completed   |
 | D5  | Proofs + Moderation               | completed   |
-| D6  | Evaluation Engine + Creator Eval  | pending     |
+| D6  | Evaluation Engine + Creator Eval  | completed   |
 | D7  | Ranking Engine (тесты)            | pending     |
 | D8  | Player Score + Leaderboard        | pending     |
 | D9  | Reports                           | pending     |
@@ -23,15 +23,28 @@
 
 - StarletteDeprecationWarning от `starlette.testclient` — warning из библиотеки, не от нашего кода.
 - PAT `SUPABASE_ACCESS_TOKEN` хранится в локальном `.env` (не коммитится); в `.env.example` — пустой плейсхолдер.
-- Storage bucket `proofs` создан и настроен (D5). Bucket `avatars` не создавался (в MVP аватары не используются).
-- Storage RLS live-проверка завершена (см. Changelog): upload под user-JWT, signed URL (относительный от API, storage3 джойнит в absolute), fetch по подписи 200, anon заблокирован (bucket невидим). Bucket `avatars` не создавался (в MVP аватары не используются).
-- Осиротевшие e2e-данные от прерванных live-прогонов удалены (4 профиля `gal-e2e-*` + каскадные зависимости + auth-пользователи).
+- **`SUPABASE_JWT_SECRET` в `.env` пуст** — подпись собственных JWT для локальных live-прогонов недоступна; получение секрета через Management API не предусмотрено (не отдаётся). Поэтому live-проверки выполняются через SQL-канал Management API (см. `scripts/e2e_evaluation_sql.py`). Auth-эндпоинты `auth/v1/token` и `admin/users` локально нестабильны (см. ниже).
+- **Локальная сеть к `supabase.co` нестабильна**: `auth/v1/token` изредка висит до таймаута (ReadTimeout), `auth/v1/admin/users` периодически отдаёт транзиентные 500. Надёжный канал — Management API `api.supabase.com` (works стабильно). Для live-проверок используется он: создание auth-пользователей и очистка — прямым SQL, проверка RPC — через `set local request.jwt.claims` + `set local role authenticated` в одном транзакционном пакете.
+- Storage RLS live-проверка завершена ранее (см. Changelog): upload под user-JWT, signed URL (относительный от API, storage3 джойнит в absolute), fetch по подписи 200, anon заблокирован (bucket невидим).
+- Осиротевшие e2e-данные от прерванных live-прогонов удалены (achievements `E2E Evaluation Target` id 7–10 + пользователи `@gal-e2e.test`, включая всех 10 пробных).
 - Уникальность `username`: только БД-индекс `profiles_username_unique(lower(username))`; при коллизии регистрация падает на `handle_new_user` (обработать в D10).
 - `/auth/recover` вызывается без `redirect_to` — письма ведут на дефолтный URL Supabase (настроить в D10).
 - Supabase отклоняет зарезервированные email-домены (`example.com`, `test.com`) и лимитирует письма (email rate limit) — важно для тестов регистрации.
 - Email-конфирмация включена: зарегистрированный пользователь входит только после подтверждения письма.
+- **D6/007**: при локальных live-прогонах через SQL-канал остается транзакционный пакет (атомарен: при ошибке ничего не персистится); вспомогательная таблица `public._gal_e2e_results` дропается. Проверку в UI через настоящий JWT (HTTP-путь) отложил из-за нестабильной сети — покрыта unit-тестами и SQL live-проверкой.
 
 ## Changelog
+
+### 2026-09-25 — D6 Evaluation Engine completed + критический баг RPC найден live
+- `migrations/005_evaluation_rpc.sql` — `rank_order` (tie-breaker), `recompute_ranks()` (security definer, компактная перенумерация по `average_position asc, rank_order asc, id asc` среди `ranked+published`), `submit_evaluation(p_achievement_id, p_harder_count)` (security definer): валидация `auth.uid()`, наличие `approved` completion (`NOT_APPROVED`), unlocked (`LOCKED`), двухпроходный сдвиг позиций в личной шкале (сжать старую позицию / освободить новую), upsert, пересчёт `average_position`/`evaluation_count`, переход `unknown→ranked` при 3+ оценках с временным `rank=max+1` + `rank_order=random()` + lock всех оценок, финальный `recompute_ranks()`. Применена к проду.
+- **Критический баг, найденный live-проверкой:** `42702 ambiguous` в `submit_evaluation` — `RETURNS TABLE (achievement_id …)` создаёт OUT-переменные, конфликтующие с колонками в `UPDATE`/`ON CONFLICT`. Оценки в проде не работали. Исправлено миграцией `006_fix_evaluation_rpc.sql`: директива `#variable_conflict use_column` + алиасы. Применена, live-проверка подтвердила работу.
+- `app/services/evaluation.py` — `EvaluationError` (+ `AuthRequiredError`/`NotApprovedError`/`LockedError` по тексту ошибок RPC), `get_user_evaluation`, `list_user_scale` (join achievements/categories), `can_evaluate`, `submit`, `evaluate_context`.
+- `app/routers/evaluations.py` — `GET`/`POST /achievements/{id}/evaluate`: аноним → login, 404 неизвестное достижение, блок оценки на карточке, `?error=` / `?info=evaluated`.
+- Шаблоны `evaluations/evaluate.html` (выбор позиции 1..N+1, «Первая оценка — якорь №1» для пустой шкалы), блок оценки в `achievements/detail.html`, CSS каунтер/селлекта.
+- `tests/test_evaluations.py` (10 тестов: аноним/login-флоу, ошибки сервиса, редиректы, `?info=evaluated`). **Итого 39 passed; ruff чист.**
+- `scripts/apply_migrations.py` — применение миграций через Management API; `scripts/e2e_evaluation_sql.py` — **live-проверка D6 на проде через единый SQL-канал** (создание auth-пользователей прямым SQL, тест `submit_evaluation` + RLS через `set local role authenticated` + `request.jwt.claims` в одной транзакции, автозачистка). **14/14 проверок прошли**: якорь первой оценки=1, upsert без дублей, агрегаты 1/2/3, переход в ranked (count=3, avg=1, rank=1), все оценки locked, LOCKED-отказ при повторной оценке, NOT_APPROVED без completion, RLS: update собственной unlocked строки ok, update locked — 0 строк, insert без approval — заблокирован.
+- Побочное: `scripts/e2e_evaluation.py` (HTTP-путь live-проверки) переведён на самоподписанные JWT (`mint_jwt`), но требует `SUPABASE_JWT_SECRET`; ожидает либо секрет в `.env`, либо стабильной сети — аукс.
+- Очистка остатков: достижения `E2E Evaluation Target` (7–10) и все пользователи `@gal-e2e.test` (10 шт.) удалены.
 
 ### 2026-09-24 — D5 live-проверка завершена (Storage + прод)
 - Storage RLS подтверждён live через прямой REST: upload файла под user-JWT в `proofs/{uid}/1/...` → 200; `create_signed_url` возвращает относительный путь `/object/sign/...`, storage3 при использовании джойнит его с base URL в absolute (баг в приложении отсутствует); fetch по signed URL → 200 с корректным содержимым; анонимный прямой fetch и list → 400/404 (bucket невидим), список недоступен.
