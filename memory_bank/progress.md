@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **65%** (D1–D6 completed; D7–D10 pending).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **80%** (D1–D7 completed; D8–D10 pending).
 
 ## Deliverables статус
 
@@ -14,7 +14,7 @@
 | D4  | Achievements CRUD                 | completed   |
 | D5  | Proofs + Moderation               | completed   |
 | D6  | Evaluation Engine + Creator Eval  | completed   |
-| D7  | Ranking Engine (тесты)            | pending     |
+| D7  | Ranking Engine (тесты)            | completed   |
 | D8  | Player Score + Leaderboard        | pending     |
 | D9  | Reports                           | pending     |
 | D10 | Polish (UI, security, errors)     | pending     |
@@ -34,6 +34,12 @@
 - **D6/007**: при локальных live-прогонах через SQL-канал остается транзакционный пакет (атомарен: при ошибке ничего не персистится); вспомогательная таблица `public._gal_e2e_results` дропается. Проверку в UI через настоящий JWT (HTTP-путь) отложил из-за нестабильной сети — покрыта unit-тестами и SQL live-проверкой.
 
 ## Changelog
+
+### 2026-09-25 — D7 Ranking Engine completed
+- `app/services/ranking.py` — чистый ранк-движок: `RankCandidate` (dataclass), `eligible_for_ranking` (фильтр как в SQL-WHERE `recompute_ranks`: published + ranked + числовое `average_position`), `compute_ranks` (порядок `average_position asc, rank_order asc, id asc` → `{id: rank}`, ранг 1 = самая низкая средняя), `player_score` (`1000/rank`, round 2; rank=None/≤0 → 0.0 — Score policy MVP).
+- `tests/test_ranking.py` — 14 тестов: порядок рангов, ничьи по `rank_order` и по `id`, пустой/одиночный список, фильтры eligible, `player_score` (1→1000, 2→500, 3→333.33, None/0/отрицательный → 0). **Итого 53 passed; ruff чист.**
+- Решение по транзакционности ранкинга (§57): пересчёт происходит атомарно внутри `public.submit_evaluation()` (та же транзакция: переход + временный rank + lock + `recompute_ranks()`), отдельный фоновый пересчёт MVP не требуется.
+- Live: переход в `ranked` с `rank=1` и компактность рангов уже подтверждены SQL live-проверкой D6 (`c_third_ranked`, `ranks_compact`).
 
 ### 2026-09-25 — D6 Evaluation Engine completed + критический баг RPC найден live
 - `migrations/005_evaluation_rpc.sql` — `rank_order` (tie-breaker), `recompute_ranks()` (security definer, компактная перенумерация по `average_position asc, rank_order asc, id asc` среди `ranked+published`), `submit_evaluation(p_achievement_id, p_harder_count)` (security definer): валидация `auth.uid()`, наличие `approved` completion (`NOT_APPROVED`), unlocked (`LOCKED`), двухпроходный сдвиг позиций в личной шкале (сжать старую позицию / освободить новую), upsert, пересчёт `average_position`/`evaluation_count`, переход `unknown→ranked` при 3+ оценках с временным `rank=max+1` + `rank_order=random()` + lock всех оценок, финальный `recompute_ranks()`. Применена к проду.

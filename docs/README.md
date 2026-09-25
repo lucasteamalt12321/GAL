@@ -96,6 +96,12 @@ Browser (Jinja2/JS/CSS)
 - Атомарная логика — security definer функция `public.submit_evaluation` (директива `#variable_conflict use_column` обязательна: `RETURNS TABLE` создаёт OUT-переменные, конфликтующие с колонками — см. миграцию 006).
 - `app/services/evaluation.py` — сервис; `app/routers/evaluations.py` — GET/POST; шаблон `evaluations/evaluate.html`.
 
+## Ранкинг (D7)
+
+- `app/services/ranking.py` — чистые функции: `eligible_for_ranking` (published + ranked + числовая средняя), `compute_ranks` (порядок `average_position asc, rank_order asc, id asc` → ранг 1 = самая низкая средняя), `player_score(rank)` = `1000/rank` (round 2; без ранга → 0).
+- Пересчёт рангов атомарен: выполняется внутри `public.submit_evaluation()` при переходе в `ranked` (`recompute_ranks()`), фоновых задач нет.
+- При равных средних порядок фиксируется `rank_order` — случайный ти-брейкер, зафиксированный в момент перехода.
+
 ## Миграции
 
 - `001_init.sql` — схема и seed категорий.
@@ -154,4 +160,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение D6: каркас FastAPI, клиенты Supabase, миграции `001`–`006` (применены к проду), аутентификация (cookie-сессия), достижения + профили, доказательства + модерация, движок оценок (личная шкала, `locked`, переход в `ranked`, `recompute_ranks()`). Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение D7: каркас FastAPI, клиенты Supabase, миграции `001`–`006`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок (`ranking.py`, тесты). Обновлять при изменениях архитектуры, маршрутов и модулей.
