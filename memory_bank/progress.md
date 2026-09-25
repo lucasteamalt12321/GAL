@@ -103,4 +103,4 @@
 
 ## last_checked_commit
 
-`3849479 feat(d5): proofs (storage bucket) and moderation queue/decisions`
+`209ff4a feat(d6): evaluation engine (personal scale, locked, ranked) and creator evaluation`
