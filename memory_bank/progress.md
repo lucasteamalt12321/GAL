@@ -134,4 +134,4 @@
 
 ## last_checked_commit
 
-`cb10bbb feat(d9): reports (submit, moderator queue, hide achievement on accept)`
+`0ac9c03 feat(d10): polish — csrf double-submit, username validation, recover redirect_to, resolve_user retries`
