@@ -35,6 +35,13 @@
 
 ## Changelog
 
+### 2026-09-25 — JSON-совместимость auth-эндпоинтов
+- `app/forms.py` — хелперы `body_data`/`body_field`/`csrf_from_body`: читают параметры POST и из form-urlencoded/multipart, и из JSON (`request.json()` при `Content-Type: application/json`).
+- `app/routers/auth.py` — `POST /auth/login`, `/auth/register`, `/auth/recover` теперь принимают и форму, и JSON-тело (422 «Field required» для JSON-запросов устранён). Обычные формы в браузере не изменились.
+- `app/csrf.py` — `_posted_token` берёт токен через `csrf_from_body` (и из JSON-поля `_csrf`, и из формы); лишний импорт `StarletteHTTPException`/`CSRF_FIELD` убран.
+- `tests/test_auth.py` +3: JSON register/login/recover проходят (sign_up-стаб, AuthError с keyword-аргументами). **Итого 88 passed; ruff чист.**
+- Коммит: `(после проверок) feat(auth): json body support for login/register/recover`.
+
 ### 2026-09-25 — D10 Polish completed (MVP v1.0 closed)
 - **CSRF (double-submit cookie):** `app/csrf.py` — токен-cookie `gal_csrf` (httpOnly, SameSite=Lax, secure в проде), проверка в `UserContextMiddleware` константным сравнением (`secrets.compare_digest`) значения из формы (`_csrf`) или заголовка (`X-CSRF-Token`) с cookie. Enforcement активен только при `app_env == production` (SameSite=Lax уже блокирует кросс-сайт POST с cookie; в dev тесты остаются простыми). Все 12 POST-форм получили `<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">` (base.html logout, auth login/register/recover, create, complete, moderation queue ×2, evaluate, report, reports queue ×2). Шаблоны читают токен через `request.state.csrf_token` (starlette инжектит `request` в контекст).
 - **Коллизии username:** регистрация теперь проверяет формат (`validate_username`: 3–32 симв., `[A-Za-z0-9_.-]`) и занятость (регистронезависимо через `username_available`) до `sign_up` — дружелюбная ошибка «уже занято» вместо падения `handle_new_user`. Регистры: `PROFILE_ERRORS` → при ошибке проверки регистрацию не блокируем (return True).

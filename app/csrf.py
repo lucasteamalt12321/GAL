@@ -15,16 +15,13 @@ from __future__ import annotations
 import secrets
 
 from fastapi import Request
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import get_settings
+from app.forms import csrf_from_body
 
 CSRF_COOKIE = "gal_csrf"
-CSRF_FIELD = "_csrf"
 HEADER = "X-CSRF-Token"
 MAX_AGE = 60 * 60 * 24 * 30
-
-_FORM_ERRORS = (ValueError, RuntimeError, StarletteHTTPException)
 
 
 def new_token() -> str:
@@ -46,14 +43,7 @@ async def _posted_token(request: Request) -> str | None:
     header = request.headers.get(HEADER)
     if header:
         return header
-    try:
-        form = await request.form()
-    except _FORM_ERRORS:
-        return None
-    field = form.get(CSRF_FIELD)
-    if field is None:
-        return None
-    return str(field)
+    return await csrf_from_body(request)
 
 
 async def check(request: Request) -> bool:

@@ -195,3 +195,66 @@ def test_recover_without_app_url_omits_redirect_to(monkeypatch) -> None:
     resp = client.post("/auth/recover", data={"email": "user@example.com"})
     assert resp.status_code == 200
     assert "redirect_to" not in captured[0]["options"]
+
+
+def test_register_accepts_json(monkeypatch) -> None:
+    class _Session:
+        session = None
+
+    class _AuthStub:
+        def sign_up(self, _payload):
+            return _Session()
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(auth_service, "username_available", lambda _u: True)
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    resp = client.post(
+        "/auth/register",
+        json={"username": "json_user", "email": "j@example.com", "password": "secret1"},
+    )
+    assert resp.status_code == 200
+    assert "Подтвердите email" in resp.text
+
+
+def test_login_accepts_json(monkeypatch) -> None:
+    class _AuthStub:
+        def sign_in_with_password(self, _payload):
+            raise auth_service.AUTH_ERRORS[0](
+                message="bad credentials", code="invalid_login"
+            )
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    resp = client.post(
+        "/auth/login",
+        json={"email": "j@example.com", "password": "secret1"},
+    )
+    assert resp.status_code == 200
+    assert "bad credentials" in resp.text
+
+
+def test_recover_accepts_json(monkeypatch) -> None:
+    import app.routers.auth as auth_router
+
+    captured: list[dict] = []
+
+    class _AuthStub:
+        def reset_password_for_email(self, email, options=None):
+            captured.append({"email": email, "options": options or {}})
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(
+        auth_router, "get_settings", lambda: Settings(app_url="https://gal-inky.vercel.app")
+    )
+    monkeypatch.setattr(
+        auth_service, "new_anon_client", lambda: _ClientStub()
+    )
+    resp = client.post("/auth/recover", json={"email": "user@example.com"})
+    assert resp.status_code == 200
+    assert captured[0]["email"] == "user@example.com"

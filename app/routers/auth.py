@@ -1,11 +1,12 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.config import get_settings
 from app.dependencies import get_current_user
+from app.forms import body_field
 from app.services import auth as auth_service
 from app.templating import templates
 
@@ -45,16 +46,12 @@ def login_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/login", response_class=HTMLResponse, include_in_schema=False)
-def login(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
-) -> HTMLResponse:
+async def login(request: Request) -> HTMLResponse:
+    email = (await body_field(request, "email")).strip()
+    password = await body_field(request, "password")
     try:
         client = auth_service.new_anon_client()
-        res = client.auth.sign_in_with_password(
-            {"email": email.strip(), "password": password}
-        )
+        res = client.auth.sign_in_with_password({"email": email, "password": password})
     except auth_service.AUTH_ERRORS as exc:
         return _page(request, "auth/login.html", error=_error_message(exc), email=email)
     session = res.session
@@ -75,16 +72,11 @@ def register_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/register", response_class=HTMLResponse, include_in_schema=False)
-def register(
-    request: Request,
-    username: str = Form(...),
-    display_name: str = Form(""),
-    email: str = Form(...),
-    password: str = Form(...),
-) -> HTMLResponse:
-    username = username.strip()
-    display_name = (display_name or "").strip()
-    email = email.strip()
+async def register(request: Request) -> HTMLResponse:
+    username = (await body_field(request, "username")).strip()
+    display_name = (await body_field(request, "display_name")).strip()
+    email = (await body_field(request, "email")).strip()
+    password = await body_field(request, "password")
     username_error = auth_service.validate_username(username)
     if username_error:
         return _page(
@@ -145,14 +137,15 @@ def recover_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/recover", response_class=HTMLResponse, include_in_schema=False)
-def recover(request: Request, email: str = Form(...)) -> HTMLResponse:
+async def recover(request: Request) -> HTMLResponse:
+    email = (await body_field(request, "email")).strip()
     options = {}
     app_url = get_settings().app_url.strip()
     if app_url:
         options["redirect_to"] = f"{app_url.rstrip('/')}/auth/login"
     try:
         client = auth_service.new_anon_client()
-        client.auth.reset_password_for_email(email.strip(), options=options)
+        client.auth.reset_password_for_email(email, options=options)
     except auth_service.AUTH_ERRORS as exc:
         return _page(
             request, "auth/recover.html", error=_error_message(exc), email=email
