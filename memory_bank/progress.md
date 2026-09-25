@@ -109,4 +109,4 @@
 
 ## last_checked_commit
 
-`209ff4a feat(d6): evaluation engine (personal scale, locked, ranked) and creator evaluation`
+`f0daee0 feat(d7): ranking engine (compute_ranks, player_score) with tests`
