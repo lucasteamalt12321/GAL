@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **90%** (D1–D8 completed; D9–D10 pending).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **95%** (D1–D9 completed; D10 pending).
 
 ## Deliverables статус
 
@@ -16,7 +16,7 @@
 | D6  | Evaluation Engine + Creator Eval  | completed   |
 | D7  | Ranking Engine (тесты)            | completed   |
 | D8  | Player Score + Leaderboard        | completed   |
-| D9  | Reports                           | pending     |
+| D9  | Reports                           | completed   |
 | D10 | Polish (UI, security, errors)     | pending     |
 
 ## Known Issues
@@ -34,6 +34,13 @@
 - **D6/007**: при локальных live-прогонах через SQL-канал остается транзакционный пакет (атомарен: при ошибке ничего не персистится); вспомогательная таблица `public._gal_e2e_results` дропается. Проверку в UI через настоящий JWT (HTTP-путь) отложил из-за нестабильной сети — покрыта unit-тестами и SQL live-проверкой.
 
 ## Changelog
+
+### 2026-09-25 — D9 Reports completed
+- `app/services/reports.py` — `create_report` (authenticated, проверка дубля своей жалобы, `REPORTS_ERRORS`), `list_pending_reports` (embed achievement+reporter через FK-алиасы `!reports_achievement_id_fkey`/`!reports_reporter_id_fkey`), `decide_report` (модератор: update `status/resolved_at/resolved_by/resolution_reason`; accept → `achievements.status='deleted'` — публичный список фильтрует published).
+- `app/routers/reports.py` — `GET/POST /achievements/{id}/report` (anon → login), `GET /reports` (очередь модератора, anon → login, user → 403), `POST /reports/{id}/accept|reject`; подключён в `app/main.py`.
+- Шаблоны `reports/report.html` (форма жалобы, причины: duplicate/incorrect/spam/offensive/other) и `reports/queue.html` (карточки с решением accept/reject); ссылка «Пожаловаться» на странице достижения; `.btn-danger` уже был в CSS.
+- `tests/test_reports.py` — 13 тестов (аноним/403/404, рендер формы и очереди, redirect-флоу ошибок, вызовы сервиса accept/reject). **Итого 69 passed; ruff чист.**
+- **Live-проверка `scripts/e2e_reports_sql.py` — 5/5 чеков:** reporter вставляет жалобу под своей ролью (RLS), anon жалобы не видит (rows=0) и не может их менять (0 строк), модератор видит очередь, accept скрывает достижение (`status=deleted`). В скрипт добавлены ретраи на сетевые ошибки (`_post_query`), т.к. локальная сеть к API нестабильна (SSL UNEXPECTED_EOF). Обучающие моменты из live: `profiles.role` — enum `user_role` (нужен `::public.user_role`); роль меняет только `service_role` по `request.jwt.claims` (триггер `prevent_profile_role_change`), поэтому `set local request.jwt.claims = '{"role":"service_role"}'` ставится в начале транзакции.
 
 ### 2026-09-25 — D8 Player Score + Leaderboard completed
 - `migrations/007_player_leaderboard.sql` — security definer функция `public.player_leaderboard()`: агрегат по approved completions ранжированных опубликованных достижений (`score = 1000 / rank`, round 2, unknown → 0) + `achievement_count`; `group by profiles`, `order by score desc, username asc`. Применена к проду (2 фикса колонки: `p.id as user_id`, GROUP BY по `p.id`).

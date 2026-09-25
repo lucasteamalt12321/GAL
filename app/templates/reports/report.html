@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Report — {{ achievement.title }}{% endblock %}
+{% block content %}
+  <h1>Report achievement</h1>
+  <p class="muted">
+    Жалоба на «<a href="/achievements/{{ achievement.id }}">{{ achievement.title }}</a>».
+    Жалобы рассматривает модератор.
+  </p>
+  {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+  <form method="post" action="/achievements/{{ achievement.id }}/report" class="card stack">
+    <div class="field">
+      <label for="reason">Причина *</label>
+      <select id="reason" name="reason" required>
+        <option value="duplicate">Дубликат существующего достижения</option>
+        <option value="incorrect">Некорректное описание/требования</option>
+        <option value="spam">Спам</option>
+        <option value="offensive">Оскорбительный контент</option>
+        <option value="other">Другое</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="description">Подробнее (необязательно)</label>
+      <textarea id="description" name="description" rows="4"></textarea>
+    </div>
+    <button type="submit" class="btn">Submit report</button>
+  </form>
+  <p><a href="/achievements/{{ achievement.id }}">← Back to achievement</a></p>
+{% endblock %}

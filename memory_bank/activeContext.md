@@ -2,10 +2,16 @@
 
 ## Текущий фокус
 
-D1–D8 завершены: каркас FastAPI на Vercel (`https://gal-inky.vercel.app`), миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок (личная шкала, `locked`, переход в `ranked`), ранк-движок (`ranking.py`) и **лидерборды** (`/leaderboard`: top achievements + top players, `player_leaderboard()` в БД, score = 1000/rank). Следующие блоки — D9 (Reports) → D10 (Polish).
+D1–D9 завершены: каркас FastAPI на Vercel (`https://gal-inky.vercel.app`), миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок (личная шкала, `locked`, переход в `ranked`), ранк-движок (`ranking.py`), лидерборды (`/leaderboard`: top achievements + top players, `player_leaderboard()` в БД, score = 1000/rank) и **жалобы + очередь модератора** (`/reports`). Остался последний блок — D10 (Polish: CSRF, коллизии username, redirect_to для recover, ретраи resolve_user, финальный E2E).
 
 ## Статус задач
 
+- D9 (Reports): **completed**
+  - [x] `app/services/reports.py` — `create_report` (дубль своей жалобы блокируется), `list_pending_reports`, `decide_report` (accept → achievement `deleted`)
+  - [x] `app/routers/reports.py` — `GET/POST /achievements/{id}/report`, `GET /reports`, `POST /reports/{id}/accept|reject`; подключён в `app/main.py`
+  - [x] Шаблоны `reports/report.html`, `reports/queue.html`; ссылка «Пожаловаться» на карточке достижения
+  - [x] `tests/test_reports.py` (13) — итого 69 passed, ruff чист
+  - [x] **Live SQL-проверка 5/5**: report-insert под своей ролью, anon не видит и не меняет жалобы, модератор видит, accept скрывает достижение
 - D8 (Player Score + Leaderboard): **completed**
   - [x] `migrations/007_player_leaderboard.sql` (security definer, grant anon) — применена
   - [x] `app/services/rankings.py`, `app/routers/rankings.py` (`GET /leaderboard`), шаблон, nav, CSS
@@ -81,9 +87,8 @@ D1–D8 завершены: каркас FastAPI на Vercel (`https://gal-inky.
 
 ## Следующие шаги
 
-1. D9 — Reports: `app/services/reports.py`, `app/routers/reports.py` (`GET/POST /achievements/{id}/report`, очередь модератора `/reports`), шаблоны, тесты.
-2. D10 — Polish: CSRF-токен, обработка коллизий `username`, `redirect_to` для `/auth/recover`, повтор `resolve_user` при сетевых ошибках, финальный E2E-прогон.
-3. Доп: live-проверка файловой части D5 (upload через приложение + signed URL) и HTTP-пути D6 — при стабильной сети.
+1. D10 — Polish: CSRF-токен, обработка коллизий `username`, `redirect_to` для `/auth/recover`, повтор `resolve_user` при сетевых ошибках, финальный E2E-прогон.
+2. Доп: live-проверка файловой части D5 (upload через приложение + signed URL) и HTTP-пути D6 — при стабильной сети.
 
 ## Риски на горизонте
 

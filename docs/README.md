@@ -109,6 +109,12 @@ Browser (Jinja2/JS/CSS)
 - `public.player_leaderboard()` — security definer функция в БД (агрегат недоступных под RLS completions), `grant execute to anon, authenticated`; ранжирование `score desc, username asc`.
 - `app/services/rankings.py` — `leaderboard_achievements` (REST anon) + `player_leaderboard` (rpc); `app/routers/rankings.py`.
 
+## Жалобы (D9)
+
+- `GET/POST /achievements/{id}/report` — форма жалобы (причины: duplicate/incorrect/spam/offensive/other), подача под своим JWT; одна жалоба на достижение от пользователя.
+- `GET /reports` — очередь модератора (аноним → login, не-модератор → 403); `POST /reports/{id}/accept|reject` — принятие скрывает достижение (`status=deleted`, публичные списки фильтруют `published`).
+- `app/services/reports.py` — `create_report`, `list_pending_reports` (embed achievement/reporter), `decide_report`; `app/routers/reports.py`.
+
 ## Миграции
 
 - `001_init.sql` — схема и seed категорий.
@@ -168,4 +174,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение D8: каркас FastAPI, клиенты Supabase, миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды (`/leaderboard`). Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение D9: каркас FastAPI, клиенты Supabase, миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды (`/leaderboard`), жалобы (`/reports`). Обновлять при изменениях архитектуры, маршрутов и модулей.
