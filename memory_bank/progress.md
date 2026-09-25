@@ -141,4 +141,4 @@
 
 ## last_checked_commit
 
-`0ac9c03 feat(d10): polish — csrf double-submit, username validation, recover redirect_to, resolve_user retries`
+`da0a47c feat(auth): accept json body for login/register/recover`
