@@ -49,7 +49,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D5  | Proofs + Moderation               | completed    | 15  |
 | D6  | Evaluation Engine + Creator Eval  | completed    | 15  |
 | D7  | Ranking Engine (тесты)            | completed    | 15  |
-| D8  | Player Score + Leaderboard        | pending      | 10  |
+| D8  | Player Score + Leaderboard        | completed    | 10  |
 | D9  | Reports                           | pending      | 5   |
 | D10 | Polish (UI, security, errors)     | pending      | 5   |
 

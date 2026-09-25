@@ -102,6 +102,13 @@ Browser (Jinja2/JS/CSS)
 - Пересчёт рангов атомарен: выполняется внутри `public.submit_evaluation()` при переходе в `ranked` (`recompute_ranks()`), фоновых задач нет.
 - При равных средних порядок фиксируется `rank_order` — случайный ти-брейкер, зафиксированный в момент перехода.
 
+## Лидерборды (D8)
+
+- `GET /leaderboard` — две секции: top achievements (ranked+published, сортировка по `rank`; колонки rank / avg position / evaluations / category) и top players (позиция, score, кол-во достижений).
+- Oчки игрока = `1000 / rank` за каждый `approved` completion ранжированного опубликованного достижения (unknown → 0).
+- `public.player_leaderboard()` — security definer функция в БД (агрегат недоступных под RLS completions), `grant execute to anon, authenticated`; ранжирование `score desc, username asc`.
+- `app/services/rankings.py` — `leaderboard_achievements` (REST anon) + `player_leaderboard` (rpc); `app/routers/rankings.py`.
+
 ## Миграции
 
 - `001_init.sql` — схема и seed категорий.
@@ -110,6 +117,7 @@ Browser (Jinja2/JS/CSS)
 - `004_storage_proofs.sql` — bucket `proofs` (private, лимит 50 МБ) + политики `storage.objects` (insert/delete владельца, select владельца и модератора).
 - `005_evaluation_rpc.sql` — движок оценок: `rank_order`, `recompute_ranks()`, `submit_evaluation()`, grants.
 - `006_fix_evaluation_rpc.sql` — фикс `42702 ambiguous` (OUT-параметры `RETURNS TABLE` vs колонки): `#variable_conflict use_column` + алиасы.
+- `007_player_leaderboard.sql` — `public.player_leaderboard()`: агрегат очков игроков (1000/rank), grant anon/authenticated.
 
 ## Данные
 
@@ -160,4 +168,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение D7: каркас FastAPI, клиенты Supabase, миграции `001`–`006`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок (`ranking.py`, тесты). Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение D8: каркас FastAPI, клиенты Supabase, миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды (`/leaderboard`). Обновлять при изменениях архитектуры, маршрутов и модулей.

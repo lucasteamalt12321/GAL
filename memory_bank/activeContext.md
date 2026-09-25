@@ -2,10 +2,15 @@
 
 ## Текущий фокус
 
-D1–D7 завершены: каркас FastAPI на Vercel (`https://gal-inky.vercel.app`), миграции `001`–`006` применены к Supabase `wiwyitafoprxmlyndkwe`, аутентификация, достижения + профили, доказательства + модерация, движок оценок (личная шкала, `locked`, переход в `ranked`, `recompute_ranks()`) и чистый ранк-движок (`app/services/ranking.py`, `compute_ranks`/`player_score`). Следующие блоки — D8 (Player Score + Leaderboard) → D9 (Reports) → D10 (Polish).
+D1–D8 завершены: каркас FastAPI на Vercel (`https://gal-inky.vercel.app`), миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок (личная шкала, `locked`, переход в `ranked`), ранк-движок (`ranking.py`) и **лидерборды** (`/leaderboard`: top achievements + top players, `player_leaderboard()` в БД, score = 1000/rank). Следующие блоки — D9 (Reports) → D10 (Polish).
 
 ## Статус задач
 
+- D8 (Player Score + Leaderboard): **completed**
+  - [x] `migrations/007_player_leaderboard.sql` (security definer, grant anon) — применена
+  - [x] `app/services/rankings.py`, `app/routers/rankings.py` (`GET /leaderboard`), шаблон, nav, CSS
+  - [x] `tests/test_rankings.py` (3) — итого 56 passed, ruff чист
+  - [x] Live SQL-проверка: 17/17 (player score 1000×3, anon-read, achievement в лидерборде)
 - D7 (Ranking Engine): **completed**
   - [x] `app/services/ranking.py`: `eligible_for_ranking` / `compute_ranks` / `player_score` (чистые функции)
   - [x] `tests/test_ranking.py` (14 тестов) — итого 53 passed, ruff чист
@@ -76,10 +81,9 @@ D1–D7 завершены: каркас FastAPI на Vercel (`https://gal-inky.
 
 ## Следующие шаги
 
-1. D8 — Player Score + Leaderboard: страница `/leaderboard` (achievement + player), рендер ранга/очков, «?» для unknown, `rankings`/`scoring` в docs.
-2. D9 — Reports: форма жалобы + очередь модератора.
-3. D10 — Polish: CSRF-токен, обработка коллизий `username`, `redirect_to` для `/auth/recover`, повтор `resolve_user` при сетевых ошибках, финальный E2E-прогон.
-4. Доп: live-проверка файловой части D5 (upload через приложение + signed URL) и HTTP-пути D6 — при стабильной сети.
+1. D9 — Reports: `app/services/reports.py`, `app/routers/reports.py` (`GET/POST /achievements/{id}/report`, очередь модератора `/reports`), шаблоны, тесты.
+2. D10 — Polish: CSRF-токен, обработка коллизий `username`, `redirect_to` для `/auth/recover`, повтор `resolve_user` при сетевых ошибках, финальный E2E-прогон.
+3. Доп: live-проверка файловой части D5 (upload через приложение + signed URL) и HTTP-пути D6 — при стабильной сети.
 
 ## Риски на горизонте
 

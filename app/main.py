@@ -13,6 +13,7 @@ from app.routers import (
     evaluations,
     health,
     moderation,
+    rankings,
     users,
 )
 from app.templating import templates
@@ -39,6 +40,7 @@ app.include_router(achievements.router)
 app.include_router(completions.router)
 app.include_router(evaluations.router)
 app.include_router(moderation.router)
+app.include_router(rankings.router)
 app.include_router(users.router)
 
 

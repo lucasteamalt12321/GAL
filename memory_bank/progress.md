@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **80%** (D1–D7 completed; D8–D10 pending).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **90%** (D1–D8 completed; D9–D10 pending).
 
 ## Deliverables статус
 
@@ -15,7 +15,7 @@
 | D5  | Proofs + Moderation               | completed   |
 | D6  | Evaluation Engine + Creator Eval  | completed   |
 | D7  | Ranking Engine (тесты)            | completed   |
-| D8  | Player Score + Leaderboard        | pending     |
+| D8  | Player Score + Leaderboard        | completed   |
 | D9  | Reports                           | pending     |
 | D10 | Polish (UI, security, errors)     | pending     |
 
@@ -34,6 +34,16 @@
 - **D6/007**: при локальных live-прогонах через SQL-канал остается транзакционный пакет (атомарен: при ошибке ничего не персистится); вспомогательная таблица `public._gal_e2e_results` дропается. Проверку в UI через настоящий JWT (HTTP-путь) отложил из-за нестабильной сети — покрыта unit-тестами и SQL live-проверкой.
 
 ## Changelog
+
+### 2026-09-25 — D8 Player Score + Leaderboard completed
+- `migrations/007_player_leaderboard.sql` — security definer функция `public.player_leaderboard()`: агрегат по approved completions ранжированных опубликованных достижений (`score = 1000 / rank`, round 2, unknown → 0) + `achievement_count`; `group by profiles`, `order by score desc, username asc`. Применена к проду (2 фикса колонки: `p.id as user_id`, GROUP BY по `p.id`).
+- Причина функции в БД: RLS закрывает `achievement_completions` (только свои/модератор), лидерборд публичный, поэтому агрегированный доступ — через `security definer` (owner postgres) + `grant execute to anon, authenticated`.
+- `app/services/rankings.py` — `leaderboard_achievements` (ranked+published, `.order("rank")`, REST anon), `player_leaderboard` (rpc).
+- `app/routers/rankings.py` — `GET /leaderboard`: achievement-ранкинг (rank, avg position, count, category) + player-ранкинг (позиция, score, count); `_enrich_players` нормализует score в float и добавляет позицию.
+- `app/templates/rankings/leaderboard.html` — две секции-таблицы + пустые состояния; nav `Players` → `Leaderboard` (`/leaderboard`); CSS `.leaderboard-table/.lb-*`.
+- `app/main.py` — подключён `rankings.router`.
+- `tests/test_rankings.py` — 3 теста (рендер строк, пустое состояние, порядок из сервиса). **Итого 56 passed; ruff чист.**
+- **Live-проверка (SQL-канал, расширен `e2e_evaluation_sql.py` до 17 чеков):** `player_score_1000` (3 игрока × score 1000 при rank=1), `achievement_leaderboard_rank1` (достижение в лидерборде), `player_leaderboard_anon` (функция читается под ролью anon — grant работает). Порядок в SQL — `order by score desc, username asc` (unit-тест проверяет проброс порядка из сервиса).
 
 ### 2026-09-25 — D7 Ranking Engine completed
 - `app/services/ranking.py` — чистый ранк-движок: `RankCandidate` (dataclass), `eligible_for_ranking` (фильтр как в SQL-WHERE `recompute_ranks`: published + ranked + числовое `average_position`), `compute_ranks` (порядок `average_position asc, rank_order asc, id asc` → `{id: rank}`, ранг 1 = самая низкая средняя), `player_score` (`1000/rank`, round 2; rank=None/≤0 → 0.0 — Score policy MVP).

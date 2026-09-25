@@ -557,3 +557,44 @@ body {
 .scale-list a {
   color: var(--text);
 }
+.leaderboard-section {
+  margin-bottom: 2rem;
+}
+
+.leaderboard-section h2 {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.4rem;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.leaderboard-table th {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.leaderboard-table .lb-rank {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.leaderboard-table .lb-score {
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--muted);
+}

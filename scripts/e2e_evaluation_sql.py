@@ -91,7 +91,7 @@ create table if not exists public._gal_e2e_results (
     ok boolean not null,
     note text not null
 );
-grant select, insert on public._gal_e2e_results to authenticated;
+grant select, insert on public._gal_e2e_results to anon, authenticated;
 drop policy if exists _gal_e2e_all on public._gal_e2e_results;
 create policy _gal_e2e_all on public._gal_e2e_results
     for all using (true) with check (true);
@@ -228,6 +228,22 @@ begin
         ('positions_all_1', v_n = 3, format('rows=%s', v_n))
     on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
 
+    -- D8: player scores = 1000 / rank по approved completion'ам ранжированных
+    select count(*) into v_n
+      from public.player_leaderboard()
+     where score = 1000.00 and achievement_count = 1;
+    insert into public._gal_e2e_results values
+        ('player_score_1000', v_n = 3, format('rows=%s', v_n))
+    on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
+
+    select count(*) into v_n
+      from public.achievements
+     where ranking_status = 'ranked' and status = 'published' and rank = 1
+       and id = v_ach;
+    insert into public._gal_e2e_results values
+        ('achievement_leaderboard_rank1', v_n = 1, format('rows=%s', v_n))
+    on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
+
     select (select count(*) from public.achievements
              where ranking_status = 'ranked' and status = 'published')
          = (select max(rank) from public.achievements
@@ -287,6 +303,19 @@ begin
     get diagnostics v_n = row_count;
     insert into public._gal_e2e_results values
         ('rls_locked_update_blocked', v_n = 0, format('rows=%s', v_n))
+    on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
+end $$;
+reset role;
+
+-- D8: player_leaderboard() читается даже под ролью anon (grant + security definer)
+set local role anon;
+set local request.jwt.claims = '{{"role":"anon"}}';
+do $$
+declare v_n bigint;
+begin
+    select count(*) into v_n from public.player_leaderboard() where score = 1000.00;
+    insert into public._gal_e2e_results values
+        ('player_leaderboard_anon', v_n = 3, format('rows=%s', v_n))
     on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
 end $$;
 reset role;

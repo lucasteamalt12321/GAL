@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard{% endblock %}
+{% block content %}
+  <h1>Leaderboard</h1>
+
+  <section class="leaderboard-section">
+    <h2>Top achievements</h2>
+    {% if achievements %}
+      <table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Achievement</th>
+            <th>Category</th>
+            <th>Avg position</th>
+            <th>Evaluations</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in achievements %}
+            <tr>
+              <td class="lb-rank">{{ a.rank }}</td>
+              <td><a href="/achievements/{{ a.id }}">{{ a.title }}</a></td>
+              <td>{{ a.category.name if a.category else '—' }}</td>
+              <td>{{ a.average_position|round(2) if a.average_position is not none else '?' }}</td>
+              <td>{{ a.evaluation_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Пока нет ранжированных достижений — появится после того, как достижения получат 3+ оценки.</p>
+    {% endif %}
+  </section>
+
+  <section class="leaderboard-section">
+    <h2>Top players</h2>
+    {% if players %}
+      <table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Player</th>
+            <th>Score</th>
+            <th>Achievements</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in players %}
+            <tr>
+              <td class="lb-rank">{{ p.leaderboard_position }}</td>
+              <td><a href="/users/{{ p.username }}">{{ p.display_name or p.username }}</a></td>
+              <td class="lb-score">{{ p.score }}</td>
+              <td>{{ p.achievement_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Пока нет очков. Очки начисляются за подтверждённые выполнения ранжированных достижений (1000 / rank).</p>
+    {% endif %}
+  </section>
+{% endblock %}
