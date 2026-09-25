@@ -119,4 +119,4 @@
 
 ## last_checked_commit
 
-`f0daee0 feat(d7): ranking engine (compute_ranks, player_score) with tests`
+`49bc0e6 feat(d8): player score and leaderboard (player_leaderboard RPC, /leaderboard page)`
