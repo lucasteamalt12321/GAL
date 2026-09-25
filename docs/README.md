@@ -115,6 +115,13 @@ Browser (Jinja2/JS/CSS)
 - `GET /reports` — очередь модератора (аноним → login, не-модератор → 403); `POST /reports/{id}/accept|reject` — принятие скрывает достижение (`status=deleted`, публичные списки фильтруют `published`).
 - `app/services/reports.py` — `create_report`, `list_pending_reports` (embed achievement/reporter), `decide_report`; `app/routers/reports.py`.
 
+## Безопасность и polish (D10)
+
+- **CSRF:** double-submit cookie `gal_csrf` (httpOnly, SameSite=Lax, secure в проде); проверка токена из формы (`_csrf`) или заголовка (`X-CSRF-Token`) константным сравнением в `UserContextMiddleware`. Enforcement только при `APP_ENV=production`. Токен доступен в шаблонах через `request.state.csrf_token`.
+- **Регистрация:** `validate_username` (3–32 симв., `[A-Za-z0-9_.-]`) + регистронезависимая проверка занятости `username_available` перед `sign_up`.
+- **Recover:** `reset_password_for_email` получает `redirect_to = APP_URL/auth/login` (setting `app_url`).
+- **Сеть:** `resolve_user` повторяет транзиентные ошибки (`_retry_network`, до 3 попыток), невалидный токен — сразу отсутствие пользователя.
+
 ## Миграции
 
 - `001_init.sql` — схема и seed категорий.
@@ -174,4 +181,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение D9: каркас FastAPI, клиенты Supabase, миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды (`/leaderboard`), жалобы (`/reports`). Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение MVP v1.0 (D1–D10): каркас FastAPI, клиенты Supabase, миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды (`/leaderboard`), жалобы (`/reports`), CSRF/username/recover-полировка. Обновлять при изменениях архитектуры, маршрутов и модулей.

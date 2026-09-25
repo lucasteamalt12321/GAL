@@ -6,6 +6,7 @@
 <section class="auth-card auth-card-wide">
   <h1>Предложить достижение</h1>
   <form method="post" action="/achievements/create" class="stack" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label class="field">
       <span class="field-label">Название</span>
       <input type="text" name="title" value="{{ title }}" required maxlength="200">

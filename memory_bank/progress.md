@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **95%** (D1–D9 completed; D10 pending).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D10 completed, MVP v1.0 готов).
 
 ## Deliverables статус
 
@@ -17,7 +17,7 @@
 | D7  | Ranking Engine (тесты)            | completed   |
 | D8  | Player Score + Leaderboard        | completed   |
 | D9  | Reports                           | completed   |
-| D10 | Polish (UI, security, errors)     | pending     |
+| D10 | Polish (UI, security, errors)     | completed   |
 
 ## Known Issues
 
@@ -27,13 +27,21 @@
 - **Локальная сеть к `supabase.co` нестабильна**: `auth/v1/token` изредка висит до таймаута (ReadTimeout), `auth/v1/admin/users` периодически отдаёт транзиентные 500. Надёжный канал — Management API `api.supabase.com` (works стабильно). Для live-проверок используется он: создание auth-пользователей и очистка — прямым SQL, проверка RPC — через `set local request.jwt.claims` + `set local role authenticated` в одном транзакционном пакете.
 - Storage RLS live-проверка завершена ранее (см. Changelog): upload под user-JWT, signed URL (относительный от API, storage3 джойнит в absolute), fetch по подписи 200, anon заблокирован (bucket невидим).
 - Осиротевшие e2e-данные от прерванных live-прогонов удалены (achievements `E2E Evaluation Target` id 7–10 + пользователи `@gal-e2e.test`, включая всех 10 пробных).
-- Уникальность `username`: только БД-индекс `profiles_username_unique(lower(username))`; при коллизии регистрация падает на `handle_new_user` (обработать в D10).
-- `/auth/recover` вызывается без `redirect_to` — письма ведут на дефолтный URL Supabase (настроить в D10).
-- Supabase отклоняет зарезервированные email-домены (`example.com`, `test.com`) и лимитирует письма (email rate limit) — важно для тестов регистрации.
-- Email-конфирмация включена: зарегистрированный пользователь входит только после подтверждения письма.
-- **D6/007**: при локальных live-прогонах через SQL-канал остается транзакционный пакет (атомарен: при ошибке ничего не персистится); вспомогательная таблица `public._gal_e2e_results` дропается. Проверку в UI через настоящий JWT (HTTP-путь) отложил из-за нестабильной сети — покрыта unit-тестами и SQL live-проверкой.
+- Уникальность `username`: БД-индекс + предварительная проверка при регистрации (D10, race-коллизия → ошибка `sign_up`, обрабатывается gracefully).
+- `/auth/recover` — `redirect_to` на `APP_URL/auth/login` при заданном `APP_URL` (D10); по умолчанию Supabase-дефолт.
+- Email-конфирмация включена: зарегистрированный пользователь входит только после подтверждения письма (`res.session` → вход; иначе сообщение).
+- CSRF активен в production (`app_env == "production"`); в development не проверяется.
+- `public._gal_e2e_results` остаётся в схеме после live-прогонов (утилитарная таблица E2E, `create table if not exists`).
 
 ## Changelog
+
+### 2026-09-25 — D10 Polish completed (MVP v1.0 closed)
+- **CSRF (double-submit cookie):** `app/csrf.py` — токен-cookie `gal_csrf` (httpOnly, SameSite=Lax, secure в проде), проверка в `UserContextMiddleware` константным сравнением (`secrets.compare_digest`) значения из формы (`_csrf`) или заголовка (`X-CSRF-Token`) с cookie. Enforcement активен только при `app_env == production` (SameSite=Lax уже блокирует кросс-сайт POST с cookie; в dev тесты остаются простыми). Все 12 POST-форм получили `<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">` (base.html logout, auth login/register/recover, create, complete, moderation queue ×2, evaluate, report, reports queue ×2). Шаблоны читают токен через `request.state.csrf_token` (starlette инжектит `request` в контекст).
+- **Коллизии username:** регистрация теперь проверяет формат (`validate_username`: 3–32 симв., `[A-Za-z0-9_.-]`) и занятость (регистронезависимо через `username_available`) до `sign_up` — дружелюбная ошибка «уже занято» вместо падения `handle_new_user`. Регистры: `PROFILE_ERRORS` → при ошибке проверки регистрацию не блокируем (return True).
+- **`/auth/recover`:** передаёт `redirect_to = APP_URL/auth/login` (новый setting `app_url`; см. `.env.example`), если `APP_URL` задан — письма ведут на приложение.
+- **`resolve_user`:** `_retry_network` — до 3 попыток с нарастающей паузой на транзиентных сетевых ошибках (`httpx.HTTPError` и пр.), но не на `AuthError` (невалидный токен — сразу return None). Лечит «потерю сессии» при нестабильной сети (Known Issue закрыт).
+- `tests/test_csrf.py` (9: уникальность, cookie на GET, токен в формах, production: POST без/с неверным/с верным токеном — 403/403/303, header-путь, dev-разрешённость) + расширен `tests/test_auth.py` (9: validate_username, username_available(+/−), ошибки при коротком/занятом username, регистрация доходит до sign_up, recover передаёт/не передаёт redirect_to). **Итого 85 passed; ruff чист.**
+- **Финальный live-прогон:** `e2e_evaluation_sql.py` — 17/17 (движок оценок + RLS + лидерборды), `e2e_reports_sql.py` — 5/5 (жалобы + RLS) — все проверки зелёные.
 
 ### 2026-09-25 — D9 Reports completed
 - `app/services/reports.py` — `create_report` (authenticated, проверка дубля своей жалобы, `REPORTS_ERRORS`), `list_pending_reports` (embed achievement+reporter через FK-алиасы `!reports_achievement_id_fkey`/`!reports_reporter_id_fkey`), `decide_report` (модератор: update `status/resolved_at/resolved_by/resolution_reason`; accept → `achievements.status='deleted'` — публичный список фильтрует published).

@@ -6,6 +6,7 @@
 <section class="auth-card">
   <h1>Register</h1>
   <form method="post" action="/auth/register" class="stack">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label class="field">
       <span class="field-label">Username</span>
       <input type="text" name="username" value="{{ username }}" required

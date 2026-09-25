@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
+from app.config import Settings
 from app.main import app
+from app.services import auth as auth_service
 
 client = TestClient(app)
 
@@ -41,3 +43,155 @@ def test_anonymous_nav_shows_auth_links() -> None:
     assert resp.status_code == 200
     assert "Sign in" in resp.text
     assert "Register" in resp.text
+
+
+def test_validate_username_rules() -> None:
+    assert auth_service.validate_username("ab") is not None
+    assert auth_service.validate_username("a" * 33) is not None
+    assert auth_service.validate_username("bad name!") is not None
+    assert auth_service.validate_username("") is not None
+    assert auth_service.validate_username("alice_01") is None
+    assert auth_service.validate_username("A.B-c") is None
+
+
+def test_username_available_when_no_match(monkeypatch) -> None:
+    class _Empty:
+        data = None
+
+    class _Query:
+        def ilike(self, *_a, **_k):
+            return self
+
+        def maybe_single(self):
+            return self
+
+        def execute(self):
+            return _Empty()
+
+    class _Table:
+        def select(self, *_a, **_k):
+            return _Query()
+
+    class _Client:
+        def table(self, _name):
+            return _Table()
+
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _Client())
+    assert auth_service.username_available("alice") is True
+
+
+def test_username_available_when_taken(monkeypatch) -> None:
+    class _Data:
+        def __init__(self):
+            self.data = [{"id": "123"}]
+
+    class _Query:
+        def ilike(self, *_a, **_k):
+            return self
+
+        def maybe_single(self):
+            return self
+
+        def execute(self):
+            return _Data()
+
+    class _Table:
+        def select(self, *_a, **_k):
+            return _Query()
+
+    class _Client:
+        def table(self, _name):
+            return _Table()
+
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _Client())
+    assert auth_service.username_available("alice") is False
+
+
+def test_register_short_username_shows_error() -> None:
+    resp = client.post(
+        "/auth/register",
+        data={"username": "ab", "email": "x@example.com", "password": "secret1"},
+    )
+    assert resp.status_code == 200
+    assert "от 3 до 32" in resp.text
+
+
+def test_register_taken_username_shows_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        auth_service, "username_available", lambda _username: False
+    )
+    resp = client.post(
+        "/auth/register",
+        data={"username": "alice", "email": "x@example.com", "password": "secret1"},
+    )
+    assert resp.status_code == 200
+    assert "уже занято" in resp.text
+
+
+def test_register_valid_proceeds_to_signup(monkeypatch) -> None:
+    class _Session:
+        session = None
+
+    class _AuthStub:
+        def sign_up(self, _payload):
+            return _Session()
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(auth_service, "username_available", lambda _u: True)
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    resp = client.post(
+        "/auth/register",
+        data={"username": "new_gal_user", "email": "u@example.com", "password": "secret1"},
+    )
+    assert resp.status_code == 200
+    assert "Подтвердите email" in resp.text
+
+
+def test_recover_passes_redirect_to(monkeypatch) -> None:
+    import app.routers.auth as auth_router
+
+    captured: list[dict] = []
+
+    class _AuthStub:
+        def reset_password_for_email(self, email, options=None):
+            captured.append({"email": email, "options": options or {}})
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(
+        auth_router, "get_settings", lambda: Settings(app_url="https://gal-inky.vercel.app")
+    )
+    monkeypatch.setattr(
+        auth_service, "new_anon_client", lambda: _ClientStub()
+    )
+    resp = client.post("/auth/recover", data={"email": "user@example.com"})
+    assert resp.status_code == 200
+    assert captured[0]["email"] == "user@example.com"
+    assert (
+        captured[0]["options"].get("redirect_to")
+        == "https://gal-inky.vercel.app/auth/login"
+    )
+
+
+def test_recover_without_app_url_omits_redirect_to(monkeypatch) -> None:
+    import app.routers.auth as auth_router
+
+    captured: list[dict] = []
+
+    class _AuthStub:
+        def reset_password_for_email(self, email, options=None):
+            captured.append({"email": email, "options": options or {}})
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(auth_router, "get_settings", lambda: Settings(app_url=""))
+    monkeypatch.setattr(
+        auth_service, "new_anon_client", lambda: _ClientStub()
+    )
+    resp = client.post("/auth/recover", data={"email": "user@example.com"})
+    assert resp.status_code == 200
+    assert "redirect_to" not in captured[0]["options"]

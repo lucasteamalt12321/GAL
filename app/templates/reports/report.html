@@ -8,6 +8,7 @@
   </p>
   {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
   <form method="post" action="/achievements/{{ achievement.id }}/report" class="card stack">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="field">
       <label for="reason">Причина *</label>
       <select id="reason" name="reason" required>

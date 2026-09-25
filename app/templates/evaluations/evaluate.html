@@ -37,6 +37,7 @@
   {% endif %}
 
   <form method="post" action="/achievements/{{ achievement.id }}/evaluate" class="stack eval-form">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label class="field">
       <span class="field-label">Позиция в вашем личном топе (№1 — самое сложное из сделанного вами)</span>
       <select name="harder_count" required>

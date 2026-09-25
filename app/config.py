@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_name: str = "GAL"
     app_version: str = "0.1.0"
     app_env: str = "development"
+    app_url: str = ""
 
     supabase_url: str = ""
     supabase_anon_key: str = ""

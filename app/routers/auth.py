@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.config import get_settings
 from app.dependencies import get_current_user
 from app.services import auth as auth_service
 from app.templating import templates
@@ -84,16 +85,26 @@ def register(
     username = username.strip()
     display_name = (display_name or "").strip()
     email = email.strip()
-    if not username:
+    username_error = auth_service.validate_username(username)
+    if username_error:
         return _page(
             request,
             "auth/register.html",
-            error="Имя пользователя обязательно.",
+            error=username_error,
             username=username,
             display_name=display_name,
             email=email,
         )
     try:
+        if not auth_service.username_available(username):
+            return _page(
+                request,
+                "auth/register.html",
+                error="Это имя пользователя уже занято. Выберите другое.",
+                username="",
+                display_name=display_name,
+                email=email,
+            )
         client = auth_service.new_anon_client()
         res = client.auth.sign_up(
             {
@@ -135,9 +146,13 @@ def recover_page(request: Request) -> HTMLResponse:
 
 @router.post("/recover", response_class=HTMLResponse, include_in_schema=False)
 def recover(request: Request, email: str = Form(...)) -> HTMLResponse:
+    options = {}
+    app_url = get_settings().app_url.strip()
+    if app_url:
+        options["redirect_to"] = f"{app_url.rstrip('/')}/auth/login"
     try:
         client = auth_service.new_anon_client()
-        client.auth.reset_password_for_email(email.strip())
+        client.auth.reset_password_for_email(email.strip(), options=options)
     except auth_service.AUTH_ERRORS as exc:
         return _page(
             request, "auth/recover.html", error=_error_message(exc), email=email

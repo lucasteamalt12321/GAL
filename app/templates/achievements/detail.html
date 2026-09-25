@@ -108,6 +108,7 @@
     <section class="prose">
       <h2>Я выполнил это</h2>
       <form method="post" action="/achievements/{{ achievement.id }}/complete" class="stack" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <fieldset class="field proof-field">
           <legend class="field-label">Доказательство</legend>
           <p class="muted">Приложите файл (до 50 МБ) или ссылку.</p>

@@ -21,10 +21,12 @@
             (status: {{ report.achievement.status }})
           </p>
           <form method="post" action="/reports/{{ report.id }}/accept" class="stack">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <input type="text" name="resolution_reason" placeholder="Причина (необязательно)">
             <button type="submit" class="btn btn-danger">Accept — hide achievement</button>
           </form>
           <form method="post" action="/reports/{{ report.id }}/reject" class="stack">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <input type="text" name="resolution_reason" placeholder="Причина (необязательно)">
             <button type="submit" class="btn">Reject</button>
           </form>

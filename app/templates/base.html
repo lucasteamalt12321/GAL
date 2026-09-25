@@ -20,6 +20,7 @@
           {% endif %}
           <a class="nav-link nav-user" href="/users/{{ request.state.user.username }}">{{ request.state.user.username }}</a>
           <form method="post" action="/auth/logout" class="inline-form">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button type="submit" class="nav-link btn-link">Sign out</button>
           </form>
         {% else %}

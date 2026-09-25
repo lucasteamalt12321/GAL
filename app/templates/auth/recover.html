@@ -6,6 +6,7 @@
 <section class="auth-card">
   <h1>Recover password</h1>
   <form method="post" action="/auth/recover" class="stack">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label class="field">
       <span class="field-label">Email</span>
       <input type="email" name="email" value="{{ email }}" required autocomplete="email">

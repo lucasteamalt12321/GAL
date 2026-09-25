@@ -4,6 +4,8 @@
 
 Глобальная платформа для рейтинга человеческих достижений. Сравнение достижений из разных сфер (Geometry Dash, музыка, шахматы, программирование, Minecraft, образование, спорт) через единую относительную шкалу сложности, построенную на личных сравнениях пользователей.
 
+> **Статус: MVP v1.0 Завершён (100%)** — все deliverables D1–D10 completed, `pytest` 85 passed, ruff чист, live-проверки SQL-канала 17/17 + 5/5.
+
 ## Рамки MVP (v1.0)
 
 Стек: Python + FastAPI + Jinja2 + Supabase (PostgreSQL + Auth + Storage) + Vercel.
@@ -51,7 +53,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D7  | Ranking Engine (тесты)            | completed    | 15  |
 | D8  | Player Score + Leaderboard        | completed    | 10  |
 | D9  | Reports                           | completed    | 5   |
-| D10 | Polish (UI, security, errors)     | pending      | 5   |
+| D10 | Polish (UI, security, errors)     | completed    | 5   |
 
 ### Ключевые правила deliverables
 

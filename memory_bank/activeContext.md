@@ -2,10 +2,17 @@
 
 ## Текущий фокус
 
-D1–D9 завершены: каркас FastAPI на Vercel (`https://gal-inky.vercel.app`), миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок (личная шкала, `locked`, переход в `ranked`), ранк-движок (`ranking.py`), лидерборды (`/leaderboard`: top achievements + top players, `player_leaderboard()` в БД, score = 1000/rank) и **жалобы + очередь модератора** (`/reports`). Остался последний блок — D10 (Polish: CSRF, коллизии username, redirect_to для recover, ретраи resolve_user, финальный E2E).
+**MVP v1.0 завершён.** D1–D10 все completed: каркас FastAPI на Vercel (`https://gal-inky.vercel.app`), миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды, жалобы + CSRF-защита форм, валидация username, `redirect_to` для recover, ретраи `resolve_user`. `pytest` 85 passed, ruff чист, live-проверки 17/17 + 5/5. Проект готов: пользователь может пройти полный цикл Success Criteria (см. projectbrief).
 
 ## Статус задач
 
+- D10 (Polish): **completed**
+  - [x] CSRF double-submit cookie (`app/csrf.py` + middleware; enforcement в production) + токен во всех 12 POST-формах
+  - [x] `validate_username` / `username_available` при регистрации (дружелюбная ошибка вместо падения `handle_new_user`)
+  - [x] `/auth/recover` → `redirect_to` на `APP_URL/auth/login` (setting `app_url`)
+  - [x] `resolve_user`: ретраи `_retry_network` на транзиентных сетевых ошибках
+  - [x] `tests/test_csrf.py` (9) + `tests/test_auth.py` (9 новых) — итого 85 passed, ruff чист
+  - [x] Финальный live-прогон: 17/17 (evaluations+leaderboards) + 5/5 (reports)
 - D9 (Reports): **completed**
   - [x] `app/services/reports.py` — `create_report` (дубль своей жалобы блокируется), `list_pending_reports`, `decide_report` (accept → achievement `deleted`)
   - [x] `app/routers/reports.py` — `GET/POST /achievements/{id}/report`, `GET /reports`, `POST /reports/{id}/accept|reject`; подключён в `app/main.py`
@@ -87,8 +94,11 @@ D1–D9 завершены: каркас FastAPI на Vercel (`https://gal-inky.
 
 ## Следующие шаги
 
-1. D10 — Polish: CSRF-токен, обработка коллизий `username`, `redirect_to` для `/auth/recover`, повтор `resolve_user` при сетевых ошибках, финальный E2E-прогон.
-2. Доп: live-проверка файловой части D5 (upload через приложение + signed URL) и HTTP-пути D6 — при стабильной сети.
+**MVP завершён.** Опциональные дополнения (не входят в рамки MVP):
+
+1. Пост-MVP: профиль модератора с историей решений, пагинация списков, activity-лента, относительный rank на карточке («топ N%»).
+2. Доработки при стабильной сети: файловая часть live-проверки D5 (upload через приложение + signed URL) и HTTP-путь D6 (`mint_jwt` при заполненном `SUPABASE_JWT_SECRET`).
+3. Инфраструктура: добавить `APP_URL` в Secrets Vercel (для `redirect_to` recover), при желании — CI через GitHub Actions (ruff + pytest).
 
 ## Риски на горизонте
 
