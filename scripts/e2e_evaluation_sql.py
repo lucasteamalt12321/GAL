@@ -293,19 +293,30 @@ begin
     end;
 end $$;
 
--- RLS: собственную ЗАБЛОКИРОВАННУЮ оценку обновить нельзя (0 строк)
+-- HARDENING: прямой UPDATE evaluations под authenticated запрещён целиком
+-- (оценки правятся только через RPC submit_evaluation; 42501)
 set local request.jwt.claims = '{j_a}';
 set local role authenticated;
 do $$
-declare v_n bigint;
 begin
-    update public.evaluations set position = position
-     where achievement_id = (select id from public.achievements where title = 'E2E Achievement')
-       and user_id = '{a}';
-    get diagnostics v_n = row_count;
-    insert into public._gal_e2e_results values
-        ('rls_locked_update_blocked', v_n = 0, format('rows=%s', v_n))
-    on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
+    begin
+        update public.evaluations set position = position
+         where achievement_id = (select id from public.achievements where title = 'E2E Achievement')
+           and user_id = '{a}';
+        insert into public._gal_e2e_results values
+            ('rls_locked_update_blocked', false, 'update not blocked')
+        on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
+    exception when others then
+        if sqlerrm like '%permission denied%' or sqlerrm like '%42501%' then
+            insert into public._gal_e2e_results values
+                ('rls_locked_update_blocked', true, left(sqlerrm, 60))
+            on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
+        else
+            insert into public._gal_e2e_results values
+                ('rls_locked_update_blocked', false, 'wrong error: ' || left(sqlerrm, 60))
+            on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
+        end if;
+    end;
 end $$;
 reset role;
 

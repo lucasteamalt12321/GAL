@@ -2,8 +2,10 @@
 
 Идея: при первом посещении браузеру выдаётся httpOnly-кука `gal_csrf`
 (random token). Каждая форма несёт тот же токен в скрытом поле `_csrf`.
-При POST-запросе, когда кука присутствует в запросе, middleware сверяет
-значение из тела/заголовка с кукой константным сравнением.
+При POST-запросе, когда кука присутствует в запросе, app-level-зависимость
+`csrf_protect` сверяет значение из тела/заголовка с кукой константным
+сравнением. Зависимость исполняется на экземпляре Request эндпоинта (не в
+middleware), поэтому чтение тела для проверки не съедает multipart-загрузку.
 
 SameSite=Lax уже блокирует отправку куки в кросс-сайтовых POST, поэтому
 проверка включается только при наличии куки (реальные браузеры её всегда
@@ -54,9 +56,7 @@ async def check(request: Request) -> bool:
     if not posted:
         return False
     try:
-        return secrets.compare_digest(
-            posted.encode("utf-8"), cookie.encode("utf-8")
-        )
+        return secrets.compare_digest(posted.encode("utf-8"), cookie.encode("utf-8"))
     except (TypeError, UnicodeEncodeError):
         return False
 
