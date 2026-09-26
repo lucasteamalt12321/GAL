@@ -99,9 +99,7 @@ def test_evaluate_page_shows_scale(monkeypatch) -> None:
             "category": {"name": "Chess"},
         },
     }
-    monkeypatch.setattr(
-        evaluation_service, "list_user_scale", lambda *_a: [other]
-    )
+    monkeypatch.setattr(evaluation_service, "list_user_scale", lambda *_a: [other])
     resp = client.get("/achievements/1/evaluate")
     assert resp.status_code == 200
     assert "Other" in resp.text
@@ -110,7 +108,8 @@ def test_evaluate_page_shows_scale(monkeypatch) -> None:
 
 def test_evaluate_post_requires_auth() -> None:
     resp = client.post(
-        "/achievements/1/evaluate", data={"harder_count": "0"},
+        "/achievements/1/evaluate",
+        data={"harder_count": "0"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -124,7 +123,8 @@ def test_evaluate_invalid_position_redirects(monkeypatch) -> None:
     )
     monkeypatch.setattr(evaluation_service, "list_user_scale", lambda *_a: [])
     resp = client.post(
-        "/achievements/1/evaluate", data={"harder_count": "abc"},
+        "/achievements/1/evaluate",
+        data={"harder_count": "abc"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -137,11 +137,10 @@ def test_evaluate_out_of_range_redirects(monkeypatch) -> None:
         achievements_service, "get_achievement", lambda *_: _achievement()
     )
     other = {"achievement_id": 2, "position": 1, "achievement": None}
-    monkeypatch.setattr(
-        evaluation_service, "list_user_scale", lambda *_a: [other]
-    )
+    monkeypatch.setattr(evaluation_service, "list_user_scale", lambda *_a: [other])
     resp = client.post(
-        "/achievements/1/evaluate", data={"harder_count": "5"},
+        "/achievements/1/evaluate",
+        data={"harder_count": "5"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -154,9 +153,7 @@ def test_evaluate_success_redirects(monkeypatch) -> None:
         achievements_service, "get_achievement", lambda *_: _achievement()
     )
     other = {"achievement_id": 2, "position": 1, "achievement": None}
-    monkeypatch.setattr(
-        evaluation_service, "list_user_scale", lambda *_a: [other]
-    )
+    monkeypatch.setattr(evaluation_service, "list_user_scale", lambda *_a: [other])
     calls: list[tuple] = []
 
     def _fake_submit(request, achievement_id, harder_count):
@@ -165,7 +162,8 @@ def test_evaluate_success_redirects(monkeypatch) -> None:
 
     monkeypatch.setattr(evaluation_service, "submit", _fake_submit)
     resp = client.post(
-        "/achievements/1/evaluate", data={"harder_count": "1"},
+        "/achievements/1/evaluate",
+        data={"harder_count": "1"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -185,7 +183,8 @@ def test_evaluate_error_redirects(monkeypatch) -> None:
 
     monkeypatch.setattr(evaluation_service, "submit", _raise)
     resp = client.post(
-        "/achievements/1/evaluate", data={"harder_count": "0"},
+        "/achievements/1/evaluate",
+        data={"harder_count": "0"},
         follow_redirects=False,
     )
     assert resp.status_code == 303

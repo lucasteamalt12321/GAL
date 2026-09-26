@@ -49,7 +49,9 @@ select 1 from public.profiles where id = '{uid}';
         timeout=120,
     )
     if resp.status_code != 201 or resp.json() != [{"?column?": 1}]:
-        raise RuntimeError(f"create user via SQL failed: {resp.status_code} {resp.text[:300]}")
+        raise RuntimeError(
+            f"create user via SQL failed: {resp.status_code} {resp.text[:300]}"
+        )
     return {"user_id": uid, "email": email, "uname": uname}
 
 
@@ -379,7 +381,9 @@ def main() -> int:
             print("--- payload failed; nothing persisted (transaction rolled back)")
             return 1
 
-        resp = _run_sql(env, "drop table if exists public._gal_e2e_results;", timeout=60)
+        resp = _run_sql(
+            env, "drop table if exists public._gal_e2e_results;", timeout=60
+        )
         _sql_delete_users(env, [info["user_id"] for info in created])
         print("GAL E2E OK: 8 checks -- see table above")
         return 0

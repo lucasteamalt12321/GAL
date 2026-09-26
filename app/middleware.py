@@ -30,7 +30,11 @@ class UserContextMiddleware(BaseHTTPMiddleware):
         request.state.csrf_token = new_csrf_token()
         if not _should_skip(request.url.path):
             enforce_csrf = get_settings().app_env == "production"
-            if request.method == "POST" and enforce_csrf and not await csrf_check(request):
+            if (
+                request.method == "POST"
+                and enforce_csrf
+                and not await csrf_check(request)
+            ):
                 return PlainTextResponse("CSRF token mismatch.", status_code=403)
             csrf_cookie = request.cookies.get(CSRF_COOKIE)
             if csrf_cookie:

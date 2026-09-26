@@ -64,7 +64,9 @@ def _retry(fn, *, attempts: int = 4, delay: float = 1.5, fatal=lambda _e: False)
 
 
 def _is_http_4xx(exc: Exception) -> bool:
-    return isinstance(exc, httpx.HTTPStatusError) and 400 <= exc.response.status_code < 500
+    return (
+        isinstance(exc, httpx.HTTPStatusError) and 400 <= exc.response.status_code < 500
+    )
 
 
 class _Env(BaseSettings):
@@ -114,7 +116,9 @@ class Db:
     def _url(self, table: str) -> str:
         return f"{self.auth_base}/rest/v1/{table}"
 
-    def _request(self, method: str, path: str, *, params=None, json_body=None, prefer=None):
+    def _request(
+        self, method: str, path: str, *, params=None, json_body=None, prefer=None
+    ):
         def _do():
             resp = self._client.request(
                 method,
@@ -124,7 +128,9 @@ class Db:
                 json=json_body,
             )
             if resp.status_code >= 400:
-                raise RuntimeError(f"{method} {path}: {resp.status_code} {resp.text[:500]}")
+                raise RuntimeError(
+                    f"{method} {path}: {resp.status_code} {resp.text[:500]}"
+                )
             return resp.json() if resp.content else []
 
         resp = _retry(_do, attempts=4, delay=1.5)
@@ -132,7 +138,14 @@ class Db:
             return [resp]
         return resp or []
 
-    def select(self, table: str, columns: str, *, eq: tuple[str, object] | None = None, single: bool = False):
+    def select(
+        self,
+        table: str,
+        columns: str,
+        *,
+        eq: tuple[str, object] | None = None,
+        single: bool = False,
+    ):
         params = {"select": columns}
         if eq:
             col, val = eq
@@ -143,12 +156,17 @@ class Db:
         return rows
 
     def insert(self, table: str, values: dict) -> list[dict]:
-        return self._request("POST", table, json_body=values, prefer="return=representation")
+        return self._request(
+            "POST", table, json_body=values, prefer="return=representation"
+        )
 
     def update(self, table: str, values: dict, *, eq: tuple[str, object]) -> list[dict]:
         col, val = eq
         return self._request(
-            "PATCH", table, params={col: f"eq.{val}"}, json_body=values,
+            "PATCH",
+            table,
+            params={col: f"eq.{val}"},
+            json_body=values,
             prefer="return=representation",
         )
 
@@ -177,7 +195,10 @@ def _create_user(auth_base: str, service_key: str, uname: str) -> dict:
             time.sleep(3)
             resp = httpx.post(
                 f"{auth_base}/auth/v1/admin/users",
-                headers={"apikey": service_key, "Authorization": f"Bearer {service_key}"},
+                headers={
+                    "apikey": service_key,
+                    "Authorization": f"Bearer {service_key}",
+                },
                 json=payload,
                 timeout=60,
             )
@@ -214,7 +235,9 @@ def _delete_user(auth_base: str, service_key: str, user_id: str) -> None:
         print(f"cleanup failed for {user_id}")
 
 
-def _make_user(env: _Env, auth_base: str, uname: str, users: list, clients: list) -> dict:
+def _make_user(
+    env: _Env, auth_base: str, uname: str, users: list, clients: list
+) -> dict:
     info = _create_user(auth_base, env.supabase_service_role_key, uname)
     users.append(info)
     clients.append(_make_db(env, info["user_id"], info["email"]))
@@ -226,7 +249,10 @@ def _make_user(env: _Env, auth_base: str, uname: str, users: list, clients: list
 def main() -> int:
     env = _Env()
     if not env.supabase_service_role_key or not env.supabase_jwt_secret:
-        print("Set SUPABASE_SERVICE_ROLE_KEY and SUPABASE_JWT_SECRET in .env", file=sys.stderr)
+        print(
+            "Set SUPABASE_SERVICE_ROLE_KEY and SUPABASE_JWT_SECRET in .env",
+            file=sys.stderr,
+        )
         return 1
 
     auth_base = env.supabase_url.rstrip("/")
@@ -236,7 +262,9 @@ def main() -> int:
     users: list[dict] = []
     clients: list[Db] = []
 
-    admin_db = Db(auth_base, env.supabase_service_role_key, env.supabase_service_role_key)
+    admin_db = Db(
+        auth_base, env.supabase_service_role_key, env.supabase_service_role_key
+    )
     try:
         mod_info = _make_user(env, auth_base, "mod", users, clients)
         a_info = _make_user(env, auth_base, "a", users, clients)
@@ -258,7 +286,9 @@ def main() -> int:
 
         checks = Check()
 
-        category_id = mod.select("categories", "id", eq=("slug", "other"), single=True)["id"]
+        category_id = mod.select("categories", "id", eq=("slug", "other"), single=True)[
+            "id"
+        ]
 
         # --- A creates achievement + own proof ---
         ach = a.insert(
@@ -370,7 +400,10 @@ def main() -> int:
             f"average_position wrong: {r3}"
         )
         final_ach = admin_db.select(
-            "achievements", "rank,rank_order,ranking_status", eq=("id", ach_id), single=True
+            "achievements",
+            "rank,rank_order,ranking_status",
+            eq=("id", ach_id),
+            single=True,
         )
         checks.ok() if final_ach["rank"] == 1 else checks.fail(
             f"rank should be 1, got {final_ach}"

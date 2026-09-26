@@ -27,12 +27,16 @@ def _project_ref(env: _Env) -> str:
     return host.split(".")[0]
 
 
-def _post_query(url: str, headers: dict, query: str, retries: int = 4) -> httpx.Response:
+def _post_query(
+    url: str, headers: dict, query: str, retries: int = 4
+) -> httpx.Response:
     payload = {"query": query}
     last: Exception | None = None
     for attempt in range(retries):
         try:
-            return httpx.post(url, headers=headers, content=json.dumps(payload), timeout=120)
+            return httpx.post(
+                url, headers=headers, content=json.dumps(payload), timeout=120
+            )
         except httpx.HTTPError as exc:
             last = exc
             print(f"retry {attempt + 1}/{retries}: {exc}")
@@ -44,7 +48,10 @@ def main() -> None:
     if not env.supabase_access_token or not env.supabase_url:
         raise SystemExit("Set SUPABASE_URL and SUPABASE_ACCESS_TOKEN in .env")
     url = f"{MANAGE_API}/projects/{_project_ref(env)}/database/query"
-    headers = {"Authorization": f"Bearer {env.supabase_access_token}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {env.supabase_access_token}",
+        "Content-Type": "application/json",
+    }
 
     moderator = "mod@gal-e2e.test"
     reporter = "e2e-reporter@gal-e2e.test"

@@ -71,9 +71,7 @@ def _has_approved_completion(request: Request, achievement_id: int) -> bool:
     return completion is not None and completion.get("status") == "approved"
 
 
-def can_evaluate(
-    request: Request, achievement: dict
-) -> tuple[bool, str | None]:
+def can_evaluate(request: Request, achievement: dict) -> tuple[bool, str | None]:
     if request.state.user is None:
         return False, "auth"
     if achievement.get("status") != "published":
@@ -102,7 +100,9 @@ def submit(request: Request, achievement_id: int, harder_count: int) -> dict:
     except EVALUATION_ERRORS as exc:
         message = str(exc)
         if "LOCKED" in message:
-            raise LockedError("Оценка зафиксирована — достижение уже ранжировано.") from exc
+            raise LockedError(
+                "Оценка зафиксирована — достижение уже ранжировано."
+            ) from exc
         if "NOT_APPROVED" in message:
             raise NotApprovedError(
                 "Оценивать можно только подтверждённо выполненные достижения."

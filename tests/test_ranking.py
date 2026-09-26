@@ -24,6 +24,7 @@ def _row(
 
 # --- compute_ranks -----------------------------------------------------------
 
+
 def test_compute_ranks_descending_difficulty() -> None:
     candidates = [
         RankCandidate(id=1, average_position=2.5),
@@ -59,6 +60,7 @@ def test_compute_ranks_single() -> None:
 
 # --- eligible_for_ranking ----------------------------------------------------
 
+
 def test_eligible_filters_non_published() -> None:
     rows = [_row(1, status="pending"), _row(2, status="rejected"), _row(3)]
     assert [c.id for c in eligible_for_ranking(rows)] == [3]
@@ -82,6 +84,7 @@ def test_eligible_keeps_order_and_fields() -> None:
 
 
 # --- player_score ------------------------------------------------------------
+
 
 def test_player_score_rank_1() -> None:
     assert player_score(1) == 1000.0

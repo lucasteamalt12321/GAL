@@ -28,8 +28,18 @@ def test_leaderboard_renders_rows(monkeypatch) -> None:
         rankings_service,
         "player_leaderboard",
         lambda *_: [
-            {"username": "alice", "display_name": "Alice", "score": 1500.0, "achievement_count": 2},
-            {"username": "bob", "display_name": "Bob", "score": 500.0, "achievement_count": 1},
+            {
+                "username": "alice",
+                "display_name": "Alice",
+                "score": 1500.0,
+                "achievement_count": 2,
+            },
+            {
+                "username": "bob",
+                "display_name": "Bob",
+                "score": 500.0,
+                "achievement_count": 1,
+            },
         ],
     )
     resp = client.get("/leaderboard")
@@ -53,8 +63,18 @@ def test_leaderboard_empty_state(monkeypatch) -> None:
 
 def test_leaderboard_keeps_service_order(monkeypatch) -> None:
     rows = [
-        {"username": "low", "display_name": "Low", "score": 500.0, "achievement_count": 1},
-        {"username": "high", "display_name": "High", "score": 2500.0, "achievement_count": 3},
+        {
+            "username": "low",
+            "display_name": "Low",
+            "score": 500.0,
+            "achievement_count": 1,
+        },
+        {
+            "username": "high",
+            "display_name": "High",
+            "score": 2500.0,
+            "achievement_count": 3,
+        },
     ]
     monkeypatch.setattr(rankings_service, "player_leaderboard", lambda *_: rows)
     monkeypatch.setattr(rankings_service, "leaderboard_achievements", lambda *_: [])

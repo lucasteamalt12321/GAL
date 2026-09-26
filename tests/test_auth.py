@@ -117,9 +117,7 @@ def test_register_short_username_shows_error() -> None:
 
 
 def test_register_taken_username_shows_error(monkeypatch) -> None:
-    monkeypatch.setattr(
-        auth_service, "username_available", lambda _username: False
-    )
+    monkeypatch.setattr(auth_service, "username_available", lambda _username: False)
     resp = client.post(
         "/auth/register",
         data={"username": "alice", "email": "x@example.com", "password": "secret1"},
@@ -143,7 +141,11 @@ def test_register_valid_proceeds_to_signup(monkeypatch) -> None:
     monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
     resp = client.post(
         "/auth/register",
-        data={"username": "new_gal_user", "email": "u@example.com", "password": "secret1"},
+        data={
+            "username": "new_gal_user",
+            "email": "u@example.com",
+            "password": "secret1",
+        },
     )
     assert resp.status_code == 200
     assert "Подтвердите email" in resp.text
@@ -162,11 +164,11 @@ def test_recover_passes_redirect_to(monkeypatch) -> None:
         auth = _AuthStub()
 
     monkeypatch.setattr(
-        auth_router, "get_settings", lambda: Settings(app_url="https://gal-inky.vercel.app")
+        auth_router,
+        "get_settings",
+        lambda: Settings(app_url="https://gal-inky.vercel.app"),
     )
-    monkeypatch.setattr(
-        auth_service, "new_anon_client", lambda: _ClientStub()
-    )
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
     resp = client.post("/auth/recover", data={"email": "user@example.com"})
     assert resp.status_code == 200
     assert captured[0]["email"] == "user@example.com"
@@ -189,9 +191,7 @@ def test_recover_without_app_url_omits_redirect_to(monkeypatch) -> None:
         auth = _AuthStub()
 
     monkeypatch.setattr(auth_router, "get_settings", lambda: Settings(app_url=""))
-    monkeypatch.setattr(
-        auth_service, "new_anon_client", lambda: _ClientStub()
-    )
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
     resp = client.post("/auth/recover", data={"email": "user@example.com"})
     assert resp.status_code == 200
     assert "redirect_to" not in captured[0]["options"]
@@ -250,11 +250,11 @@ def test_recover_accepts_json(monkeypatch) -> None:
         auth = _AuthStub()
 
     monkeypatch.setattr(
-        auth_router, "get_settings", lambda: Settings(app_url="https://gal-inky.vercel.app")
+        auth_router,
+        "get_settings",
+        lambda: Settings(app_url="https://gal-inky.vercel.app"),
     )
-    monkeypatch.setattr(
-        auth_service, "new_anon_client", lambda: _ClientStub()
-    )
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
     resp = client.post("/auth/recover", json={"email": "user@example.com"})
     assert resp.status_code == 200
     assert captured[0]["email"] == "user@example.com"

@@ -26,7 +26,9 @@ def _moderator_guard(request: Request) -> RedirectResponse | None:
     response_class=HTMLResponse,
     include_in_schema=False,
 )
-def report_form(request: Request, achievement_id: int, error: str | None = None) -> HTMLResponse:
+def report_form(
+    request: Request, achievement_id: int, error: str | None = None
+) -> HTMLResponse:
     if request.state.user is None:
         return RedirectResponse(LOGIN_URL, status_code=303)
     achievement = achievements_service.get_achievement(request, achievement_id)
@@ -76,7 +78,10 @@ def reports_queue(request: Request, error: str | None = None) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="reports/queue.html",
-        context={"pending_reports": reports_service.list_pending_reports(request), "error": error},
+        context={
+            "pending_reports": reports_service.list_pending_reports(request),
+            "error": error,
+        },
     )
 
 
@@ -106,7 +111,9 @@ def reject_report(
     return _decide(request, report_id, "rejected", resolution_reason)
 
 
-def _decide(request: Request, report_id: int, decision: str, reason: str) -> HTMLResponse:
+def _decide(
+    request: Request, report_id: int, decision: str, reason: str
+) -> HTMLResponse:
     redirect = _moderator_guard(request)
     if redirect is not None:
         return redirect

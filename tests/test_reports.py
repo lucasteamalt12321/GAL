@@ -132,7 +132,11 @@ def test_queue_renders_pending(monkeypatch) -> None:
                 "description": "Looks like spam",
                 "status": "pending",
                 "created_at": "2026-09-25T10:00:00Z",
-                "achievement": {"id": 4, "title": "Win a tournament", "status": "published"},
+                "achievement": {
+                    "id": 4,
+                    "title": "Win a tournament",
+                    "status": "published",
+                },
                 "reporter": {"username": "alice", "display_name": "Alice"},
             }
         ],

@@ -32,8 +32,9 @@
 - Email-конфирмация включена: зарегистрированный пользователь входит только после подтверждения письма (`res.session` → вход; иначе сообщение).
 - CSRF активен в production (`app_env == "production"`); в development не проверяется.
 - `public._gal_e2e_results` остаётся в схеме после live-прогонов (утилитарная таблица E2E, `create table if not exists`).
-- **Верификация прода с локальной машины невозможна** (текущее окружение): и `Invoke-WebRequest`, и webfetch к `https://gal-inky.vercel.app` отваливаются с сетевой ошибкой (повторяющиеся TLS/транспортные сбои локального прокси). Код пушен, Vercel деплоит автоматически; проверка `/health` — с другого интернет-доступа.
-- **`APP_URL` на Vercel не добавлен в Secrets** — без него `/auth/recover` не пропишет `redirect_to` (используется Supabase-дефолт). Добавить при доступе к дашборду.
+- **Верификация прода с локальной машины**: `Invoke-WebRequest`/webfetch к Vercel рвутся на локальном прокси; обход — публичный прокси `api.allorigins.win/get?url=...`. Им подтверждено `/health` → `200 {"status":"ok","environment":"production","supabase":{"configured":true,...}}`. Тяжёлые Supabase-страницы через прокси нестабильны (таймауты allorigins / Vercel cold start — не баг приложения). Последний деплой подтверждён также через `vercel ls gal` (Ready, 10 мин назад).
+- **`APP_URL` добавлен в Vercel Secrets (production)** через CLI (`vercel env add APP_URL production` → значение `https://gal-inky.vercel.app`; project `gal`, secret). `/auth/recover` теперь шлёт `redirect_to` на приложение.
+- **`ruff format` применён ко всему репо** (app/tests/scripts) — 20 файлов отформатировано; поведение не изменилось (88 passed). Впредь формат проверять `ruff format --check`.
 
 ## Changelog
 
