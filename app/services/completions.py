@@ -217,16 +217,66 @@ def submit_completion(
     user = request.state.user
     if user is None:
         raise CompletionError("Требуется вход в систему.")
-    if get_user_completion(request, achievement_id) is not None:
+    client = auth_service.user_client_from_request(request)
+    if client is None:
+        raise CompletionError("Требуется вход в систему.")
+
+    existing = get_user_completion(request, achievement_id)
+
+    completion: dict
+    if existing is not None and existing["status"] == "rejected":
+        old_proof_paths = [
+            proof["storage_path"]
+            for proof in list_proofs(request, existing["id"])
+            if not str(proof.get("storage_path", "")).startswith(
+                ("http://", "https://")
+            )
+        ]
+        try:
+            res = client.rpc(
+                "reset_rejected_completion", {"p_achievement_id": achievement_id}
+            ).execute()
+        except COMPLETION_ERRORS as exc:
+            raise CompletionError(
+                "Не удалось обновить заявку. Попробуйте ещё раз."
+            ) from exc
+        if old_proof_paths:
+            try:
+                client.storage.from_(PROOFS_BUCKET).remove(old_proof_paths)
+            except COMPLETION_ERRORS:
+                logger.debug(
+                    "Failed to remove stale proof objects %r",
+                    old_proof_paths,
+                    exc_info=True,
+                )
+        completion = {"id": res.data[0]["completion_id"]}
+    elif existing is not None:
         raise AlreadyCompletedError(
             "Вы уже отправляли доказательство для этого достижения."
         )
+    else:
+        completion = create_completion(request, achievement_id, user.id)
+
     external_url = (external_url or "").strip()
     filename = getattr(uploaded, "filename", None)
     if not external_url and not filename:
+        already_pending = completion.get("status") == "pending" or (
+            existing is not None and existing["status"] == "rejected"
+        )
+        if already_pending:
+            try:
+                client.rpc(
+                    "remove_empty_pending_completion",
+                    {"p_completion_id": completion["id"]},
+                ).execute()
+            except COMPLETION_ERRORS:
+                logger.debug(
+                    "Failed to clean empty completion %s",
+                    completion["id"],
+                    exc_info=True,
+                )
         raise ProofError("Приложите файл или укажите ссылку на доказательство.")
 
-    completion = create_completion(request, achievement_id, user.id)
     try:
         attach_proof(
             request,
@@ -240,5 +290,14 @@ def submit_completion(
         logger.warning(
             "Proof attach failed for completion %s", completion["id"], exc_info=True
         )
+        try:
+            client.rpc(
+                "remove_empty_pending_completion",
+                {"p_completion_id": completion["id"]},
+            ).execute()
+        except COMPLETION_ERRORS:
+            logger.debug(
+                "Failed to clean empty completion %s", completion["id"], exc_info=True
+            )
         raise
     return completion
