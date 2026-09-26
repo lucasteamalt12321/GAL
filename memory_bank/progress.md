@@ -144,4 +144,4 @@
 
 ## last_checked_commit
 
-`da0a47c feat(auth): accept json body for login/register/recover`
+`553ed2d style: ruff format app tests scripts; sync memory (APP_URL secret added, prod health verified)`
