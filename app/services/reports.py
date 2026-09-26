@@ -130,3 +130,13 @@ def decide_report(
             client.table("achievements").update({"status": "deleted"}).eq(
                 "id", achievement_id
             ).eq("status", "published").execute()
+            # Скрытое достижение выбывает из ранжирования: плотные ранги
+            # пересчитываются, чтобы в лидерборде не оставалось дыр по рангу.
+            try:
+                client.rpc("recompute_ranks").execute()
+            except REPORTS_ERRORS:
+                logger.debug(
+                    "recompute_ranks failed after accepting report %s",
+                    report_id,
+                    exc_info=True,
+                )

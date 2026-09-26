@@ -85,6 +85,15 @@ def validate_username(username: str) -> str | None:
     return None
 
 
+def ilike_literal(value: str) -> str:
+    """Экранирование для сравнения ILIKE как литерала.
+
+    PostgREST не позволяет задать ESCAPE-clause, поэтому экранируем wildcard
+    % и _ обратным слешем (стандартный escape-символ PostgreSQL в LIKE).
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def username_available(username: str) -> bool:
     """Проверка занятости username (по регистронезависимому индексу)."""
     try:
@@ -92,7 +101,7 @@ def username_available(username: str) -> bool:
         row = (
             client.table("profiles")
             .select("id")
-            .ilike("username", (username or "").strip())
+            .ilike("username", ilike_literal((username or "").strip()))
             .maybe_single()
             .execute()
         )

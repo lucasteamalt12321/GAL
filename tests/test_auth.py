@@ -38,6 +38,12 @@ def test_logout_redirects_and_clears_cookies() -> None:
     assert resp.headers["location"] == "/"
 
 
+def test_ilike_literal_escapes_wildcards() -> None:
+    assert auth_service.ilike_literal("alice") == "alice"
+    assert auth_service.ilike_literal("a%l_ic\\e") == "a\\%l\\_ic\\\\e"
+    assert auth_service.ilike_literal("%_") == "\\%\\_"
+
+
 def test_anonymous_nav_shows_auth_links() -> None:
     resp = client.get("/")
     assert resp.status_code == 200

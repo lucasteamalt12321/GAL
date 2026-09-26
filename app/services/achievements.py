@@ -100,7 +100,7 @@ def get_profile(request: Request, username: str) -> dict | None:
     res = (
         client.table("profiles")
         .select(PROFILE_SELECT)
-        .ilike("username", username)
+        .ilike("username", auth_service.ilike_literal(username))
         .maybe_single()
         .execute()
     )
