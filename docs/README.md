@@ -63,6 +63,7 @@ Browser (Jinja2/JS/CSS)
 - `POST /auth/logout` — `sign_out` + удаление cookie.
 - `POST /auth/recover` — письмо для сброса пароля.
 - `GET /auth/me` — JSON текущего пользователя (401 без сессии).
+- `POST /auth/register|login|recover` принимают тело и как form-urlencoded, и как JSON (см. `app/forms.py`); для JSON-Flow CSRF-токен допускается полем `_csrf` или заголовком `X-CSRF-Token`.
 - `UserContextMiddleware` резолвит пользователя на каждый запрос; при истёкшем access-токене делает refresh и обновляет cookie. `/static` и `/health` пропускаются.
 - Профиль читается из `profiles` (роль, username, avatar).
 
