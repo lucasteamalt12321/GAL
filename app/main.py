@@ -1,10 +1,11 @@
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
+from app.csrf import csrf_protect
 from app.middleware import UserContextMiddleware
 from app.routers import (
     achievements,
@@ -30,6 +31,7 @@ app = FastAPI(
         "человеческих достижений."
     ),
     version=settings.app_version,
+    dependencies=[Depends(csrf_protect)],
 )
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")

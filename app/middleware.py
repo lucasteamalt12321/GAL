@@ -1,14 +1,9 @@
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse
 
-from app.config import get_settings
 from app.csrf import (
     CSRF_COOKIE,
-)
-from app.csrf import (
-    check as csrf_check,
 )
 from app.csrf import (
     cookie_kwargs as csrf_cookie_kwargs,
@@ -29,13 +24,6 @@ class UserContextMiddleware(BaseHTTPMiddleware):
         request.state.pending_cookies = []
         request.state.csrf_token = new_csrf_token()
         if not _should_skip(request.url.path):
-            enforce_csrf = get_settings().app_env == "production"
-            if (
-                request.method == "POST"
-                and enforce_csrf
-                and not await csrf_check(request)
-            ):
-                return PlainTextResponse("CSRF token mismatch.", status_code=403)
             csrf_cookie = request.cookies.get(CSRF_COOKIE)
             if csrf_cookie:
                 request.state.csrf_token = csrf_cookie
