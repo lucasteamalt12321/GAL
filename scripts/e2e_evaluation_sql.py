@@ -381,11 +381,19 @@ def main() -> int:
             print("--- payload failed; nothing persisted (transaction rolled back)")
             return 1
 
+        rows = resp.json()
+        rows = rows if isinstance(rows, list) else []
+        total = len(rows)
+        passed = sum(1 for r in rows if isinstance(r, dict) and r.get("ok") is True)
+        print(f"GAL E2E OK: {passed}/{total} checks -- see table above")
+        if passed != total:
+            print("--- FAILED: some checks did not pass", file=sys.stderr)
+            return 1
+
         resp = _run_sql(
             env, "drop table if exists public._gal_e2e_results;", timeout=60
         )
         _sql_delete_users(env, [info["user_id"] for info in created])
-        print("GAL E2E OK: 8 checks -- see table above")
         return 0
     finally:
         _sql_delete_users(env, [info["user_id"] for info in created])

@@ -38,6 +38,10 @@
 
 ## Changelog
 
+### 2026-09-25 — Багфикс: итог live-проверки в e2e_evaluation_sql.py
+- Скрипт печатал статичное `"GAL E2E OK: 8 checks"` (сперва было 8 проверок, после D8 их стало 17) и возвращал 0 по одному HTTP-201, даже если отдельные чеки `ok=false`.
+- Теперь счётчик динамический: `passed/total` считается по строкам финального `select ... from _gal_e2e_results;` (последний стейтмент payload), при несовпадении — ненулевой код выхода и сообщение в stderr.
+
 ### 2026-09-25 — JSON-совместимость auth-эндпоинтов
 - `app/forms.py` — хелперы `body_data`/`body_field`/`csrf_from_body`: читают параметры POST и из form-urlencoded/multipart, и из JSON (`request.json()` при `Content-Type: application/json`).
 - `app/routers/auth.py` — `POST /auth/login`, `/auth/register`, `/auth/recover` теперь принимают и форму, и JSON-тело (422 «Field required» для JSON-запросов устранён). Обычные формы в браузере не изменились.
