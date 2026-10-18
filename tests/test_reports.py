@@ -1,3 +1,4 @@
+import httpx
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -73,8 +74,29 @@ def test_submit_report_requires_auth() -> None:
     assert resp.headers["location"] == "/auth/login"
 
 
+def test_submit_report_unknown_achievement_404(monkeypatch) -> None:
+    _login_as(monkeypatch, "user")
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: None)
+
+    def _must_not_run(*_args, **_kwargs):  # pragma: no cover - защита от регрессии
+        raise AssertionError(
+            "create_report не должен вызываться для несуществующего id"
+        )
+
+    monkeypatch.setattr(reports_service, "create_report", _must_not_run)
+    resp = client.post(
+        "/achievements/999/report",
+        data={"reason": "spam"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 404
+
+
 def test_submit_report_success_redirects(monkeypatch) -> None:
     _login_as(monkeypatch, "user")
+    monkeypatch.setattr(
+        achievements_service, "get_achievement", lambda *_: _achievement()
+    )
     calls: list[dict] = []
 
     def _fake(request, **kwargs):
@@ -94,6 +116,9 @@ def test_submit_report_success_redirects(monkeypatch) -> None:
 
 def test_submit_report_error_redirects(monkeypatch) -> None:
     _login_as(monkeypatch, "user")
+    monkeypatch.setattr(
+        achievements_service, "get_achievement", lambda *_: _achievement()
+    )
 
     def _raise(*_args, **_kwargs):
         raise reports_service.ReportError("Вы уже оставили жалобу")
@@ -106,6 +131,42 @@ def test_submit_report_error_redirects(monkeypatch) -> None:
     )
     assert resp.status_code == 303
     assert resp.headers["location"].startswith("/achievements/4/report?error=")
+
+
+def test_submit_report_storage_error_redirects(monkeypatch) -> None:
+    """Ошибка PostgREST/сети не должна давать 500."""
+    _login_as(monkeypatch, "user")
+    monkeypatch.setattr(
+        achievements_service, "get_achievement", lambda *_: _achievement()
+    )
+
+    def _raise(*_args, **_kwargs):
+        raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr(reports_service, "create_report", _raise)
+    resp = client.post(
+        "/achievements/4/report",
+        data={"reason": "spam"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert "report-submitted" not in resp.headers["location"]
+
+
+def test_decide_report_storage_error_redirects(monkeypatch) -> None:
+    _login_as(monkeypatch, "moderator")
+
+    def _raise(*_args, **_kwargs):
+        raise httpx.ReadTimeout("boom")
+
+    monkeypatch.setattr(reports_service, "decide_report", _raise)
+    resp = client.post(
+        "/reports/1/accept",
+        data={},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/reports?error=")
 
 
 def test_queue_requires_auth() -> None:

@@ -174,21 +174,10 @@ begin
     on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
 end $$;
 
--- RLS: собственную незаблокированную оценку обновлять можно (policy unlocked)
-set local request.jwt.claims = '{j_a}';
-set local role authenticated;
-do $$
-declare v_n bigint;
-begin
-    update public.evaluations set position = position
-     where achievement_id = (select id from public.achievements where title = 'E2E Achievement')
-       and user_id = '{a}';
-    get diagnostics v_n = row_count;
-    insert into public._gal_e2e_results values
-        ('rls_unlocked_self_update', v_n = 1, format('rows=%s', v_n))
-    on conflict (kind) do update set ok = excluded.ok, note = excluded.note;
-end $$;
-reset role;
+-- NB: чек rls_unlocked_self_update (прямой UPDATE своей unlocked строки)
+-- удалён: 008 revoke insert, update on evaluations от authenticated сделал
+-- такой UPDATE невозможным на уровне привилегий, а RLS-политика unlocked
+-- стала defense-in-depth. Эквивалентный чек — rls_locked_update_blocked ниже.
 
 do $$
 declare

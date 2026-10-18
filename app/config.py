@@ -21,6 +21,16 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str = ""
 
     @property
+    def is_production(self) -> bool:
+        """Единая точка истины для production-поведения.
+
+        Раньше сравнение было строгим (`app_env == "production"`), поэтому
+        опечатка (`prod`, `Production`, значение с пробелом) молча выключала
+        CSRF-защиту и флаг Secure у cookies — fail-open.
+        """
+        return self.app_env.strip().lower() == "production"
+
+    @property
     def supabase_configured(self) -> bool:
         return bool(self.supabase_url and self.supabase_anon_key)
 

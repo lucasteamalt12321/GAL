@@ -8,6 +8,9 @@ ACHIEVEMENT_ERRORS = (
     APIError,
     httpx.HTTPError,
     auth_service.SupabaseNotConfiguredError,
+    # create_achievement сам бросает PermissionError, когда user-JWT клиент
+    # недоступен (битая сессия) — раньше это давало 500 вместо формы с ошибкой.
+    PermissionError,
 )
 
 ACHIEVEMENT_SELECT = (

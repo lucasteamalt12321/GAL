@@ -69,12 +69,17 @@ def create_report(
     if not reason:
         raise ReportError("Укажите причину жалобы.")
 
+    # Дубль считаем только среди pending: partial-индекс reports_pending_unique
+    # (008/245) явно разрешает новую жалобу после рассмотрения. limit(1)
+    # вместо maybe_single: при ослабленном индексе maybe_single() на >1 строке
+    # бросил бы APIError (406) -> 500.
     existing = (
         client.table("reports")
         .select("id,status")
         .eq("achievement_id", achievement_id)
         .eq("reporter_id", user.id)
-        .maybe_single()
+        .eq("status", "pending")
+        .limit(1)
         .execute()
     )
     if existing is not None and existing.data:
@@ -115,27 +120,49 @@ def decide_report(
     if report is None or not report.data or report.data.get("status") != "pending":
         raise ReportError("Жалоба не найдена или уже рассмотрена.")
 
-    client.table("reports").update(
-        {
-            "status": decision,
-            "resolved_at": _now_iso(),
-            "resolved_by": user.id,
-            "resolution_reason": resolution_reason,
-        }
-    ).eq("id", report_id).execute()
+    # Фильтр по status='pending' делает решение идемпотентным при гонке двух
+    # модераторов: второй UPDATE не найдёт строк и получит внятную ошибку
+    # вместо повторного accept (двойное скрытие + двойной пересчёт рангов).
+    updated = (
+        client.table("reports")
+        .update(
+            {
+                "status": decision,
+                "resolved_at": _now_iso(),
+                "resolved_by": user.id,
+                "resolution_reason": resolution_reason,
+            }
+        )
+        .eq("id", report_id)
+        .eq("status", "pending")
+        .execute()
+    )
+    if updated is None or not updated.data:
+        raise ReportError("Жалоба не найдена или уже рассмотрена.")
 
     if decision == "accepted":
         achievement_id = report.data.get("achievement_id")
         if achievement_id is not None:
-            client.table("achievements").update({"status": "deleted"}).eq(
-                "id", achievement_id
-            ).eq("status", "published").execute()
+            hidden = (
+                client.table("achievements")
+                .update({"status": "deleted"})
+                .eq("id", achievement_id)
+                .eq("status", "published")
+                .execute()
+            )
+            if hidden is None or not hidden.data:
+                logger.warning(
+                    "Report %s accepted, but achievement %s was not published",
+                    report_id,
+                    achievement_id,
+                )
             # Скрытое достижение выбывает из ранжирования: плотные ранги
             # пересчитываются, чтобы в лидерборде не оставалось дыр по рангу.
+            # Ошибка не глотается: дыры в рангах видны всем в лидерборде.
             try:
                 client.rpc("recompute_ranks").execute()
             except REPORTS_ERRORS:
-                logger.debug(
+                logger.warning(
                     "recompute_ranks failed after accepting report %s",
                     report_id,
                     exc_info=True,

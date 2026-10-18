@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -54,6 +56,10 @@ def submit_report(
 ) -> HTMLResponse:
     if request.state.user is None:
         return RedirectResponse(LOGIN_URL, status_code=303)
+    # Без этой проверки insert падал по FK (23503), а APIError не ловился
+    # доменным ReportError -> 500 вместо 404.
+    if achievements_service.get_achievement(request, achievement_id) is None:
+        raise HTTPException(status_code=404, detail="Achievement not found")
     try:
         reports_service.create_report(
             request,
@@ -63,7 +69,14 @@ def submit_report(
         )
     except reports_service.ReportError as exc:
         return RedirectResponse(
-            f"/achievements/{achievement_id}/report?error={exc}", status_code=303
+            f"/achievements/{achievement_id}/report?error={quote(str(exc))}",
+            status_code=303,
+        )
+    except reports_service.REPORTS_ERRORS:
+        return RedirectResponse(
+            f"/achievements/{achievement_id}/report"
+            f"?error={quote('Не удалось отправить жалобу. Попробуйте ещё раз.')}",
+            status_code=303,
         )
     return RedirectResponse(
         f"/achievements/{achievement_id}?info=report-submitted", status_code=303
@@ -120,5 +133,10 @@ def _decide(
     try:
         reports_service.decide_report(request, report_id, decision, reason)
     except reports_service.ReportError as exc:
-        return RedirectResponse(f"{QUEUE_URL}?error={exc}", status_code=303)
+        return RedirectResponse(f"{QUEUE_URL}?error={quote(str(exc))}", status_code=303)
+    except reports_service.REPORTS_ERRORS:
+        return RedirectResponse(
+            f"{QUEUE_URL}?error={quote('Не удалось сохранить решение. Попробуйте ещё раз.')}",
+            status_code=303,
+        )
     return RedirectResponse(QUEUE_URL, status_code=303)

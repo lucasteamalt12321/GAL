@@ -18,7 +18,11 @@
           {% if request.state.user.role in ('moderator', 'admin') %}
             <a class="nav-link" href="/moderation">Moderation</a>
           {% endif %}
-          <a class="nav-link nav-user" href="/users/{{ request.state.user.username }}">{{ request.state.user.username }}</a>
+          {% if request.state.user.username %}
+            <a class="nav-link nav-user" href="/users/{{ request.state.user.username }}">{{ request.state.user.username }}</a>
+          {% else %}
+            <span class="nav-link nav-user muted">{{ request.state.user.email or "Аккаунт" }}</span>
+          {% endif %}
           <form method="post" action="/auth/logout" class="inline-form">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button type="submit" class="nav-link btn-link">Sign out</button>

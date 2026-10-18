@@ -37,7 +37,7 @@ def cookie_kwargs() -> dict:
         "path": "/",
         "httponly": True,
         "samesite": "lax",
-        "secure": settings.app_env == "production",
+        "secure": settings.is_production,
     }
 
 
@@ -69,7 +69,7 @@ async def csrf_protect(request: Request) -> None:
     """
     if request.method != "POST":
         return
-    if get_settings().app_env != "production":
+    if not get_settings().is_production:
         return
     if not await check(request):
         raise HTTPException(status_code=403, detail="CSRF token mismatch.")
