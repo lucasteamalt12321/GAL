@@ -396,10 +396,11 @@ def main() -> int:
         rows = rows if isinstance(rows, list) else []
         total = len(rows)
         passed = sum(1 for r in rows if isinstance(r, dict) and r.get("ok") is True)
-        print(f"GAL E2E OK: {passed}/{total} checks -- see table above")
         if passed != total:
+            print(f"GAL E2E FAILED: {passed}/{total} checks -- see table above")
             print("--- FAILED: some checks did not pass", file=sys.stderr)
             return 1
+        print(f"GAL E2E OK: {passed}/{total} checks -- see table above")
 
         resp = _run_sql(
             env, "drop table if exists public._gal_e2e_results;", timeout=60
@@ -407,6 +408,12 @@ def main() -> int:
         _sql_delete_users(env, [info["user_id"] for info in created])
         return 0
     finally:
+        # Утилитарная таблица остаётся в public с грантами anon/authenticated,
+        # если прогон прервался раньше drop -> чистим всегда.
+        try:
+            _run_sql(env, "drop table if exists public._gal_e2e_results;", timeout=60)
+        except Exception as exc:  # noqa: BLE001 - cleanup не должен маскировать результат
+            print(f"[cleanup] failed to drop _gal_e2e_results: {exc}", file=sys.stderr)
         _sql_delete_users(env, [info["user_id"] for info in created])
 
 

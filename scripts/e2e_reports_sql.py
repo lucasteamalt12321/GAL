@@ -8,6 +8,7 @@ accept хайдит достижение (deleted), reject отклоняет.
 from __future__ import annotations
 
 import json
+import sys
 
 import httpx
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,7 +44,7 @@ def _post_query(
     raise last
 
 
-def main() -> None:
+def main() -> int:
     env = _Env()
     if not env.supabase_access_token or not env.supabase_url:
         raise SystemExit("Set SUPABASE_URL and SUPABASE_ACCESS_TOKEN in .env")
@@ -181,28 +182,37 @@ select json_agg(json_build_object('kind', kind, 'ok', ok, 'note', note) order by
 commit;
 """
 
-    resp = _post_query(url, headers, sql)
-    print(f"--- reports RLS live check: HTTP {resp.status_code}")
-    if resp.status_code == 201:
+    try:
+        resp = _post_query(url, headers, sql)
+        print(f"--- reports RLS live check: HTTP {resp.status_code}")
+        if resp.status_code != 201:
+            print(resp.text[:2000], file=sys.stderr)
+            print("--- FAILED: query did not return 201", file=sys.stderr)
+            return 1
         body = resp.json()
         result = body[0].get("result")
         print(json.dumps(result, ensure_ascii=False, default=str))
         rows = [r for r in (result or []) if isinstance(r, dict)]
         ok_rows = [r for r in rows if r.get("ok")]
-        print(f"GAL REPORTS E2E: {len(ok_rows)}/{len(rows)} checks")
         if len(ok_rows) != len(rows):
-            raise SystemExit(1)
-    else:
-        print(resp.text[:2000])
-
-    cleanup = (
-        "delete from auth.users where id in "
-        "('d0000000-0000-4000-8000-000000000001','d0000000-0000-4000-8000-000000000002');"
-    )
-    resp = _post_query(url, headers, cleanup)
-    if resp.status_code != 201:
-        print(f"cleanup users warning: {resp.status_code} {resp.text[:200]}")
+            print(f"GAL REPORTS E2E FAILED: {len(ok_rows)}/{len(rows)} checks")
+            print("--- FAILED: some checks did not pass", file=sys.stderr)
+            return 1
+        print(f"GAL REPORTS E2E OK: {len(ok_rows)}/{len(rows)} checks")
+        return 0
+    finally:
+        try:
+            _post_query(url, headers, "drop table if exists public._gal_e2e_results;")
+        except Exception as exc:  # noqa: BLE001 - cleanup не должен маскировать результат
+            print(f"[cleanup] failed to drop _gal_e2e_results: {exc}", file=sys.stderr)
+        cleanup = (
+            "delete from auth.users where id in "
+            "('d0000000-0000-4000-8000-000000000001','d0000000-0000-4000-8000-000000000002');"
+        )
+        resp = _post_query(url, headers, cleanup)
+        if resp.status_code != 201:
+            print(f"cleanup users warning: {resp.status_code} {resp.text[:200]}")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

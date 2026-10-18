@@ -4,7 +4,7 @@
 
 Глобальная платформа для рейтинга человеческих достижений. Сравнение достижений из разных сфер (Geometry Dash, музыка, шахматы, программирование, Minecraft, образование, спорт) через единую относительную шкалу сложности, построенную на личных сравнениях пользователей.
 
-> **Статус: MVP v1.0 Завершён (100%)** — все deliverables D1–D10 completed, `pytest` 85 passed, ruff чист, live-проверки SQL-канала 17/17 + 5/5.
+> **Статус: MVP v1.0 завершён** (D1–D11 completed). `pytest` — 94 passed, `ruff` чист.
 
 ## Рамки MVP (v1.0)
 
@@ -42,24 +42,19 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 
 Сумма весов = 100. Процент выполнения считается только по этому списку.
 
-| ID  | Deliverable                       | Status       | Вес |
-|-----|-----------------------------------|--------------|-----|
-| D1  | Foundation + Memory Bank          | completed    | 5   |
-| D2  | Database Schema + RLS             | completed    | 10  |
-| D3  | Authentication                    | completed    | 10  |
-| D4  | Achievements CRUD                 | completed    | 10  |
-| D5  | Proofs + Moderation               | completed    | 15  |
-| D6  | Evaluation Engine + Creator Eval  | completed    | 15  |
-| D7  | Ranking Engine (тесты)            | completed    | 15  |
-| D8  | Player Score + Leaderboard        | completed    | 10  |
-| D9  | Reports                           | completed    | 5   |
-| D10 | Polish (UI, security, errors)     | completed    | 5   |
-
-### Ключевые правила deliverables
-
-- Каждый новый пункт ТЗ / scope change добавляется в этот список до или одновременно с реализацией.
-- После задачи, влияющей на готовность, статусы обновляются.
-- Если deliverables рассинхронизированы с кодом — восстановить перед расчётом процента.
+| ID  | Deliverable                       | Status    | Вес |
+|-----|-----------------------------------|-----------|-----|
+| D1  | Foundation + Memory Bank          | completed | 4   |
+| D2  | Database Schema + RLS             | completed | 8   |
+| D3  | Authentication                    | completed | 8   |
+| D4  | Achievements CRUD                 | completed | 8   |
+| D5  | Proofs + Moderation               | completed | 12  |
+| D6  | Evaluation Engine + Creator Eval  | completed | 12  |
+| D7  | Ranking Engine (тесты)            | completed | 12  |
+| D8  | Player Score + Leaderboard        | completed | 8   |
+| D9  | Reports                           | completed | 4   |
+| D10 | Polish (UI, security, errors)     | completed | 4   |
+| D11 | Bugfix по итогам bug-hunt 09-28   | completed | 20  |
 
 ## Success Criteria MVP
 

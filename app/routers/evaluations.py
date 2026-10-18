@@ -19,6 +19,20 @@ def _achievement_or_404(request: Request, achievement_id: int) -> dict:
     return item
 
 
+def _parse_position(raw: str) -> int | None:
+    """Строгий разбор позиции из формы."""
+    value = (raw or "").strip()
+    if not value or not value.isascii() or not value.isdigit():
+        return None
+    try:
+        num = int(value)
+    except ValueError:
+        return None
+    if num < 0 or num > 10**6:
+        return None
+    return num
+
+
 @router.get(
     "/achievements/{achievement_id}/evaluate",
     response_class=HTMLResponse,
@@ -66,7 +80,8 @@ def evaluate(
         return RedirectResponse(LOGIN_URL, status_code=303)
     _achievement_or_404(request, achievement_id)
 
-    if not harder_count.isdigit():
+    count = _parse_position(harder_count)
+    if count is None:
         return RedirectResponse(
             f"/achievements/{achievement_id}/evaluate?error={quote('Выберите позицию.')}",
             status_code=303,
@@ -74,7 +89,6 @@ def evaluate(
 
     scale = evaluation_service.list_user_scale(request)
     others = [e for e in scale if e["achievement_id"] != achievement_id]
-    count = int(harder_count)
     if count < 0 or count > len(others):
         return RedirectResponse(
             f"/achievements/{achievement_id}/evaluate?error={quote('Недопустимая позиция.')}",

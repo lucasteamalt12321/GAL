@@ -22,6 +22,20 @@ VIDEO_PROOF = "video"
 DOCUMENT_PROOF = "document"
 OTHER_PROOF = "other"
 
+# Vercel обрезает тело serverless-функции на ~4.5 МБ, поэтому серверный лимит
+# 50 МБ (лимит бакета) в приложении недостижим: файл большего размера
+# отклоняется платформой до FastAPI. Показываем реальный потолок приложения.
+MAX_REQUEST_PROOF_BYTES = 4 * 1024 * 1024
+
+
+def _too_large_message() -> str:
+    mib = MAX_REQUEST_PROOF_BYTES // (1024 * 1024)
+    return (
+        f"Файл слишком большой. Максимум {mib} МБ — для более крупных "
+        "доказательств используйте ссылку."
+    )
+
+
 COMPLETION_ERRORS = (
     APIError,
     StorageException,
@@ -134,6 +148,26 @@ def create_completion(request: Request, achievement_id: int, user_id: str) -> di
     return res.data[0]
 
 
+def _uploaded_size(uploaded) -> int | None:
+    """Размер загруженного файла без чтения содержимого в память.
+
+    Starlette уже распарсил multipart и положил тело в SpooledTemporaryFile,
+    поэтому seek/tell дают точный размер. Раньше файл читался целиком и только
+    потом сравнивался с лимитом — тело произвольного размера оседало в RAM.
+    """
+    stream = getattr(uploaded, "file", None)
+    if stream is None:
+        return None
+    try:
+        current = stream.tell()
+        stream.seek(0, 2)
+        size = stream.tell()
+        stream.seek(current, 0)
+    except (OSError, ValueError):
+        return None
+    return int(size)
+
+
 def attach_proof(
     request: Request,
     *,
@@ -150,6 +184,12 @@ def attach_proof(
 
     external_url = (external_url or "").strip()
     description = (description or "").strip()
+
+    if uploaded is not None:
+        try:
+            uploaded.file.seek(0)
+        except (OSError, ValueError):
+            pass
 
     if external_url:
         if not external_url.startswith(("http://", "https://")):
@@ -169,11 +209,23 @@ def attach_proof(
         return res.data[0]
 
     filename = getattr(uploaded, "filename", None)
-    content = uploaded.file.read() if uploaded is not None and filename else b""
+    has_file = uploaded is not None and bool(filename)
+    if has_file:
+        size = _uploaded_size(uploaded)
+        if size is not None and (
+            size > MAX_REQUEST_PROOF_BYTES or size > MAX_PROOF_BYTES
+        ):
+            raise ProofError(_too_large_message())
+    content = uploaded.file.read() if has_file else b""
+    if has_file:
+        try:
+            uploaded.file.seek(0)
+        except (OSError, ValueError):
+            pass
     if not content:
         raise ProofError("Приложите файл или укажите ссылку на доказательство.")
     if len(content) > MAX_PROOF_BYTES:
-        raise ProofError("Файл слишком большой (максимум 50 МБ).")
+        raise ProofError(_too_large_message())
 
     content_type = getattr(uploaded, "content_type", None) or "application/octet-stream"
     path = f"{user.id}/{achievement_id}/{uuid.uuid4().hex}-{_safe_filename(filename)}"

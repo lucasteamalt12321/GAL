@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from urllib.parse import quote
 
@@ -11,6 +12,8 @@ from app.templating import templates
 
 router = APIRouter(prefix="/achievements", tags=["achievements"])
 
+logger = logging.getLogger(__name__)
+
 LOGIN_URL = "/auth/login"
 
 CREATE_TEMPLATE = "achievements/create.html"
@@ -18,7 +21,12 @@ CREATE_TEMPLATE = "achievements/create.html"
 
 def _parse_category_id(raw: str) -> int | None:
     raw = (raw or "").strip()
-    return int(raw) if raw.isdigit() else None
+    if not raw.isascii() or not raw.isdigit():
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def _create_context(
@@ -123,6 +131,10 @@ def create(
             ),
         )
 
+    # create и submit_completion разведены по разным except: общий блок ловил
+    # ошибку второго вызова и перерисовывал форму create, хотя строка в
+    # achievements уже была вставлена -> повторный сабмит давал дубль
+    # достижения без доказательства в очереди модерации.
     try:
         item = achievements_service.create_achievement(
             request,
@@ -130,17 +142,6 @@ def create(
             description=description,
             requirements=requirements,
             category_id=parsed_category,
-        )
-        completions_service.submit_completion(
-            request,
-            achievement_id=item["id"],
-            description="Доказательство создателя",
-            external_url=external_url,
-            uploaded=file,
-        )
-    except completions_service.CompletionError as exc:
-        return RedirectResponse(
-            f"/achievements/{item['id']}?error={quote(str(exc))}", status_code=303
         )
     except achievements_service.ACHIEVEMENT_ERRORS as exc:
         return templates.TemplateResponse(
@@ -155,6 +156,25 @@ def create(
                 category_id=category_id,
                 external_url=external_url,
             ),
+        )
+
+    try:
+        completions_service.submit_completion(
+            request,
+            achievement_id=item["id"],
+            description="Доказательство создателя",
+            external_url=external_url,
+            uploaded=file,
+        )
+    except completions_service.CompletionError as exc:
+        return RedirectResponse(
+            f"/achievements/{item['id']}?error={quote(str(exc))}", status_code=303
+        )
+    except completions_service.COMPLETION_ERRORS:
+        return RedirectResponse(
+            f"/achievements/{item['id']}"
+            f"?error={quote('Достижение создано, но доказательство не прикрепилось. Пришлите его со страницы достижения.')}",
+            status_code=303,
         )
     return RedirectResponse(
         f"/achievements/{item['id']}?info=submitted", status_code=303

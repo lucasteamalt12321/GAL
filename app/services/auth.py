@@ -6,7 +6,14 @@ import httpx
 from fastapi import Request, Response
 from postgrest.exceptions import APIError
 from supabase import Client, create_client
-from supabase_auth.errors import AuthError
+from supabase_auth.errors import (
+    AuthApiError,
+    AuthError,
+    AuthInvalidCredentialsError,
+    AuthInvalidJwtError,
+    AuthSessionMissingError,
+    AuthWeakPasswordError,
+)
 
 from app.config import get_settings
 
@@ -22,8 +29,29 @@ class SupabaseNotConfiguredError(RuntimeError):
     pass
 
 
-AUTH_ERRORS = (AuthError, httpx.HTTPError, SupabaseNotConfiguredError)
+class MalformedSessionTokenError(ValueError):
+    """Кука сессии не похожа на JWT (битая/обрезанная/подменённая)."""
+
+
+AUTH_ERRORS = (
+    AuthError,
+    httpx.HTTPError,
+    SupabaseNotConfiguredError,
+    MalformedSessionTokenError,
+)
 PROFILE_ERRORS = (APIError, httpx.HTTPError)
+
+# AuthRetryableError (5xx/503 от GoTrue) — подкласс AuthError, но ретраится.
+# Остальные AuthError (невалидный токен, слабый пароль) — нет.
+NON_RETRYABLE_AUTH_ERRORS = (
+    AuthApiError,
+    AuthSessionMissingError,
+    AuthInvalidJwtError,
+    AuthInvalidCredentialsError,
+    AuthWeakPasswordError,
+    MalformedSessionTokenError,
+    SupabaseNotConfiguredError,
+)
 
 
 @dataclass
@@ -36,6 +64,19 @@ class CurrentUser:
     role: str
 
 
+def looks_like_jwt(token: str | None) -> bool:
+    """Грубая проверка формы access-токена (3 части, разделённые точкой).
+
+    supabase_auth `set_session` обращается к `access_token.split(".")[1]` и на
+    значении без точки бросает IndexError, который не входит ни в один
+    перехватываемый кортеж и приводил к 500 на всех страницах при битой куке.
+    """
+    if not token:
+        return False
+    parts = token.split(".")
+    return len(parts) == 3 and all(parts)
+
+
 def new_anon_client() -> Client:
     settings = get_settings()
     if not settings.supabase_configured:
@@ -44,6 +85,8 @@ def new_anon_client() -> Client:
 
 
 def new_user_client(access_token: str, refresh_token: str) -> Client:
+    if not looks_like_jwt(access_token) or not refresh_token:
+        raise MalformedSessionTokenError("Malformed session cookie")
     client = new_anon_client()
     client.auth.set_session(access_token, refresh_token)
     return client
@@ -53,6 +96,8 @@ def user_client_from_request(request: Request) -> Client | None:
     access = request.cookies.get(SESSION_COOKIE)
     refresh = request.cookies.get(REFRESH_COOKIE)
     if not access or not refresh:
+        return None
+    if not looks_like_jwt(access):
         return None
     try:
         return new_user_client(access, refresh)
@@ -71,7 +116,7 @@ def _cookie_kwargs() -> dict:
         "path": "/",
         "httponly": True,
         "samesite": "lax",
-        "secure": settings.app_env == "production",
+        "secure": settings.is_production,
     }
 
 
@@ -158,12 +203,17 @@ def _build_user(resp_user, profile: dict | None) -> CurrentUser | None:
 
 
 def _retry_network(fn):
-    """Повторяет сетевые вызовы auth при транзиентных ошибках (не токен)."""
+    """Повторяет вызовы auth при транзиентных ошибках.
+
+    AuthRetryableError (5xx/503 GoTrue) — подкласс AuthError, поэтому blanket
+    `except AuthError: raise` ретраил 0 раз, а неретраибельный
+    SupabaseNotConfiguredError ретраился трижды с задержками. Теперь разделены.
+    """
     last: Exception | None = None
     for attempt in range(_NETWORK_RETRIES):
         try:
             return fn()
-        except AuthError:
+        except NON_RETRYABLE_AUTH_ERRORS:
             raise
         except AUTH_ERRORS as exc:
             last = exc
@@ -172,10 +222,28 @@ def _retry_network(fn):
     raise last  # type: ignore[misc]
 
 
+def _drop_auth_cookies(request: Request) -> None:
+    """Помечает куки сессии на удаление в ответе.
+
+    Без этого битая кука переживала запрос: каждая следующая страница снова
+    делала get_user + refresh (до 3 попыток с задержкой).
+    """
+    cookies = getattr(request.state, "pending_cookies", None)
+    if cookies is None:
+        return
+    if any(name == SESSION_COOKIE for name, _value, _kwargs in cookies):
+        return
+    cookies.append((SESSION_COOKIE, "", {"max_age": 0, "path": "/"}))
+    cookies.append((REFRESH_COOKIE, "", {"max_age": 0, "path": "/"}))
+
+
 def resolve_user(request: Request) -> CurrentUser | None:
     access = request.cookies.get(SESSION_COOKIE)
     refresh = request.cookies.get(REFRESH_COOKIE)
     if not access:
+        return None
+    if not looks_like_jwt(access):
+        _drop_auth_cookies(request)
         return None
     settings = get_settings()
     if not settings.supabase_configured:
@@ -185,12 +253,17 @@ def resolve_user(request: Request) -> CurrentUser | None:
     resp = None
     try:
         resp = _retry_network(lambda: client.auth.get_user(jwt=access))
+    except MalformedSessionTokenError:
+        _drop_auth_cookies(request)
+        return None
     except AUTH_ERRORS:
         resp = None
 
     if (resp is None or resp.user is None) and refresh:
         try:
             refreshed = _retry_network(lambda: client.auth.refresh_session(refresh))
+        except NON_RETRYABLE_AUTH_ERRORS:
+            refreshed = None
         except AUTH_ERRORS:
             refreshed = None
         if refreshed is not None and refreshed.session is not None:
@@ -207,6 +280,7 @@ def resolve_user(request: Request) -> CurrentUser | None:
                 resp = None
 
     if resp is None or resp.user is None:
+        _drop_auth_cookies(request)
         return None
     profile = _fetch_profile(client, str(resp.user.id))
     return _build_user(resp.user, profile)
