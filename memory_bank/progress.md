@@ -22,11 +22,27 @@
 
 ## Changelog
 
+### 2026-10-19 — D11 доставлен в прод: миграции 008–012, инцидент INACTIVE, live-e2e, автодеплой
+
+**Конфликт миграций.** Моя `010_harden_achievements_and_ranks.sql` (коммит `842865f`) **удалена** — сломана (`LANGUAGE SQL` с PL/pgSQL-синтаксисом; guard `is_moderator()` внутри `recompute_ranks()` ломал бы оценки обычных пользователей). Приняты чужие миграции от 28.09.2026 (другой программист): `010_ranking_integrity.sql` + `011_evaluation_lock.sql` — полнее и корректнее (`recompute_ranks_internal()` без guard + guarded-обёртка, trigger `guard_ranking_fields`, data-fix locked). Упоминания `010_harden_...` в Changelog за 2026-10-18 относятся к тому коммиту и более не актуальны.
+
+**Исправлена ложная запись memory bank:** «008/009 применены к проду» не соответствовало действительности — в прод-БД не было ни `reset_rejected_completion`, ни привилегий из 008. Фактически применены в этой сессии.
+
+**Инцидент.** Прод-проект Supabase `wiwyitafoprxmlyndkwe` был `INACTIVE` (compute остановлен) — все страницы приложения были недоступны. Восстановлен через `POST /v1/projects/{ref}/restore` (201 → `COMING_UP` → `CHANNEL_UP`). Ошибка `42P01 relation "public.achievements" does not exist` при первой попытке применения миграций — запрос попал в базу до завершения восстановления схемы.
+
+**Применено к проду (порядок критичен):** `008 → 009 → 010 → 011 → 012` через Management API (201). Новая `migrations/012_revoke_internal_execute.sql` — `revoke execute on recompute_ranks_internal() from anon, authenticated, service_role` (default privileges Supabase выдают execute всем ролям, revoke от PUBLIC не снимает; проверено: до 012 anon вызывал функцию, после — `42501 permission denied`). Итог проверен: функции `reset_rejected_completion`, `recompute_ranks_internal`, `guard_ranking_fields`, `submit_evaluation`, `recompute_ranks`, `player_leaderboard` — есть; 2 триггера на achievements; whitelist-гранты authenticated точные.
+
+**Live-e2e на проде:** `scripts/e2e_evaluation_sql.py` — **16/16**, `scripts/e2e_reports_sql.py` — **5/5**; данные убраны (users/achievements/оценки/жалобы = 0, категории-seed = 8). В `e2e_evaluation_sql.py` удалён чек `rls_unlocked_self_update` (задублирован `rls_locked_update_blocked`; после 008 прямой UPDATE падает с permission denied).
+
+**Деплой и HTTP.** Push `57e48e2`, `4eeb269` → автодеплой Vercel подтверждён: deployment `gal-mygfx8c73` (18.10 21:31:19, Ready), aliases `gal-inky.vercel.app` + `gal-git-main-...`. HTTP через DoH + `curl --resolve` (IP `216.198.79.195`): `/health`, `/`, `/achievements`, `/leaderboard`, `/auth/login`, `/docs` — **200** (маршрут логина именно `/auth/login`, `/login` → 404 — это норма).
+
+**Контроль:** `pytest` — 94 passed, `ruff check`/`format` — чисто (до и после коммитов). `.pytestlog.txt` оставлен незакоммиченным (мусорный лог).
+
 ### 2026-10-18 — D11 Bugfix: все критические/ключевые находки закрыты
 
 Реализованы и закоммичены исправления по баг-ханту 2026-09-28. `pytest` — **94 passed**, `ruff check`/`format` — чисто. Коммит `842865f`.
 
-**Критические:**
+**Критические** *(миграция удалена 2026-10-19 как сломанная, см. Changelog; закрыто чужими 010/011)*:
 - `migrations/010_harden_achievements_and_ranks.sql`: блокировка подделки `rank`/`ranking_status`/`average_position`/`evaluation_count` — `revoke update on achievements from authenticated; grant update` только по разрешённым колонкам (`title, description, requirements, category_id, status`).
 - `migrations/010_harden_achievements_and_ranks.sql`: `recompute_ranks()` — убран публичный `execute` у `authenticated`, добавлен гард `public.is_moderator()` (defense-in-depth), `execute` оставлен у `service_role`. `submit_evaluation` продолжает вызывать SD-функцию.
 

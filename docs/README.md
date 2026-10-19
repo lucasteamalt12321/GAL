@@ -132,6 +132,11 @@ Browser (Jinja2/JS/CSS)
 - `005_evaluation_rpc.sql` — движок оценок: `rank_order`, `recompute_ranks()`, `submit_evaluation()`, grants.
 - `006_fix_evaluation_rpc.sql` — фикс `42702 ambiguous` (OUT-параметры `RETURNS TABLE` vs колонки): `#variable_conflict use_column` + алиасы.
 - `007_player_leaderboard.sql` — `public.player_leaderboard()`: агрегат очков игроков (1000/rank), grant anon/authenticated.
+- `008_hardening.sql` — хардинг (bug-hunt 2026-09-28): revoke execute на security definer RPC от лишних ролей; `recompute_ranks` перестроен через deferred constraint trigger (immediate-вариант нарушал `achievements_rank_unique`); запрет прямого REST-обновления `rank`/`ranking_status` и др. служебных колонок `achievements`.
+- `009_retry_completion_rpc.sql` — lifecycle повтора/cleanup отклонённого completion: security definer RPC вместо прямых DELETE/UPDATE, запрещённых RLS.
+- `010_ranking_integrity.sql` — целостность рейтинга: `recompute_ranks_internal()` (без guard) + guarded-обёртка `recompute_ranks()`, trigger `guard_ranking_fields` (column-level REVOKE из 008 не действует на table-level grant из 002), data-fix lock-нутых записей. **Порядок критичен: применять после 008.**
+- `011_evaluation_lock.sql` — lock-режим оценок: `submit_evaluation` учитывает `locked` у achievement.
+- `012_revoke_internal_execute.sql` — `revoke execute` на `recompute_ranks_internal()` от `anon`/`authenticated`/`service_role` (default privileges Supabase выдают execute всем ролям, revoke от PUBLIC не снимает).
 
 ## Данные
 
@@ -182,4 +187,4 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Статус
 
-Документация соответствует состоянию на завершение MVP v1.0 (D1–D10): каркас FastAPI, клиенты Supabase, миграции `001`–`007`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды (`/leaderboard`), жалобы (`/reports`), CSRF/username/recover-полировка. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию на завершение MVP v1.0 (D1–D10): каркас FastAPI, клиенты Supabase, миграции `001`–`012`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды (`/leaderboard`), жалобы (`/reports`), CSRF/username/recover-полировка. Обновлять при изменениях архитектуры, маршрутов и модулей.
