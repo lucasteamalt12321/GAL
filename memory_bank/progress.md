@@ -65,4 +65,4 @@
 
 ## last_checked_commit
 
-`842865f D11: harden achievements/ranks + auth guard + evaluations parsing + reports guard + achievements create-split + completions stream + e2e + template + config tweaks` (2026-10-18)
+`a74e42c docs: migrations 008-012 in README; add 012 revoke internal execute; memory bank sync (prod delivery, INACTIVE incident, migration conflict)` (2026-10-19)
