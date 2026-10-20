@@ -81,4 +81,4 @@
 
 ## last_checked_commit
 
-`a74e42c docs: migrations 008-012 in README; add 012 revoke internal execute; memory bank sync (prod delivery, INACTIVE incident, migration conflict)` (2026-10-19)
+`da78dd6 fix(resilience): 503 instead of 500 when Supabase stalls; parallel leaderboard` (2026-10-20)
