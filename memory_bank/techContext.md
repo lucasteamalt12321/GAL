@@ -68,6 +68,7 @@ SUPABASE_JWT_SECRET=         # при необходимости
 
 - `uvicorn app.main:app --reload`
 - Реальный Supabase development project.
+- **Сеть (2026-10-20):** локальная сеть периодически блэкхолит TCP-диапазоны Supabase (`8.47.69.0/24`, `8.6.112.0/24`); DNS исправен (адреса пула ротируются), обрыв — именно на TCP-коннекте, не на резолве. Обход: VPN/прокси (для httpx — `HTTPS_PROXY` в окружении процесса) либо локальный Supabase (`supabase start`, нужен Docker). При недоступности Supabase БД-страницы отдают 503 (таймаут PostgREST 6 с), а не 500.
 
 ## CI/CD (план)
 
