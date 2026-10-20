@@ -123,6 +123,12 @@ Browser (Jinja2/JS/CSS)
 - **Recover:** `reset_password_for_email` получает `redirect_to = APP_URL/auth/login` (setting `app_url`).
 - **Сеть:** `resolve_user` повторяет транзиентные ошибки (`_retry_network`, до 3 попыток), невалидный токен — сразу отсутствие пользователя.
 
+## Устойчивость к сбоям Supabase (D10)
+
+- PostgREST-таймаут задаётся явно через `SUPABASE_TIMEOUT_SECONDS` (по умолчанию `6`) и прокидывается в `create_client(..., options=ClientOptions(postgrest_client_timeout=...))` (`app/services/auth.py`). Без него библиотека ждёт 120 с и бросает `httpx.ReadTimeout`.
+- Глобальные обработчики `httpx.HTTPError` и `postgrest.exceptions.APIError` (`app/main.py`) отдают `errors/upstream.html` с кодом **503** и пишут причину в лог `gal.upstream`. Сбой Supabase не превращается в голый 500 «Internal Server Error» (покрывает все БД-страницы).
+- `/leaderboard` грузит две независимые секции (achievements + players) параллельно (`ThreadPoolExecutor`), поэтому время страницы ограничено одним таймаутом, а не двумя.
+
 ## Миграции
 
 - `001_init.sql` — схема и seed категорий.
@@ -182,7 +188,7 @@ Achievement → Creator Proof → Moderation → Published
 ## Развёртывание
 
 - Vercel: `vercel.json`, ASGI = `app.main:app`.
-- Переменные: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+- Переменные: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, опц. `SUPABASE_TIMEOUT_SECONDS` (таймаут PostgREST, дефолт `6`).
 - `SERVICE_ROLE_KEY` только на сервере.
 
 ## Статус

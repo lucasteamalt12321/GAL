@@ -2,6 +2,8 @@
 
 ## Текущий фокус
 
+**2026-10-20 — Инцидент `/leaderboard` → 500, устранён (resilience).** Прод-страница `/leaderboard` падала с `500 Internal Server Error`, когда запрос к Supabase зависал/обрывался: у БД-страниц не было ни таймаута (postgrest ждёт 120 с), ни обработки ошибок. Внедрено: `SUPABASE_TIMEOUT_SECONDS` (дефолт `6`) в Supabase-клиенте; глобальные обработчики `httpx.HTTPError`/`postgrest.exceptions.APIError` → страница **503** (`app/templates/errors/upstream.html`); `/leaderboard` грузит две секции параллельно. До/после: 500 за 120 с → **503 за 6.5 с**; `pytest` — 98 passed, `ruff` — чисто. Детали — в Changelog `progress.md`.
+
 **D11 — Bugfix по итогам bug-hunt 2026-09-28: завершён и доставлен в прод** (2026-10-18/19). MVP v1.0 (D1–D10) + D11 реализованы; изменения запушены в `main` (коммиты `57e48e2`, `4eeb269`); автодеплой Vercel подтверждён (`gal-mygfx8c73`, 18.10 21:31, Ready, alias `gal-inky.vercel.app`); миграции `008`–`012` применены к прод-БД Supabase `wiwyitafoprxmlyndkwe`. Live-e2e на проде: оценки **16/16**, жалобы **5/5**, тестовые данные убраны. `pytest` — 94 passed, `ruff check`/`format` — чисто.
 
 **Разрешение конфликта миграций:** моя `010_harden_achievements_and_ranks.sql` (коммит `842865f`) **удалена** — сломана (`LANGUAGE SQL` с PL/pgSQL-синтаксисом; guard `is_moderator()` внутри `recompute_ranks()` ломал бы оценки обычных пользователей). Приняты чужие миграции (28.09.2026, другой программист): `010_ranking_integrity.sql` + `011_evaluation_lock.sql` — полнее и корректнее (`recompute_ranks_internal()` без guard + guarded-обёртка, trigger `guard_ranking_fields`, data-fix locked). Добавлена новая `012_revoke_internal_execute.sql`. **Порядок применения критичен: 008 → 009 → 010 → 011 → 012** (008 содержит `create or replace` устаревших `submit_evaluation`/`recompute_ranks`, после неё обязательно переприменение 010/011).
@@ -42,5 +44,5 @@
 
 ## Риски
 
-- Локальный DNS отравлен/нестабилен: `*.supabase.co` и часть доменов не резолвятся, `*.vercel.app` резолвится в фиктивный IP. Обход: DoH (`dns.google/resolve`) + `curl --resolve`; рабочий IP на 19.10 — `216.198.79.195` (может смениться, перерезолвить). `api.supabase.com` и vercel CLI работают напрямую.
+- Локальный DNS отравлен/нестабилен: `*.supabase.co` и часть доменов не резолвятся, `*.vercel.app` резолвится в фиктивный IP. Обход: DoH (`dns.google/resolve`) + `curl --resolve`; рабочий IP на 19.10 — `216.198.79.195` (может смениться, перерезолвить). `api.supabase.com` и vercel CLI работают напрямую. Воспроизведение (19.10): системный резолвер отдавал `8.47.69.1`/`8.6.112.1` (мёртвые), DoH — `…​.5`. Сбой/зависание Supabase теперь даёт **503** (таймаут 6 с + глобальные обработчики), а не 500.
 - `recompute_ranks_internal()` закрыт от `anon`/`authenticated`/`service_role` execute (012); служебные колонки `achievements` защищены trigger `guard_ranking_fields` (010). Изменение whitelist не затрагивает логику приложения.

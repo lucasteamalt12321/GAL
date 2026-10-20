@@ -1,5 +1,7 @@
 """GAL leaderboards: achievement rank list + player scores."""
 
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
@@ -24,8 +26,13 @@ def _enrich_players(players: list[dict]) -> list[dict]:
 
 @router.get("", response_class=HTMLResponse, include_in_schema=False)
 def leaderboard_page(request: Request) -> HTMLResponse:
-    achievements = rankings_service.leaderboard_achievements()
-    players = _enrich_players(rankings_service.player_leaderboard())
+    # Два независимых чтения грузим параллельно: так суммарное время страницы
+    # ограничено одним таймаутом Supabase, а не двумя подряд.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        achievements_future = pool.submit(rankings_service.leaderboard_achievements)
+        players_future = pool.submit(rankings_service.player_leaderboard)
+        achievements = achievements_future.result()
+        players = _enrich_players(players_future.result())
     return templates.TemplateResponse(
         request=request,
         name="rankings/leaderboard.html",

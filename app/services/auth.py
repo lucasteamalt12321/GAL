@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import httpx
 from fastapi import Request, Response
 from postgrest.exceptions import APIError
-from supabase import Client, create_client
+from supabase import Client, ClientOptions, create_client
 from supabase_auth.errors import (
     AuthApiError,
     AuthError,
@@ -77,11 +77,26 @@ def looks_like_jwt(token: str | None) -> bool:
     return len(parts) == 3 and all(parts)
 
 
+def _client_options() -> ClientOptions:
+    """Опции Supabase-клиента с явным таймаутом PostgREST.
+
+    Без него библиотека ждёт 120 с и бросает httpx.ReadTimeout, из-за чего
+    зависший Supabase превращался в 500 на всех БД-страницах.
+    """
+    return ClientOptions(
+        postgrest_client_timeout=get_settings().supabase_timeout_seconds,
+    )
+
+
 def new_anon_client() -> Client:
     settings = get_settings()
     if not settings.supabase_configured:
         raise SupabaseNotConfiguredError("Supabase is not configured")
-    return create_client(settings.supabase_url, settings.supabase_anon_key)
+    return create_client(
+        settings.supabase_url,
+        settings.supabase_anon_key,
+        options=_client_options(),
+    )
 
 
 def new_user_client(access_token: str, refresh_token: str) -> Client:

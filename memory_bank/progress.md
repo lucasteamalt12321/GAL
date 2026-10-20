@@ -22,6 +22,22 @@
 
 ## Changelog
 
+### 2026-10-20 — Инцидент: `/leaderboard` отдавал 500 при сбое Supabase — устранено (resilience)
+
+**Симптом.** На проде (`gal-inky.vercel.app`) `/leaderboard` возвращал `500 Internal Server Error`, когда запрос к Supabase зависал/обрывался.
+
+**Причина.** Обработчики БД-страниц вызывали Supabase-сервисы без таймаута и без обработки ошибок. `postgrest` по умолчанию ждёт **120 с** (`DEFAULT_POSTGREST_CLIENT_TIMEOUT`), затем бросает `httpx.ReadTimeout`/`RemoteProtocolError`; исключение никто не ловит → FastAPI отдаёт дефолтный 500. Воспроизведено локально (TestClient): `/` → 200, `/leaderboard` → 500 (120.6 с; повтор 20.0 с). Изоляция вызовов: `leaderboard_achievements` → `ReadTimeout` (121 с), `player_leaderboard` → `RemoteProtocolError` «Server disconnected» (41 с). Триггер — нестабильный DNS/сеть до `*.supabase.co` (системный резолвер отдаёт мёртвые `8.47.69.1`/`8.6.112.1` вместо `…​.5` из DoH).
+
+**Исправление (resilience).**
+- `app/config.py` — `supabase_timeout_seconds` (env `SUPABASE_TIMEOUT_SECONDS`, дефолт `6`).
+- `app/services/auth.py` — `create_client(..., options=ClientOptions(postgrest_client_timeout=...))`.
+- `app/main.py` — глобальные обработчики `httpx.HTTPError` и `postgrest.exceptions.APIError` → шаблон `app/templates/errors/upstream.html` со статусом **503** + лог `gal.upstream`; покрывает все БД-страницы.
+- `app/routers/rankings.py` — два независимых чтения `/leaderboard` грузятся параллельно (`ThreadPoolExecutor`), время страницы ограничено одним таймаутом.
+
+**Проверка.** До: 500 за 120 с. После: 503 за **6.5 с** (страница «Сервис временно недоступен»). `pytest` — **98 passed** (94 + 4 новых `tests/test_resilience.py`), `ruff check`/`format` — чисто.
+
+**Прод не сломан.** `gal-inky.vercel.app/leaderboard` — 200 (40/40), внешняя проверка 200; публичный домен один (`gal-lucasteamalt…` и `gal-git-main-…` → 302, SSO-защита Vercel). Баг проявлялся только в момент сбоя Supabase; теперь такой сбой даёт 503, а не 500.
+
 ### 2026-10-19 — D11 доставлен в прод: миграции 008–012, инцидент INACTIVE, live-e2e, автодеплой
 
 **Конфликт миграций.** Моя `010_harden_achievements_and_ranks.sql` (коммит `842865f`) **удалена** — сломана (`LANGUAGE SQL` с PL/pgSQL-синтаксисом; guard `is_moderator()` внутри `recompute_ranks()` ломал бы оценки обычных пользователей). Приняты чужие миграции от 28.09.2026 (другой программист): `010_ranking_integrity.sql` + `011_evaluation_lock.sql` — полнее и корректнее (`recompute_ranks_internal()` без guard + guarded-обёртка, trigger `guard_ranking_fields`, data-fix locked). Упоминания `010_harden_...` в Changelog за 2026-10-18 относятся к тому коммиту и более не актуальны.

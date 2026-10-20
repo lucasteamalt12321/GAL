@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     supabase_jwt_secret: str = ""
 
+    # Таймаут одного PostgREST-запроса (сек). Библиотека по умолчанию ждёт
+    # 120 с, поэтому при сбое Supabase страница висела минуты и падала с
+    # httpx.ReadTimeout → 500. Держим значение с запасом ниже лимита функции.
+    supabase_timeout_seconds: float = 6.0
+
     @property
     def is_production(self) -> bool:
         """Единая точка истины для production-поведения.
