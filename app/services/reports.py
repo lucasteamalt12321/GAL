@@ -48,6 +48,7 @@ def list_pending_reports(request: Request) -> list[dict]:
         .select(QUEUE_SELECT)
         .eq("status", "pending")
         .order("created_at")
+        .limit(100)
         .execute()
     )
     return res.data or []
@@ -156,9 +157,21 @@ def decide_report(
                     report_id,
                     achievement_id,
                 )
+            # Заявки на скрытое достижение не должны оставаться в очереди.
+            try:
+                client.table("achievement_completions").update(
+                    {"status": "rejected"}
+                ).eq("achievement_id", achievement_id).eq("status", "pending").execute()
+            except REPORTS_ERRORS:
+                logger.warning(
+                    "Failed to reject pending completions for hidden achievement %s",
+                    achievement_id,
+                    exc_info=True,
+                )
             # Скрытое достижение выбывает из ранжирования: плотные ранги
             # пересчитываются, чтобы в лидерборде не оставалось дыр по рангу.
-            # Ошибка не глотается: дыры в рангах видны всем в лидерборде.
+            # Ошибка логируется: решение по жалобе уже зафиксировано, откатывать
+            # его нельзя, а ранги можно пересчитать повторно.
             try:
                 client.rpc("recompute_ranks").execute()
             except REPORTS_ERRORS:

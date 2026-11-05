@@ -1,10 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Сервис временно недоступен{% endblock %}
 {% block content %}
+<section class="error-page">
+  <p class="error-code">503</p>
   <h1>Сервис временно недоступен</h1>
   <p class="muted">
     Не удалось загрузить данные — сервис хранения временно недоступен.
-    Пожалуйста, обновите страницу через минуту.
+    Обычно это проходит за минуту; страницу можно обновить.
   </p>
-  <p><a class="nav-link" href="/">Вернуться на главную</a></p>
+  <div class="row">
+    <button type="button" class="btn btn-primary" data-reload>Обновить страницу</button>
+    <a class="btn" href="/">На главную</a>
+  </div>
+</section>
 {% endblock %}

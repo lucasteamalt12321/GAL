@@ -1,61 +1,91 @@
 {% extends "base.html" %}
-{% block title %}Leaderboard{% endblock %}
+{% block title %}Рейтинг{% endblock %}
 {% block content %}
-  <h1>Leaderboard</h1>
+  <h1>Рейтинг</h1>
 
   <section class="leaderboard-section">
-    <h2>Top achievements</h2>
+    <h2>Топ достижений</h2>
     {% if achievements %}
-      <table class="leaderboard-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Achievement</th>
-            <th>Category</th>
-            <th>Avg position</th>
-            <th>Evaluations</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for a in achievements %}
+      <div class="table-scroll">
+        <table class="leaderboard-table">
+          <caption class="visually-hidden">Достижения, отсортированные по глобальному рангу</caption>
+          <thead>
             <tr>
-              <td class="lb-rank">{{ a.rank }}</td>
-              <td><a href="/achievements/{{ a.id }}">{{ a.title }}</a></td>
-              <td>{{ a.category.name if a.category else '—' }}</td>
-              <td>{{ a.average_position|round(2) if a.average_position is not none else '?' }}</td>
-              <td>{{ a.evaluation_count }}</td>
+              <th scope="col">#</th>
+              <th scope="col">Достижение</th>
+              <th scope="col">Категория</th>
+              <th scope="col">Средняя позиция</th>
+              <th scope="col">Оценок</th>
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {% for a in achievements %}
+              <tr>
+                <td class="lb-rank">#{{ a.rank }}</td>
+                <td><a href="/achievements/{{ a.id }}">{{ a.title }}</a></td>
+                <td>{{ a.category.name if a.category else '—' }}</td>
+                <td>{{ a.average_position|round(2) if a.average_position is not none else '?' }}</td>
+                <td>{{ a.evaluation_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="result-count muted">Всего в рейтинге: {{ total }}</p>
+      {% if pages > 1 %}
+        <nav class="pagination" aria-label="Страницы рейтинга достижений">
+          {% if page > 1 %}
+            <a class="btn" href="{{ request.url.include_query_params(page=page-1) }}">← Назад</a>
+          {% endif %}
+          <span class="muted">Страница {{ page }} из {{ pages }}</span>
+          {% if page < pages %}
+            <a class="btn" href="{{ request.url.include_query_params(page=page+1) }}">Вперёд →</a>
+          {% endif %}
+        </nav>
+      {% endif %}
     {% else %}
       <p class="muted">Пока нет ранжированных достижений — появится после того, как достижения получат 3+ оценки.</p>
     {% endif %}
   </section>
 
   <section class="leaderboard-section">
-    <h2>Top players</h2>
+    <h2>Топ игроков</h2>
     {% if players %}
-      <table class="leaderboard-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Player</th>
-            <th>Score</th>
-            <th>Achievements</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for p in players %}
+      <div class="table-scroll">
+        <table class="leaderboard-table">
+          <caption class="visually-hidden">Игроки, отсортированные по сумме очков</caption>
+          <thead>
             <tr>
-              <td class="lb-rank">{{ p.leaderboard_position }}</td>
-              <td><a href="/users/{{ p.username }}">{{ p.display_name or p.username }}</a></td>
-              <td class="lb-score">{{ p.score }}</td>
-              <td>{{ p.achievement_count }}</td>
+              <th scope="col">#</th>
+              <th scope="col">Игрок</th>
+              <th scope="col">Очки</th>
+              <th scope="col">Достижений</th>
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {% for p in players %}
+              <tr>
+                <td class="lb-rank">{{ (players_page - 1) * 25 + loop.index }}</td>
+                <td><a href="/users/{{ p.username }}">{{ p.display_name or p.username }}</a></td>
+                <td class="lb-score">{{ p.score }}</td>
+                <td>{{ p.achievement_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="result-count muted">Всего игроков: {{ players_total }}</p>
+      {% if players_pages > 1 %}
+        <nav class="pagination" aria-label="Страницы рейтинга игроков">
+          {% if players_page > 1 %}
+            <a class="btn" href="{{ request.url.include_query_params(players_page=players_page-1) }}">← Назад</a>
+          {% endif %}
+          <span class="muted">Страница {{ players_page }} из {{ players_pages }}</span>
+          {% if players_page < players_pages %}
+            <a class="btn" href="{{ request.url.include_query_params(players_page=players_page+1) }}">Вперёд →</a>
+          {% endif %}
+        </nav>
+      {% endif %}
     {% else %}
       <p class="muted">Пока нет очков. Очки начисляются за подтверждённые выполнения ранжированных достижений (1000 / rank).</p>
     {% endif %}

@@ -41,6 +41,11 @@ SUPABASE_URL=
 SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=   # только backend
 SUPABASE_JWT_SECRET=         # при необходимости
+SUPABASE_ACCESS_TOKEN=       # Management API: миграции/e2e
+APP_ENV=production           # CSRF + Secure cookies
+APP_URL=                     # ссылка сброса пароля
+SUPABASE_TIMEOUT_SECONDS=6   # таймаут PostgREST
+DISPLAY_UTC_OFFSET_HOURS=3   # даты в UI
 ```
 
 `.env.example` содержит шаблон; `.env` не коммитится.
@@ -57,7 +62,9 @@ SUPABASE_JWT_SECRET=         # при необходимости
   - `001_init.sql` — таблицы;
   - `002_rls.sql` — RLS policies;
   - `003_fix_handle_new_user.sql` — `handle_new_user` → `security definer`;
-  - `004_storage_proofs.sql` — bucket `proofs` (private, 50 МБ) + политики `storage.objects`.
+  - `004_storage_proofs.sql` — bucket `proofs` (private, 50 МБ) + политики `storage.objects`;
+  - `005`–`012` — движок оценок, хардинг, integrity, lock, revoke internal execute;
+  - `013_ui_features_and_hardening.sql` — soft-delete своих pending, приватность proofs, авторство истории модерации, deferred trigger «публикация только с approved proof создателя», постраничный `player_leaderboard_page`.
 - Storage bucket `proofs` — приватный; файлы по пути `{user_id}/{achievement_id}/{uuid}-{file}`; доступ по signed URL (TTL 3600), RLS на `storage.objects`.
 - Миграции применяются через Management API: `POST https://api.supabase.com/v1/projects/{ref}/database/query` с `Authorization: Bearer <PAT>` (успех = 201), т.к. `psql`/supabase CLI недоступны.
 - API supabase-py 2.31: auth = `supabase_auth.SyncGoTrueClient` (`SyncClient`/`SyncSupabaseAuthClient` — импорт падает); Storage = `client.storage.from_("proofs")` (`storage3._sync.file_api.SyncBucketProxy`, `upload(path, bytes, FileOptions)`, `create_signed_url(path, expires_in)` → dict с `signedURL`/`signedUrl`, `remove`, `list`); исключения `storage3.exceptions.StorageException`/`StorageApiError`.
@@ -70,11 +77,12 @@ SUPABASE_JWT_SECRET=         # при необходимости
 - Реальный Supabase development project.
 - **Сеть (2026-10-20):** локальная сеть периодически блэкхолит TCP-диапазоны Supabase (`8.47.69.0/24`, `8.6.112.0/24`); DNS исправен (адреса пула ротируются), обрыв — именно на TCP-коннекте, не на резолве. Обход: VPN/прокси (для httpx — `HTTPS_PROXY` в окружении процесса) либо локальный Supabase (`supabase start`, нужен Docker). При недоступности Supabase БД-страницы отдают 503 (таймаут PostgREST 6 с), а не 500.
 
-## CI/CD (план)
+## CI/CD
 
-- Push → Vercel (dev preview) → production.
-- ruff на PR/commit.
-- pytest для ranking engine минимум.
+- GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
+- Push → Vercel (production).
+- Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .`.
+- Тесты: 121 (юнит-ранкинг, роуты, CSRF, resilience, v1.1-сценарии).
 
 ## Правила проверки кода
 

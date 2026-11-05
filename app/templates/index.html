@@ -1,18 +1,92 @@
 {% extends "base.html" %}
 
-{% block title %}Home{% endblock %}
+{% block title %}Главная{% endblock %}
 
 {% block content %}
 <section class="hero">
   <h1>Global Achievement List</h1>
-  <p class="lead">Глобальная платформа рейтинга человеческих достижений.</p>
-  <p class="sub">Сложность достижения определяется теми, кто его уже выполнил.</p>
+  <p class="lead">Единый рейтинг достижений из разных сфер — от Geometry Dash и шахмат до музыки и программирования.</p>
+  <p class="sub">Сложность определяют те, кто уже выполнил достижение: вы ставите его на своё место в личной шкале, а из множества таких сравнений складывается общий рейтинг.</p>
   <div class="hero-actions">
-    <a class="btn btn-primary" href="/achievements">Leaderboard</a>
-    <a class="btn" href="/achievements/create">Предложить достижение</a>
+    <a class="btn btn-primary" href="/achievements">Смотреть достижения</a>
+    <a class="btn" href="/leaderboard">Рейтинг игроков</a>
+    {% if not request.state.user %}
+      <a class="btn" href="/auth/register">Присоединиться</a>
+    {% endif %}
   </div>
 </section>
-<section class="placeholder">
-  <p>MVP находится в разработке. Каркас FastAPI + Supabase уже развёрнут.</p>
+
+<section class="how-it-works">
+  <h2>Как это работает</h2>
+  <ol class="steps">
+    <li>
+      <span class="step-number">1</span>
+      <h3>Предложите достижение</h3>
+      <p>Опишите, что нужно сделать, и приложите доказательство собственного выполнения.</p>
+    </li>
+    <li>
+      <span class="step-number">2</span>
+      <h3>Пройдите модерацию</h3>
+      <p>Модератор проверяет доказательство и публикует достижение в каталоге.</p>
+    </li>
+    <li>
+      <span class="step-number">3</span>
+      <h3>Оцените лично</h3>
+      <p>Выполнили достижение сами? Поставьте его на своё место в личной шкале сложности.</p>
+    </li>
+    <li>
+      <span class="step-number">4</span>
+      <h3>Получите общий рейтинг</h3>
+      <p>После трёх независимых оценок достижение входит в глобальный рейтинг, а вы получаете очки.</p>
+    </li>
+  </ol>
+</section>
+
+<div class="home-columns">
+  <section class="home-panel">
+    <div class="page-head">
+      <h2>Топ достижений</h2>
+      <a class="btn" href="/leaderboard">Весь рейтинг</a>
+    </div>
+    {% if top_achievements %}
+      <ol class="home-list">
+        {% for a in top_achievements %}
+          <li>
+            <span class="home-rank">#{{ a.rank }}</span>
+            <a href="/achievements/{{ a.id }}">{{ a.title }}</a>
+            {% if a.category %}<span class="muted">{{ a.category.name }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="muted">Рейтинг появится, когда достижения получат три оценки.</p>
+    {% endif %}
+  </section>
+
+  <section class="home-panel">
+    <div class="page-head">
+      <h2>Топ игроков</h2>
+      <a class="btn" href="/leaderboard">Весь рейтинг</a>
+    </div>
+    {% if top_players %}
+      <ol class="home-list">
+        {% for p in top_players %}
+          <li>
+            <span class="home-rank">{{ loop.index }}</span>
+            <a href="/users/{{ p.username }}">{{ p.display_name or p.username }}</a>
+            <span class="muted">{{ p.score }} очков</span>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="muted">Очки начисляются за подтверждённые выполнения достижений из рейтинга.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="cta-panel">
+  <h2>Знаете достижение, которого здесь нет?</h2>
+  <p class="muted">Добавьте его — достаточно описания и доказательства, что вы справились сами.</p>
+  <a class="btn btn-primary" href="/achievements/create">Предложить достижение</a>
 </section>
 {% endblock %}

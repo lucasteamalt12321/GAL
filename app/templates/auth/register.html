@@ -1,19 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}Register{% endblock %}
+{% block title %}Регистрация{% endblock %}
 
 {% block content %}
 <section class="auth-card">
-  <h1>Register</h1>
+  <h1>Регистрация</h1>
   <form method="post" action="/auth/register" class="stack">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label class="field">
-      <span class="field-label">Username</span>
+      <span class="field-label">Имя пользователя</span>
       <input type="text" name="username" value="{{ username }}" required
              minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.-]+" autocomplete="username">
+      <span class="hint muted">Латиница, цифры, точка, дефис и подчёркивание; 3–32 символа.</span>
     </label>
     <label class="field">
-      <span class="field-label">Display name</span>
+      <span class="field-label">Отображаемое имя</span>
       <input type="text" name="display_name" value="{{ display_name }}" maxlength="64">
     </label>
     <label class="field">
@@ -21,11 +22,15 @@
       <input type="email" name="email" value="{{ email }}" required autocomplete="email">
     </label>
     <label class="field">
-      <span class="field-label">Password</span>
+      <span class="field-label">Пароль</span>
       <input type="password" name="password" required minlength="6" autocomplete="new-password">
     </label>
-    <button type="submit" class="btn btn-primary">Register</button>
+    <label class="field">
+      <span class="field-label">Повторите пароль</span>
+      <input type="password" name="password_confirm" required minlength="6" autocomplete="new-password">
+    </label>
+    <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
   </form>
-  <p class="muted">Already have an account? <a href="/auth/login">Sign in</a></p>
+  <p class="muted">Уже есть аккаунт? <a href="/auth/login">Войти</a></p>
 </section>
 {% endblock %}

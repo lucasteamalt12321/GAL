@@ -29,10 +29,10 @@ def _sample_achievement() -> dict:
 
 def test_list_page_renders(monkeypatch) -> None:
     monkeypatch.setattr(achievements_service, "list_categories", list)
-    monkeypatch.setattr(achievements_service, "list_achievements", lambda **_: [])
+    monkeypatch.setattr(achievements_service, "list_achievements", lambda **_: ([], 0))
     resp = client.get("/achievements")
     assert resp.status_code == 200
-    assert "Achievements" in resp.text
+    assert "Достижения" in resp.text
 
 
 def test_list_page_shows_achievement(monkeypatch) -> None:
@@ -42,7 +42,9 @@ def test_list_page_shows_achievement(monkeypatch) -> None:
         lambda: [{"id": 1, "name": "Chess", "slug": "chess"}],
     )
     monkeypatch.setattr(
-        achievements_service, "list_achievements", lambda **_: [_sample_achievement()]
+        achievements_service,
+        "list_achievements",
+        lambda **_: ([_sample_achievement()], 1),
     )
     resp = client.get("/achievements")
     assert resp.status_code == 200
@@ -100,7 +102,7 @@ def test_profile_renders(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        achievements_service, "list_achievements_by_creator", lambda *_: []
+        achievements_service, "list_achievements_by_creator", lambda *_, **__: []
     )
     resp = client.get("/users/alice")
     assert resp.status_code == 200

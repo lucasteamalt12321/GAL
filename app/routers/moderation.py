@@ -38,6 +38,18 @@ def queue(request: Request, error: str | None = None) -> HTMLResponse:
     )
 
 
+@router.get("/history", response_class=HTMLResponse, include_in_schema=False)
+def history(request: Request) -> HTMLResponse:
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+    return templates.TemplateResponse(
+        request=request,
+        name="moderation/history.html",
+        context={"reviews": moderation_service.list_history(request)},
+    )
+
+
 @router.post(
     "/achievements/{achievement_id}",
     response_class=HTMLResponse,
@@ -56,7 +68,42 @@ def decide_achievement(
         moderation_service.decide_achievement(request, achievement_id, decision, reason)
     except moderation_service.ModerationError as exc:
         return RedirectResponse(f"{QUEUE_URL}?error={exc}", status_code=303)
+    except moderation_service.MODERATION_ERRORS:
+        return RedirectResponse(
+            f"{QUEUE_URL}?error=Не удалось сохранить решение. Попробуйте ещё раз.",
+            status_code=303,
+        )
     return RedirectResponse(QUEUE_URL, status_code=303)
+
+
+@router.post(
+    "/achievements/{achievement_id}/hide",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+def hide_achievement(
+    request: Request,
+    achievement_id: int,
+    reason: str = Form(""),
+) -> HTMLResponse:
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+    try:
+        moderation_service.hide_achievement(request, achievement_id, reason)
+    except moderation_service.ModerationError as exc:
+        return RedirectResponse(
+            f"/achievements/{achievement_id}?error={exc}", status_code=303
+        )
+    except moderation_service.MODERATION_ERRORS:
+        return RedirectResponse(
+            f"/achievements/{achievement_id}"
+            "?error=Не удалось скрыть достижение. Попробуйте ещё раз.",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/achievements/{achievement_id}?info=hidden", status_code=303
+    )
 
 
 @router.post(
@@ -77,4 +124,9 @@ def decide_completion(
         moderation_service.decide_completion(request, completion_id, decision, reason)
     except moderation_service.ModerationError as exc:
         return RedirectResponse(f"{QUEUE_URL}?error={exc}", status_code=303)
+    except moderation_service.MODERATION_ERRORS:
+        return RedirectResponse(
+            f"{QUEUE_URL}?error=Не удалось сохранить решение. Попробуйте ещё раз.",
+            status_code=303,
+        )
     return RedirectResponse(QUEUE_URL, status_code=303)

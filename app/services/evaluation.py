@@ -111,6 +111,12 @@ def submit(request: Request, achievement_id: int, harder_count: int) -> dict:
             raise NotApprovedError(
                 "Оценивать можно только подтверждённо выполненные достижения."
             ) from exc
+        if "NOT_FOUND" in message:
+            raise EvaluationError(
+                "Достижение не найдено или ещё не опубликовано."
+            ) from exc
+        if "AUTH_REQUIRED" in message:
+            raise AuthRequiredError("Требуется вход в систему.") from exc
         raise EvaluationError(
             message[:300] or "Не удалось сохранить оценку. Попробуйте ещё раз."
         ) from exc

@@ -9,24 +9,24 @@
     <div class="detail-badges">
       {% if achievement.category %}<span class="tag">{{ achievement.category.name }}</span>{% endif %}
       {% if achievement.status != 'published' %}
-        <span class="badge badge-{{ achievement.status }}">{{ achievement.status }}</span>
+        <span class="badge badge-{{ achievement.status }}">{{ achievement.status|status_label }}</span>
       {% endif %}
     </div>
   </div>
 
   <div class="detail-stats">
     <div class="stat">
-      <span class="stat-label">Global rank</span>
+      <span class="stat-label">Место в рейтинге</span>
       <span class="stat-value">{% if achievement.rank %}#{{ achievement.rank }}{% else %}?{% endif %}</span>
     </div>
     <div class="stat">
-      <span class="stat-label">Average position</span>
+      <span class="stat-label">Средняя позиция</span>
       <span class="stat-value">
         {% if achievement.average_position %}{{ "%.2f"|format(achievement.average_position) }}{% else %}?{% endif %}
       </span>
     </div>
     <div class="stat">
-      <span class="stat-label">Evaluations</span>
+      <span class="stat-label">Оценок</span>
       <span class="stat-value">{{ achievement.evaluation_count }}</span>
     </div>
   </div>
@@ -35,6 +35,28 @@
     <div class="flash flash-info">
       Достижение на модерации. Публикация произойдёт после проверки доказательства собственного выполнения.
     </div>
+    {% if can_edit %}
+      <div class="detail-actions">
+        <a class="btn" href="/achievements/{{ achievement.id }}/edit">Редактировать</a>
+        <form method="post" action="/achievements/{{ achievement.id }}/delete" class="inline-form"
+              data-confirm="Удалить это достижение? Действие необратимо.">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="submit" class="btn btn-danger">Удалить</button>
+        </form>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {% if can_hide %}
+    <form method="post" action="/moderation/achievements/{{ achievement.id }}/hide" class="stack hide-form"
+          data-confirm="Скрыть достижение из каталога и рейтинга?">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <label class="field">
+        <span class="field-label">Скрыть достижение (модератор)</span>
+        <input type="text" name="reason" maxlength="500" placeholder="Причина скрытия">
+      </label>
+      <button type="submit" class="btn btn-danger">Скрыть достижение</button>
+    </form>
   {% endif %}
 
   {% if can_evaluate %}
@@ -56,18 +78,20 @@
         {% endif %}
       </p>
     </div>
+  {% elif eval_reason and request.state.user and achievement.status == 'published' %}
+    <p class="muted evaluation-hint">{{ eval_reason }}</p>
   {% endif %}
 
   {% if achievement.description %}
     <section class="prose">
-      <h2>Description</h2>
+      <h2>Описание</h2>
       <p>{{ achievement.description }}</p>
     </section>
   {% endif %}
 
   {% if achievement.requirements %}
     <section class="prose">
-      <h2>Requirements</h2>
+      <h2>Требования</h2>
       <p>{{ achievement.requirements }}</p>
     </section>
   {% endif %}
@@ -78,26 +102,30 @@
       <a href="/users/{{ achievement.creator.username }}">
         {{ achievement.creator.display_name or achievement.creator.username }}
       </a>
+      {% if achievement.created_at %}· {{ achievement.created_at|date_local }}{% endif %}
     </p>
   {% endif %}
 
-  <p class="muted">
-    <a href="/achievements/{{ achievement.id }}/report">Пожаловаться на достижение</a>
-  </p>
+  {% if achievement.status == 'published' and request.state.user %}
+    <p class="muted">
+      <a href="/achievements/{{ achievement.id }}/report">Пожаловаться на достижение</a>
+    </p>
+  {% endif %}
 
   {% if own_completion %}
     <section class="prose">
       <h2>Ваше доказательство</h2>
       <p>
         Статус заявки:
-        <span class="badge badge-{{ own_completion.status }}">{{ own_completion.status }}</span>
+        <span class="badge badge-{{ own_completion.status }}">{{ own_completion.status|completion_status_label }}</span>
+        {% if own_completion.created_at %}· {{ own_completion.created_at|date_local }}{% endif %}
       </p>
       {% if proofs %}
         <ul class="proof-list">
           {% for p in proofs %}
             <li>
-              <span class="tag">{{ p.proof_type }}</span>
-              {% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">открыть доказательство</a>{% else %}<span class="muted">недоступно</span>{% endif %}
+              <span class="tag">{{ p.proof_type|proof_type_label }}</span>
+              {% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">открыть доказательство</a>{% else %}<span class="muted">недоступно</span>{% endif %}
               {% if p.description %}<span class="muted"> — {{ p.description }}</span>{% endif %}
             </li>
           {% endfor %}
@@ -111,9 +139,15 @@
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <fieldset class="field proof-field">
           <legend class="field-label">Доказательство</legend>
-          <p class="muted">Приложите файл (до 4 МБ) или ссылку.</p>
-          <input type="file" name="file">
-          <input type="url" name="external_url" placeholder="https://...">
+          <p class="muted">Приложите файл (до {{ max_proof_bytes // 1048576 }} МБ) или ссылку.</p>
+          <label class="field">
+            <span class="field-label">Файл</span>
+            <input type="file" name="file" data-max-bytes="{{ max_proof_bytes }}">
+          </label>
+          <label class="field">
+            <span class="field-label">Ссылка</span>
+            <input type="url" name="external_url" placeholder="https://...">
+          </label>
         </fieldset>
         <label class="field">
           <span class="field-label">Комментарий</span>
@@ -127,7 +161,7 @@
       <a class="btn btn-primary" href="/auth/login">Войдите, чтобы отправить доказательство</a>
     </div>
   {% elif achievement.status == 'published' %}
-    <p class="muted">Вы уже отправили доказательство по этому достижению.</p>
+    <p class="muted">Вы уже отправляли доказательство по этому достижению.</p>
   {% endif %}
 </article>
 {% endblock %}

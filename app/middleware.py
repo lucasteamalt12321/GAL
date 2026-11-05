@@ -32,7 +32,13 @@ class UserContextMiddleware(BaseHTTPMiddleware):
             )
         response = await call_next(request)
         for name, value, kwargs in getattr(request.state, "pending_cookies", []):
-            response.set_cookie(name, value, **auth_service._cookie_kwargs())
+            # kwargs важны для удаления cookie (max_age=0): раньше они
+            # игнорировались, и «удалённая» битая сессия жила ещё 30 дней.
+            response.set_cookie(
+                name,
+                value,
+                **{**auth_service._cookie_kwargs(), **kwargs},
+            )
         if request.cookies.get(CSRF_COOKIE) is None:
             response.set_cookie(
                 CSRF_COOKIE, request.state.csrf_token, **csrf_cookie_kwargs()

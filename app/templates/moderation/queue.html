@@ -4,7 +4,10 @@
 
 {% block content %}
 <section class="moderation">
-  <h1>Модерация</h1>
+  <div class="page-head">
+    <h1>Модерация</h1>
+    <a class="btn" href="/moderation/history">История решений</a>
+  </div>
 
   <h2>Достижения на проверке</h2>
   {% if pending_achievements %}
@@ -16,7 +19,8 @@
             {% if a.category %}<span class="tag">{{ a.category.name }}</span>{% endif %}
           </div>
           {% if a.creator %}
-            <p class="muted">Автор: {{ a.creator.display_name or a.creator.username }}</p>
+            <p class="muted">Автор: {{ a.creator.display_name or a.creator.username }}
+              {% if a.created_at %}· {{ a.created_at|datetime_local }}{% endif %}</p>
           {% endif %}
           {% if a.description %}<p class="prose">{{ a.description }}</p>{% endif %}
           <form method="post" action="/moderation/achievements/{{ a.id }}" class="stack">
@@ -24,7 +28,9 @@
             <input type="text" name="reason" placeholder="Причина (для отклонения)" maxlength="500">
             <div class="row">
               <button type="submit" class="btn btn-primary" name="decision" value="approved">Одобрить</button>
-              <button type="submit" class="btn btn-danger" name="decision" value="rejected">Отклонить</button>
+              <button type="submit" class="btn btn-danger" name="decision" value="rejected"
+                      data-confirm="Отклонить достижение? Это действие нельзя отменить."
+                      formnovalidate>Отклонить</button>
             </div>
           </form>
         </li>
@@ -43,17 +49,18 @@
             <a class="card-title" href="/achievements/{{ c.achievement_id }}">
               {{ c.achievement.title if c.achievement else c.achievement_id }}
             </a>
-            <span class="badge badge-pending">pending</span>
+            <span class="badge badge-pending">{{ c.status|completion_status_label }}</span>
           </div>
           {% if c.user %}
-            <p class="muted">Заявитель: {{ c.user.display_name or c.user.username }}</p>
+            <p class="muted">Заявитель: {{ c.user.display_name or c.user.username }}
+              {% if c.created_at %}· {{ c.created_at|datetime_local }}{% endif %}</p>
           {% endif %}
           {% if c.proof_views %}
             <ul class="proof-list">
               {% for p in c.proof_views %}
                 <li>
-                  <span class="tag">{{ p.proof_type }}</span>
-                  {% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">доказательство</a>{% else %}<span class="muted">недоступно</span>{% endif %}
+                  <span class="tag">{{ p.proof_type|proof_type_label }}</span>
+                  {% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">доказательство</a>{% else %}<span class="muted">недоступно</span>{% endif %}
                   {% if p.description %}<span class="muted"> — {{ p.description }}</span>{% endif %}
                 </li>
               {% endfor %}
@@ -66,7 +73,9 @@
             <input type="text" name="reason" placeholder="Причина (для отклонения)" maxlength="500">
             <div class="row">
               <button type="submit" class="btn btn-primary" name="decision" value="approved">Одобрить</button>
-              <button type="submit" class="btn btn-danger" name="decision" value="rejected">Отклонить</button>
+              <button type="submit" class="btn btn-danger" name="decision" value="rejected"
+                      data-confirm="Отклонить заявку? Это действие нельзя отменить."
+                      formnovalidate>Отклонить</button>
             </div>
           </form>
         </li>

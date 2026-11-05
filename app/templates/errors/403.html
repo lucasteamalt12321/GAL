@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Доступ запрещён{% endblock %}
+{% block content %}
+<section class="error-page">
+  <p class="error-code">403</p>
+  <h1>Доступ запрещён</h1>
+  <p class="muted">У вас нет прав для этой страницы. Если вы модератор, проверьте, что вошли в аккаунт.</p>
+  <div class="row">
+    <a class="btn btn-primary" href="/">На главную</a>
+    {% if not request.state.user %}<a class="btn" href="/auth/login">Войти</a>{% endif %}
+  </div>
+</section>
+{% endblock %}

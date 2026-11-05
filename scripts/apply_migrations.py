@@ -1,10 +1,12 @@
 """Apply GAL SQL migrations to the Supabase project via Management API.
 
 Usage:
-    python -m scripts.apply_migrations [file.sql ...]
+    python -m scripts.apply_migrations [file.sql | NNN ...]
 
 Reads SUPABASE_URL and SUPABASE_ACCESS_TOKEN from the environment (.env).
-Without arguments, applies all migrations in migrations/ in order.
+Without arguments, applies all migrations in migrations/ in order. An argument
+without a path (for example `013`) resolves to the single migration whose name
+starts with that prefix.
 Success = HTTP 201 from the Management API.
 """
 
@@ -66,13 +68,23 @@ def main() -> int:
     args = [a for a in args if a != "--dry-run"]
 
     if args:
-        files = [Path(a) for a in args]
+        files = [_resolve(Path(a)) for a in args]
     else:
         files = sorted(Path("migrations").glob("*.sql"))
 
     for path in files:
         apply_migration(env.supabase_access_token, ref, path, dry_run=dry_run)
     return 0
+
+
+def _resolve(path: Path) -> Path:
+    """Разрешает аргумент вида `013` в путь миграции."""
+    if path.exists():
+        return path
+    matches = sorted(Path("migrations").glob(f"{path.name}*.sql"))
+    if len(matches) == 1:
+        return matches[0]
+    raise SystemExit(f"Migration not found or ambiguous: {path}")
 
 
 if __name__ == "__main__":

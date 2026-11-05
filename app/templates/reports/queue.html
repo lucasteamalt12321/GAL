@@ -1,39 +1,42 @@
 {% extends "base.html" %}
-{% block title %}Reports{% endblock %}
+{% block title %}Жалобы{% endblock %}
 {% block content %}
-  <h1>Reports</h1>
-  {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+  <section class="moderation">
+    <h1>Жалобы</h1>
 
-  {% if pending_reports %}
-    <div class="queue">
-      {% for report in pending_reports %}
-        <article class="card queue-item">
-          <div class="queue-meta">
-            <strong>{{ report.reason }}</strong>
-            <span class="muted">
-              by <a href="/users/{{ report.reporter.username }}">{{ report.reporter.display_name or report.reporter.username }}</a>
-              · {{ report.created_at }}
-            </span>
-          </div>
-          {% if report.description %}<p class="muted">{{ report.description }}</p>{% endif %}
-          <p>
-            On: <a href="/achievements/{{ report.achievement.id }}">{{ report.achievement.title }}</a>
-            (status: {{ report.achievement.status }})
-          </p>
-          <form method="post" action="/reports/{{ report.id }}/accept" class="stack">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <input type="text" name="resolution_reason" placeholder="Причина (необязательно)">
-            <button type="submit" class="btn btn-danger">Accept — hide achievement</button>
-          </form>
-          <form method="post" action="/reports/{{ report.id }}/reject" class="stack">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <input type="text" name="resolution_reason" placeholder="Причина (необязательно)">
-            <button type="submit" class="btn">Reject</button>
-          </form>
-        </article>
-      {% endfor %}
-    </div>
-  {% else %}
-    <p class="muted">Нет ожидающих жалоб.</p>
-  {% endif %}
+    {% if pending_reports %}
+      <div class="queue">
+        {% for report in pending_reports %}
+          <article class="card queue-item">
+            <div class="queue-meta">
+              <strong>{{ report.reason|report_reason_label }}</strong>
+              <span class="muted">
+                от <a href="/users/{{ report.reporter.username }}">{{ report.reporter.display_name or report.reporter.username }}</a>
+                · {{ report.created_at|datetime_local }}
+              </span>
+            </div>
+            {% if report.description %}<p class="muted">{{ report.description }}</p>{% endif %}
+            <p>
+              На достижение:
+              <a href="/achievements/{{ report.achievement.id }}">{{ report.achievement.title }}</a>
+              <span class="badge badge-{{ report.achievement.status }}">{{ report.achievement.status|status_label }}</span>
+            </p>
+            <form method="post" action="/reports/{{ report.id }}/accept" class="stack">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="text" name="resolution_reason" placeholder="Причина (необязательно)" maxlength="500">
+              <button type="submit" class="btn btn-danger"
+                      data-confirm="Принять жалобу и скрыть достижение?">Принять и скрыть достижение</button>
+            </form>
+            <form method="post" action="/reports/{{ report.id }}/reject" class="stack">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="text" name="resolution_reason" placeholder="Причина (необязательно)" maxlength="500">
+              <button type="submit" class="btn">Отклонить жалобу</button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Нет ожидающих жалоб.</p>
+    {% endif %}
+  </section>
 {% endblock %}

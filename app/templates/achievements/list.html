@@ -1,31 +1,48 @@
 {% extends "base.html" %}
 
-{% block title %}Achievements{% endblock %}
+{% block title %}Достижения{% endblock %}
 
 {% block content %}
 <section class="page-head">
-  <h1>Achievements</h1>
+  <h1>Достижения</h1>
   <div class="page-head-actions">
     <a class="btn {% if sort == 'rank' %}btn-active{% endif %}"
-       href="/achievements?sort=rank{% if active_category %}&category={{ active_category.slug }}{% endif %}">By rank</a>
+       href="{{ request.url.include_query_params(sort='rank', page=1) }}">По рейтингу</a>
     <a class="btn {% if sort == 'new' %}btn-active{% endif %}"
-       href="/achievements?sort=new{% if active_category %}&category={{ active_category.slug }}{% endif %}">Newest</a>
+       href="{{ request.url.include_query_params(sort='new', page=1) }}">Новые</a>
     {% if request.state.user %}
       <a class="btn btn-primary" href="/achievements/create">Предложить</a>
     {% endif %}
   </div>
 </section>
 
+<form method="get" action="/achievements" class="search-form" role="search">
+  <input type="search" name="q" value="{{ query }}" placeholder="Поиск по названию" maxlength="100"
+         aria-label="Поиск достижений по названию">
+  {% if active_category %}<input type="hidden" name="category" value="{{ active_category.slug }}">{% endif %}
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <button type="submit" class="btn">Найти</button>
+  {% if query %}<a class="btn" href="/achievements?sort={{ sort }}{% if active_category %}&category={{ active_category.slug }}{% endif %}">Сбросить</a>{% endif %}
+</form>
+
 <div class="chips">
   <a class="chip {% if not active_category %}chip-active{% endif %}"
-     href="/achievements?sort={{ sort }}">All</a>
+     href="/achievements?sort={{ sort }}">Все</a>
   {% for c in categories %}
     <a class="chip {% if active_category and active_category.slug == c.slug %}chip-active{% endif %}"
        href="/achievements?category={{ c.slug }}&sort={{ sort }}">{{ c.name }}</a>
   {% endfor %}
 </div>
 
-{% if achievements %}
+{% if category_missing %}
+  <section class="placeholder">
+    <p>Категория не найдена. <a href="/achievements">Показать все достижения</a>.</p>
+  </section>
+{% elif achievements %}
+  <p class="result-count muted">
+    Найдено {{ total }} {{ total|plural_ru(('достижение', 'достижения', 'достижений')) }}
+    {% if pages > 1 %}· страница {{ page }} из {{ pages }}{% endif %}
+  </p>
   <div class="cards">
     {% for a in achievements %}
       <a class="card" href="/achievements/{{ a.id }}">
@@ -36,15 +53,29 @@
           <h2 class="card-title">{{ a.title }}</h2>
           <div class="card-meta">
             {% if a.category %}<span class="tag">{{ a.category.name }}</span>{% endif %}
-            <span class="muted">{{ a.evaluation_count }} оценок</span>
+            <span class="muted">{{ a.evaluation_count }} {{ a.evaluation_count|plural_ru(('оценка', 'оценки', 'оценок')) }}</span>
           </div>
         </div>
       </a>
     {% endfor %}
   </div>
+  {% if pages > 1 %}
+    <nav class="pagination" aria-label="Страницы достижений">
+      {% if page > 1 %}
+        <a class="btn" href="{{ request.url.include_query_params(page=page-1) }}">← Назад</a>
+      {% endif %}
+      <span class="muted">Страница {{ page }} из {{ pages }}</span>
+      {% if page < pages %}
+        <a class="btn" href="{{ request.url.include_query_params(page=page+1) }}">Вперёд →</a>
+      {% endif %}
+    </nav>
+  {% endif %}
 {% else %}
   <section class="placeholder">
-    <p>Пока нет опубликованных достижений{% if active_category %} в категории «{{ active_category.name }}»{% endif %}.</p>
+    <p>
+      {% if query %}По запросу «{{ query }}» ничего не найдено.
+      {% else %}Пока нет опубликованных достижений{% if active_category %} в категории «{{ active_category.name }}»{% endif %}.{% endif %}
+    </p>
   </section>
 {% endif %}
 {% endblock %}

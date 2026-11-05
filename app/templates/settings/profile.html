@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки профиля{% endblock %}
+
+{% block content %}
+<section class="auth-card auth-card-wide">
+  <h1>Настройки профиля</h1>
+
+  <h2>Публичный профиль</h2>
+  <form method="post" action="/settings/profile" class="stack">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label class="field">
+      <span class="field-label">Имя пользователя</span>
+      <input type="text" name="username" value="{{ username }}" required
+             minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.-]+" autocomplete="username">
+      <span class="hint muted">Латиница, цифры, точка, дефис и подчёркивание. Меняет адрес профиля.</span>
+    </label>
+    <label class="field">
+      <span class="field-label">Отображаемое имя</span>
+      <input type="text" name="display_name" value="{{ display_name }}" maxlength="64">
+    </label>
+    <label class="field">
+      <span class="field-label">Ссылка на аватар</span>
+      <input type="url" name="avatar_url" value="{{ avatar_url }}" placeholder="https://...">
+    </label>
+    <button type="submit" class="btn btn-primary">Сохранить профиль</button>
+  </form>
+
+  <h2>Смена пароля</h2>
+  {% if password_error %}<div class="flash flash-error">{{ password_error }}</div>{% endif %}
+  <form method="post" action="/settings/password" class="stack">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label class="field">
+      <span class="field-label">Текущий пароль</span>
+      <input type="password" name="current_password" required autocomplete="current-password">
+    </label>
+    <label class="field">
+      <span class="field-label">Новый пароль</span>
+      <input type="password" name="new_password" required minlength="6" autocomplete="new-password">
+    </label>
+    <label class="field">
+      <span class="field-label">Повторите новый пароль</span>
+      <input type="password" name="new_password_confirm" required minlength="6" autocomplete="new-password">
+    </label>
+    <button type="submit" class="btn">Изменить пароль</button>
+  </form>
+</section>
+{% endblock %}

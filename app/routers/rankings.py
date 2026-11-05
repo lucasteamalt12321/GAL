@@ -1,5 +1,6 @@
 """GAL leaderboards: achievement rank list + player scores."""
 
+import math
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Request
@@ -13,31 +14,53 @@ router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
 def _enrich_players(players: list[dict]) -> list[dict]:
     out: list[dict] = []
-    for i, row in enumerate(players, start=1):
+    for row in players:
         entry = dict(row)
         try:
             entry["score"] = round(float(row["score"]), 2)
         except (TypeError, ValueError, KeyError):
             entry["score"] = 0.0
-        entry["leaderboard_position"] = i
         out.append(entry)
     return out
 
 
 @router.get("", response_class=HTMLResponse, include_in_schema=False)
-def leaderboard_page(request: Request) -> HTMLResponse:
+def leaderboard_page(
+    request: Request,
+    page: int = 1,
+    players_page: int = 1,
+) -> HTMLResponse:
+    page = max(1, page)
+    players_page = max(1, players_page)
     # Два независимых чтения грузим параллельно: так суммарное время страницы
     # ограничено одним таймаутом Supabase, а не двумя подряд.
     with ThreadPoolExecutor(max_workers=2) as pool:
-        achievements_future = pool.submit(rankings_service.leaderboard_achievements)
-        players_future = pool.submit(rankings_service.player_leaderboard)
-        achievements = achievements_future.result()
-        players = _enrich_players(players_future.result())
+        achievements_future = pool.submit(
+            rankings_service.leaderboard_achievements, page=page
+        )
+        players_future = pool.submit(
+            rankings_service.player_leaderboard, page=players_page
+        )
+        achievements, achievements_total = achievements_future.result()
+        players, players_total = players_future.result()
+    players = _enrich_players(players)
+
+    achievements_pages = max(
+        1, math.ceil(achievements_total / rankings_service.PAGE_SIZE)
+    )
+    players_pages = max(1, math.ceil(players_total / rankings_service.PAGE_SIZE))
+
     return templates.TemplateResponse(
         request=request,
         name="rankings/leaderboard.html",
         context={
             "achievements": achievements,
             "players": players,
+            "page": page,
+            "pages": achievements_pages,
+            "total": achievements_total,
+            "players_page": players_page,
+            "players_pages": players_pages,
+            "players_total": players_total,
         },
     )

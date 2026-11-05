@@ -1,5 +1,5 @@
-# Dev-зависимости: pytest/ruff едут в Vercel-бандл при установке requirements.txt.
-# Локально: pip install -r requirements-dev.txt
+# Dev-зависимости не входят в прод-бандл Vercel (там ставится только
+# requirements.txt). Локально: pip install -r requirements-dev.txt
 -r requirements.txt
 
 pytest>=8.2,<9

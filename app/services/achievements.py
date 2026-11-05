@@ -22,9 +22,11 @@ CATEGORY_SELECT = "id,name,slug"
 PROFILE_SELECT = "id,username,display_name,avatar_url,role,created_at"
 
 DEFAULT_LIMIT = 60
+PAGE_SIZE = 24
 SORT_RANK = "rank"
 SORT_NEW = "new"
 ALLOWED_SORTS = (SORT_RANK, SORT_NEW)
+CREATOR_VISIBLE_STATUSES = ("published", "pending")
 
 
 def list_categories() -> list[dict]:
@@ -33,42 +35,51 @@ def list_categories() -> list[dict]:
     return res.data or []
 
 
-def _category_id_by_slug(client, slug: str) -> int | None:
+def get_category_by_slug(slug: str) -> dict | None:
+    client = auth_service.new_anon_client()
     res = (
         client.table("categories")
-        .select("id")
+        .select(CATEGORY_SELECT)
         .eq("slug", slug)
         .maybe_single()
         .execute()
     )
-    if res is None or not res.data:
+    if res is None:
         return None
-    return res.data["id"]
+    return res.data
 
 
 def list_achievements(
     *,
     category_slug: str | None = None,
     sort: str = SORT_RANK,
-    limit: int = DEFAULT_LIMIT,
-) -> list[dict]:
+    page: int = 1,
+    limit: int = PAGE_SIZE,
+    query: str | None = None,
+) -> tuple[list[dict], int]:
+    """Возвращает (страница достижений, всего найдено)."""
     client = auth_service.new_anon_client()
-    query = (
+    base = (
         client.table("achievements")
-        .select(ACHIEVEMENT_SELECT)
+        .select(ACHIEVEMENT_SELECT, count="exact")
         .eq("status", "published")
     )
     if category_slug:
-        category_id = _category_id_by_slug(client, category_slug)
-        if category_id is None:
-            return []
-        query = query.eq("category_id", category_id)
+        category = get_category_by_slug(category_slug)
+        if category is None:
+            return [], 0
+        base = base.eq("category_id", category["id"])
+    if query:
+        base = base.ilike("title", f"%{auth_service.ilike_literal(query)}%")
     if sort == SORT_NEW:
-        query = query.order("created_at", desc=True)
+        base = base.order("created_at", desc=True)
     else:
-        query = query.order("rank").order("created_at", desc=True)
-    res = query.limit(limit).execute()
-    return res.data or []
+        base = base.order("rank").order("created_at", desc=True)
+    page = max(1, page)
+    start = (page - 1) * limit
+    res = base.range(start, start + limit - 1).execute()
+    total = res.count if res.count is not None else len(res.data or [])
+    return res.data or [], total
 
 
 def get_achievement(request: Request, achievement_id: int) -> dict | None:
@@ -85,16 +96,22 @@ def get_achievement(request: Request, achievement_id: int) -> dict | None:
     return res.data
 
 
-def list_achievements_by_creator(request: Request, creator_id: str) -> list[dict]:
+def list_achievements_by_creator(
+    request: Request,
+    creator_id: str,
+    *,
+    statuses: tuple[str, ...] | None = None,
+    limit: int = DEFAULT_LIMIT,
+) -> list[dict]:
     client = auth_service.client_for_request(request)
-    res = (
+    query = (
         client.table("achievements")
         .select(ACHIEVEMENT_SELECT)
         .eq("creator_id", creator_id)
-        .order("created_at", desc=True)
-        .limit(DEFAULT_LIMIT)
-        .execute()
     )
+    if statuses:
+        query = query.in_("status", list(statuses))
+    res = query.order("created_at", desc=True).limit(limit).execute()
     return res.data or []
 
 
@@ -135,3 +152,54 @@ def create_achievement(
         payload["category_id"] = category_id
     res = client.table("achievements").insert(payload).execute()
     return res.data[0]
+
+
+def update_achievement(
+    request: Request,
+    achievement_id: int,
+    *,
+    title: str,
+    description: str,
+    requirements: str,
+    category_id: int | None,
+) -> dict:
+    """Правит только своё достижение в статусе pending (RLS + фильтр)."""
+    user = request.state.user
+    client = auth_service.user_client_from_request(request)
+    if user is None or client is None:
+        raise PermissionError("Authentication required")
+    payload: dict = {
+        "title": title,
+        "description": description,
+        "requirements": requirements,
+        "category_id": category_id,
+    }
+    res = (
+        client.table("achievements")
+        .update(payload)
+        .eq("id", achievement_id)
+        .eq("creator_id", user.id)
+        .eq("status", "pending")
+        .execute()
+    )
+    if not res.data:
+        raise PermissionError("Достижение не найдено или уже опубликовано.")
+    return res.data[0]
+
+
+def soft_delete_own_pending(request: Request, achievement_id: int) -> None:
+    """Скрывает своё достижение, пока оно на модерации (status -> deleted)."""
+    user = request.state.user
+    client = auth_service.user_client_from_request(request)
+    if user is None or client is None:
+        raise PermissionError("Authentication required")
+    res = (
+        client.table("achievements")
+        .update({"status": "deleted"})
+        .eq("id", achievement_id)
+        .eq("creator_id", user.id)
+        .eq("status", "pending")
+        .execute()
+    )
+    if not res.data:
+        raise PermissionError("Достижение не найдено или уже рассмотрено.")

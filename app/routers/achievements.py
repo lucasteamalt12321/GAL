@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Annotated
 from urllib.parse import quote
 
@@ -17,6 +18,11 @@ logger = logging.getLogger(__name__)
 LOGIN_URL = "/auth/login"
 
 CREATE_TEMPLATE = "achievements/create.html"
+EDIT_TEMPLATE = "achievements/edit.html"
+
+LIST_INFO_MESSAGES = {
+    "deleted": "Достижение удалено.",
+}
 
 
 def _parse_category_id(raw: str) -> int | None:
@@ -29,7 +35,7 @@ def _parse_category_id(raw: str) -> int | None:
         return None
 
 
-def _create_context(
+def _form_context(
     *,
     error: str | None = None,
     title: str = "",
@@ -37,6 +43,9 @@ def _create_context(
     requirements: str = "",
     category_id: str = "",
     external_url: str = "",
+    achievement: dict | None = None,
+    action: str = "/achievements/create",
+    submit_label: str = "Отправить на модерацию",
 ) -> dict:
     return {
         "categories": achievements_service.list_categories(),
@@ -46,7 +55,27 @@ def _create_context(
         "requirements": requirements,
         "category_id": category_id,
         "external_url": external_url,
+        "achievement": achievement,
+        "action": action,
+        "submit_label": submit_label,
+        "max_proof_bytes": completions_service.MAX_REQUEST_PROOF_BYTES,
     }
+
+
+def _create_context(**kwargs) -> dict:
+    return _form_context(**kwargs)
+
+
+def _validate_fields(title: str, description: str, requirements: str) -> str | None:
+    if not title:
+        return "Название достижения обязательно."
+    if len(title) > 200:
+        return "Название слишком длинное (максимум 200 символов)."
+    if len(description) > 4000:
+        return "Описание слишком длинное (максимум 4000 символов)."
+    if len(requirements) > 4000:
+        return "Требования слишком длинные (максимум 4000 символов)."
+    return None
 
 
 @router.get("", response_class=HTMLResponse, include_in_schema=False)
@@ -54,12 +83,28 @@ def list_page(
     request: Request,
     category: str | None = None,
     sort: str = achievements_service.SORT_RANK,
+    q: str | None = None,
+    page: int = 1,
+    info: str | None = None,
 ) -> HTMLResponse:
     if sort not in achievements_service.ALLOWED_SORTS:
         sort = achievements_service.SORT_RANK
+    query = (q or "").strip()[:100]
+    page = max(1, page)
     categories = achievements_service.list_categories()
-    items = achievements_service.list_achievements(category_slug=category, sort=sort)
+    items, total = achievements_service.list_achievements(
+        category_slug=category, sort=sort, page=page, query=query or None
+    )
     active = next((c for c in categories if c["slug"] == category), None)
+    pages = max(1, math.ceil(total / achievements_service.PAGE_SIZE))
+    if page > pages and total:
+        return RedirectResponse(
+            f"/achievements?page={pages}"
+            + (f"&category={quote(category)}" if category else "")
+            + (f"&sort={sort}" if sort else "")
+            + (f"&q={quote(query)}" if query else ""),
+            status_code=303,
+        )
     return templates.TemplateResponse(
         request=request,
         name="achievements/list.html",
@@ -67,7 +112,13 @@ def list_page(
             "categories": categories,
             "achievements": items,
             "active_category": active,
+            "category_missing": bool(category) and active is None,
             "sort": sort,
+            "query": query,
+            "page": page,
+            "pages": pages,
+            "total": total,
+            "info": LIST_INFO_MESSAGES.get(info, info),
         },
     )
 
@@ -103,12 +154,13 @@ def create(
     has_file = bool(file is not None and file.filename)
     parsed_category = _parse_category_id(category_id)
 
-    if not title:
+    field_error = _validate_fields(title, description, requirements)
+    if field_error:
         return templates.TemplateResponse(
             request=request,
             name=CREATE_TEMPLATE,
             context=_create_context(
-                error="Название достижения обязательно.",
+                error=field_error,
                 title=title,
                 description=description,
                 requirements=requirements,
@@ -181,6 +233,129 @@ def create(
     )
 
 
+@router.get(
+    "/{achievement_id}/edit", response_class=HTMLResponse, include_in_schema=False
+)
+def edit_page(request: Request, achievement_id: int) -> HTMLResponse:
+    if request.state.user is None:
+        return RedirectResponse(LOGIN_URL, status_code=303)
+    item = achievements_service.get_achievement(request, achievement_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+    _require_own_pending(request, item)
+    return templates.TemplateResponse(
+        request=request,
+        name=EDIT_TEMPLATE,
+        context=_form_context(
+            title=item["title"],
+            description=item.get("description") or "",
+            requirements=item.get("requirements") or "",
+            category_id=str(item.get("category_id") or ""),
+            achievement=item,
+            action=f"/achievements/{achievement_id}/edit",
+            submit_label="Сохранить изменения",
+        ),
+    )
+
+
+@router.post(
+    "/{achievement_id}/edit", response_class=HTMLResponse, include_in_schema=False
+)
+def edit(
+    request: Request,
+    achievement_id: int,
+    title: str = Form(...),
+    description: str = Form(""),
+    requirements: str = Form(""),
+    category_id: str = Form(""),
+) -> HTMLResponse:
+    if request.state.user is None:
+        return RedirectResponse(LOGIN_URL, status_code=303)
+    item = achievements_service.get_achievement(request, achievement_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+    _require_own_pending(request, item)
+
+    title = title.strip()
+    description = description.strip()
+    requirements = requirements.strip()
+    field_error = _validate_fields(title, description, requirements)
+    if field_error:
+        return templates.TemplateResponse(
+            request=request,
+            name=EDIT_TEMPLATE,
+            context=_form_context(
+                error=field_error,
+                title=title,
+                description=description,
+                requirements=requirements,
+                category_id=category_id,
+                achievement=item,
+                action=f"/achievements/{achievement_id}/edit",
+                submit_label="Сохранить изменения",
+            ),
+        )
+    try:
+        achievements_service.update_achievement(
+            request,
+            achievement_id,
+            title=title,
+            description=description,
+            requirements=requirements,
+            category_id=_parse_category_id(category_id),
+        )
+    except achievements_service.ACHIEVEMENT_ERRORS as exc:
+        return templates.TemplateResponse(
+            request=request,
+            name=EDIT_TEMPLATE,
+            context=_form_context(
+                error=str(exc)[:300] or "Не удалось сохранить изменения.",
+                title=title,
+                description=description,
+                requirements=requirements,
+                category_id=category_id,
+                achievement=item,
+                action=f"/achievements/{achievement_id}/edit",
+                submit_label="Сохранить изменения",
+            ),
+        )
+    return RedirectResponse(
+        f"/achievements/{achievement_id}?info=updated", status_code=303
+    )
+
+
+@router.post(
+    "/{achievement_id}/delete",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+def delete(request: Request, achievement_id: int) -> HTMLResponse:
+    if request.state.user is None:
+        return RedirectResponse(LOGIN_URL, status_code=303)
+    item = achievements_service.get_achievement(request, achievement_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+    _require_own_pending(request, item)
+    try:
+        achievements_service.soft_delete_own_pending(request, achievement_id)
+    except achievements_service.ACHIEVEMENT_ERRORS as exc:
+        return RedirectResponse(
+            f"/achievements/{achievement_id}?error={quote(str(exc)[:300])}",
+            status_code=303,
+        )
+    username = getattr(request.state.user, "username", None)
+    if username:
+        return RedirectResponse(f"/users/{username}?info=deleted", status_code=303)
+    return RedirectResponse("/achievements?info=deleted", status_code=303)
+
+
+def _require_own_pending(request: Request, item: dict) -> None:
+    user = request.state.user
+    is_creator = user is not None and str(user.id) == str(item.get("creator_id"))
+    if not is_creator or item.get("status") != "pending":
+        raise HTTPException(status_code=403, detail="Achievement is not editable")
+
+
 @router.get("/{achievement_id}", response_class=HTMLResponse, include_in_schema=False)
 def detail(
     request: Request,
@@ -193,6 +368,7 @@ def detail(
         raise HTTPException(status_code=404, detail="Achievement not found")
     user = request.state.user
     is_creator = user is not None and str(user.id) == str(item["creator_id"])
+    is_moderator = user is not None and user.role in ("moderator", "admin")
 
     own_completion = None
     proof_views: list[dict] = []
@@ -216,6 +392,9 @@ def detail(
     info_messages = {
         "submitted": "Доказательство отправлено на модерацию.",
         "evaluated": "Оценка сохранена.",
+        "updated": "Изменения сохранены и отправлены на модерацию.",
+        "report-submitted": "Жалоба отправлена. Модератор её рассмотрит.",
+        "hidden": "Достижение скрыто из каталога и рейтинга.",
     }
     return templates.TemplateResponse(
         request=request,
@@ -223,12 +402,16 @@ def detail(
         context={
             "achievement": item,
             "is_creator": is_creator,
+            "is_moderator": is_moderator,
+            "can_edit": is_creator and item["status"] == "pending",
+            "can_hide": is_moderator and item["status"] == "published",
             "own_completion": own_completion,
             "proofs": proof_views,
             "can_submit": can_submit,
             "my_evaluation": my_evaluation,
             "can_evaluate": can_evaluate,
             "eval_reason": eval_reason,
+            "max_proof_bytes": completions_service.MAX_REQUEST_PROOF_BYTES,
             "error": error,
             "info": info_messages.get(info, info),
         },

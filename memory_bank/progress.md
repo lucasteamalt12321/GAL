@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D11 completed).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **90%** (D1–D11 completed, D12 in_progress — осталось применить миграцию и проверить прод).
 
 ## Deliverables статус
 
@@ -19,8 +19,31 @@
 | D9  | Reports                           | completed |
 | D10 | Polish (UI, security, errors)     | completed |
 | D11 | Bugfix по итогам bug-hunt 09-28   | completed |
+| D12 | v1.1: функции, безопасность, CI   | in_progress |
 
 ## Changelog
+
+### 2026-11-05 — v1.1 (D12): полировка, недостающие функции, безопасность, CI
+
+**Инцидент.** Прод-Supabase снова был `INACTIVE`: `/achievements` и `/leaderboard` отдавали 503 за ~0.5 с, `/` и `/auth/login` — 200. Восстановлен через Management API (`POST /restore`, 200 → `COMING_UP` → `ACTIVE_HEALTHY`); страницы снова 200.
+
+**Аудит (3 субагента).** Найдены: заглушка «MVP в разработке» на главной, `/reports` в навигации для всех (JSON-403), отсутствие 404/403-страниц, невыводимые ошибки/`report-submitted`, сырые enum и ISO-даты, отсутствие редактирования/удаления достижений и профиля, незавершённый сброс пароля, нет истории модерации, списки молча обрезаются, публичная RLS-политика proofs, публикация без proof создателя, потеря `kwargs` при удалении cookie, `NOT_FOUND` без маппинга, 500 без ключей Supabase, нет CI, расхождения README/docs/memory bank.
+
+**Реализовано.**
+- `app/main.py`: HTML-обработчики 403/404/прочих `HTTPException`, JSON только для API-путей; `SupabaseNotConfiguredError` → 503; лендинг с топами best-effort.
+- `app/presentation.py`: подписи статусов/причин/типов proof, даты (UTC+3), склонения; фильтры в `templating.py`.
+- Каталог: поиск `q`, пагинация по 24, редирект за последнюю страницу, «категория не найдена», склонения.
+- `achievements`: edit/soft-delete своих `pending`, серверная валидация длин, `can_edit`/`can_hide`/`eval_reason`/`report-submitted` в карточке.
+- Модерация: approve сначала одобряет creator completion с proof, затем публикует; reject отклоняет заявку создателя; hide (soft-delete), отклонение pending-заявок, история решений.
+- Профиль: `/settings/profile` (username/display_name/avatar), `/settings/password`; `/auth/update-password` — завершение сброса через Supabase Auth из браузера; `recover` ведёт на новую страницу.
+- Лидерборды: пагинация обоих разделов по 25; `player_leaderboard_page` с fallback на старую RPC.
+- UI: русская локализация, мобильное меню, таблицы со скроллом, контраст CTA, видимый фокус, skip-link, favicon, `main.js` (pre-check 4 МБ, confirm, reload).
+- Безопасность/RLS: `migrations/013_ui_features_and_hardening.sql` — soft-delete policy, удаление `proofs_select_approved_public`, авторство `moderation_reviews`, deferred trigger «published ⇒ approved proof создателя», постраничный лидерборд; middleware учитывает `kwargs` cookie (max-age=0).
+- Инфраструктура: `.github/workflows/ci.yml` (ruff + pytest), README/docs переписаны, `.gitignore` исправлен (`.env.example` больше не игнорируется, `.pytestlog.txt` удалён), `scripts/apply_migrations.py` принимает префикс номера.
+
+**Проверка.** `pytest` — **121 passed** (новые `tests/test_features.py`, `conftest.py` без сети), `ruff check`/`format` — чисто. Миграция 013 проверена на проде в транзакции с `rollback` (201, объекты не созданы).
+
+**Осталось на момент записи:** push, деплой Vercel, применение 013 к проду, live-проверка, `last_checked_commit`.
 
 ### 2026-10-20 — Инцидент: `/leaderboard` отдавал 500 при сбое Supabase — устранено (resilience)
 

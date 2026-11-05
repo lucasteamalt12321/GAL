@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}История модерации{% endblock %}
+
+{% block content %}
+<section class="moderation">
+  <div class="page-head">
+    <h1>История модерации</h1>
+    <a class="btn" href="/moderation">К очереди</a>
+  </div>
+  <p class="muted">Последние {{ reviews|length }} решений. Новые сверху.</p>
+
+  {% if reviews %}
+    <div class="table-scroll">
+      <table class="leaderboard-table history-table">
+        <caption class="visually-hidden">История решений модераторов</caption>
+        <thead>
+          <tr>
+            <th scope="col">Когда</th>
+            <th scope="col">Цель</th>
+            <th scope="col">Что проверяли</th>
+            <th scope="col">Решение</th>
+            <th scope="col">Модератор</th>
+            <th scope="col">Причина</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in reviews %}
+            <tr>
+              <td>{{ r.created_at|datetime_local }}</td>
+              <td>
+                {% if r.achievement_id %}
+                  <a href="/achievements/{{ r.achievement_id }}">{{ r.target_title or ('#' ~ r.achievement_id) }}</a>
+                {% elif r.target_title %}
+                  {{ r.target_title }}
+                {% else %}
+                  заявка #{{ r.completion_id }}
+                {% endif %}
+              </td>
+              <td>{{ "Достижение" if r.target_kind == "achievement" else "Выполнение" }}</td>
+              <td><span class="badge badge-{{ r.decision }}">{{ r.decision|decision_label }}</span></td>
+              <td>{{ r.moderator.display_name or r.moderator.username or "—" }}</td>
+              <td class="muted">{{ r.reason or "—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">Решений пока нет.</p>
+  {% endif %}
+</section>
+{% endblock %}

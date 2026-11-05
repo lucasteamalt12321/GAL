@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # httpx.ReadTimeout → 500. Держим значение с запасом ниже лимита функции.
     supabase_timeout_seconds: float = 6.0
 
+    # Часовой пояс отображения дат в UI (смещение от UTC, часы).
+    display_utc_offset_hours: int = 3
+
     @property
     def is_production(self) -> bool:
         """Единая точка истины для production-поведения.

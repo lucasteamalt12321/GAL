@@ -1,6 +1,6 @@
 # GAL — Architecture Overview
 
-## Global Achievement List v1.0
+## Global Achievement List v1.1
 
 Платформа для глобального рейтинга человеческих достижений из разных сфер через единую относительную шкалу сложности, построенную на личных сравнениях пользователей.
 
@@ -16,133 +16,153 @@ Browser (Jinja2/JS/CSS)
         │
    ┌─────┴─────┬─────────┐
    ▼           ▼         ▼
- PostgreSQL  Auth     Storage
- (Supabase)  (Supabase) (Supabase)
+PostgreSQL  Auth     Storage
+(Supabase)  (Supabase) (Supabase)
 ```
 
-- **FastAPI** — вся бизнес-логика (ранкинг, scroing, модерация, оценки).
-- **Supabase** — инфраструктура: PostgreSQL, авторизация, хранение доказательств.
+- **FastAPI** — бизнес-логика (ранкинг, scoring, модерация, оценки), SSR-шаблоны.
+- **Supabase** — PostgreSQL, авторизация, приватное хранение доказательств.
 
 ## Модули
 
 ### `app/routers/`
-| Модуль          | Назначение                                   |
-|-----------------|----------------------------------------------|
-| `auth.py`       | Регистрация, вход, выход, сессии             |
-| `users.py`      | Профили, личные страницы                     |
-| `achievements.py`| CRUD достижений                             |
-| `completions.py`| Выполнения + доказательства                 |
-| `evaluations.py`| Личная шкала и оценки                        |
-| `rankings.py`   | Achievement / Player leaderboards            |
-| `reports.py`    | Жалобы                                       |
-| `moderation.py` | Очередь модерации, решения                   |
+
+| Модуль           | Назначение                                             |
+|------------------|--------------------------------------------------------|
+| `auth.py`        | Вход, регистрация, выход, recover/update-password      |
+| `users.py`       | Публичные профили                                      |
+| `settings.py`    | Настройки профиля и смена пароля                       |
+| `achievements.py`| Каталог, создание, редактирование/удаление pending      |
+| `completions.py` | Выполнения + доказательства                             |
+| `evaluations.py` | Личная шкала и оценки                                   |
+| `rankings.py`    | Achievement / Player leaderboards (пагинация)           |
+| `moderation.py`  | Очередь, решения, скрытие, история                      |
+| `reports.py`     | Жалобы и их рассмотрение                                |
+| `health.py`      | `/health`                                               |
 
 ### `app/` (инфраструктура)
+
 | Модуль             | Назначение                                                    |
 |--------------------|---------------------------------------------------------------|
-| `main.py`          | Сборка FastAPI, подключение роутеров, middleware, статики     |
-| `config.py`        | Настройки (pydantic-settings), флаги `supabase_configured`    |
-| `templating.py`    | Общий `Jinja2Templates`                                       |
-| `middleware.py`    | `UserContextMiddleware` — кладёт текущего пользователя в `request.state` |
+| `main.py`          | Сборка FastAPI, роутеры, error-handlers, лендинг               |
+| `config.py`        | Настройки (pydantic-settings), `is_production`, таймауты       |
+| `presentation.py`  | Подписи enum-значений, склонения, форматирование дат           |
+| `templating.py`    | Общий `Jinja2Templates` + регистрация фильтров                 |
+| `middleware.py`    | `UserContextMiddleware` — пользователь, CSRF-cookie, сессия    |
 | `dependencies.py`  | `get_current_user` / `get_current_moderator` / `get_current_admin` |
-| `database/`        | Ленивые клиенты Supabase (anon + service role)                |
+| `csrf.py`          | Double-submit CSRF (app-level dependency)                      |
+| `forms.py`         | Чтение POST-полей из form/multipart/JSON                       |
+| `database/`        | Ленивые клиенты Supabase (anon + service role)                 |
 
 ### `app/services/`
-| Модуль          | Назначение                                   |
-|-----------------|----------------------------------------------|
-| `auth.py`       | Cookie-сессия Supabase Auth, `resolve_user`, refresh токена |
-| `ranking.py`    | Ядро: среднее, сортировка, tie-break, rank   |
-| `scoring.py`    | `1000 / rank`, суммарные очки, вычисляемые  |
-| `evaluation.py` | Personal scale, locking                      |
-| `moderation.py` | Правила approve/reject                       |
-| `achievements.py`| Жизненный цикл достижений                   |
 
-## Аутентификация (D3)
+| Модуль           | Назначение                                             |
+|------------------|--------------------------------------------------------|
+| `auth.py`        | Cookie-сессия Supabase Auth, resolve/refresh, валидация |
+| `achievements.py`| Каталог, CRUD собственных pending, профили             |
+| `completions.py` | Proof-файлы (лимит 4 МБ из-за Vercel), ссылки, retry    |
+| `evaluation.py`  | Personal scale, locking                                |
+| `moderation.py`  | Очередь, approve/reject, hide, история                  |
+| `reports.py`     | Жалобы и скрытие достижения                            |
+| `profiles.py`    | Редактирование профиля, смена пароля                   |
+| `ranking.py`     | Чистое ядро: среднее, сортировка, `player_score`       |
+| `rankings.py`    | Чтение лидербордов (достижения + игроки)               |
 
-- `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `secure` в проде).
+## Аутентификация
+
+- `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `Secure` в проде).
 - `POST /auth/logout` — `sign_out` + удаление cookie.
-- `POST /auth/recover` — письмо для сброса пароля.
+- `POST /auth/recover` — письмо со ссылкой на `/auth/update-password` (`APP_URL` или текущий origin).
+- `GET /auth/update-password` — страница завершения сброса: токены приходят во фрагменте URL, пароль отправляется из браузера напрямую в Supabase Auth (`PUT /auth/v1/user`), anon key публичен.
 - `GET /auth/me` — JSON текущего пользователя (401 без сессии).
-- `POST /auth/register|login|recover` принимают тело и как form-urlencoded, и как JSON (см. `app/forms.py`); для JSON-Flow CSRF-токен допускается полем `_csrf` или заголовком `X-CSRF-Token`.
-- `UserContextMiddleware` резолвит пользователя на каждый запрос; при истёкшем access-токене делает refresh и обновляет cookie. `/static` и `/health` пропускаются.
-- Профиль читается из `profiles` (роль, username, avatar).
+- `POST /auth/register|login|recover` принимают form-urlencoded и JSON (`app/forms.py`); для JSON CSRF-токен допускается полем `_csrf` или заголовком `X-CSRF-Token`.
+- `UserContextMiddleware` резолвит пользователя на каждый запрос; при истёкшем access-токене делает refresh и обновляет cookie; битая кука удаляется (max-age=0).
+- Профиль читается из `profiles`; роль, username, avatar доступны в `request.state.user`.
 
-## Достижения и профили (D4)
+## Достижения, профили, настройки
 
-- `GET /achievements` — публичный список опубликованных достижений; фильтры `?category=<slug>`, `?sort=rank|new`.
-- `GET /achievements/{id}` — карточка достижения (публичная; автор видит свои `pending`).
-- `GET/POST /achievements/create` — форма и создание достижения (`pending`); требуется вход.
-- `GET /users/{username}` — профиль: опубликованные достижения + свои `pending`.
-- Чтение публичных данных — anon-клиент; для записей и просмотра собственного используется user-JWT клиент (`set_session` → PostgREST переключается на JWT пользователя, RLS применяется).
-- `app/services/achievements.py` — доступ к данным; эмбеддинги `category` и `creator` (профиль) в одном запросе.
-- Идентификатор категории для фильтра резолвится отдельным запросом по `slug` (надёжнее фильтра по embedded-ресурсу).
+- `GET /achievements` — публичный каталог: фильтр `category`, сортировка `rank|new`, поиск `q`, пагинация по 24.
+- `GET /achievements/{id}` — карточка (автор видит свои pending); показывает причину недоступности оценки.
+- `GET/POST /achievements/create` — создание (`pending`); нужен proof создателя (файл или ссылка).
+- `GET/POST /achievements/{id}/edit` — правка своего достижения, пока оно `pending`.
+- `POST /achievements/{id}/delete` — soft-delete своего pending (`status=deleted`), заявки в очередь не попадают.
+- `GET /users/{username}` — профиль: публично только `published`; владельцу видны свои pending/rejected; модератору — все статусы.
+- `GET/POST /settings/profile` — username/display_name/avatar_url; `POST /settings/password` — смена пароля с проверкой текущего.
+- Идентификатор категории для фильтра резолвится отдельным запросом по `slug`; неизвестный slug показывает «категория не найдена», а не пустой каталог.
 
-## Доказательства и модерация (D5)
+## Доказательства и модерация
 
-- `POST /achievements/{id}/complete` — подача заявки о выполнении: создание `achievement_completions` (`pending`) + один proof (файл ≤50 МБ или ссылка). При создании достижения создатель обязан приложить proof своего выполнения.
-- Proof файловый: загрузка в приватный bucket `proofs` по пути `{user_id}/{achievement_id}/{uuid}-{filename}`, затем строка в `proofs`. Proof-ссылка: строка в `proofs` со `proof_type=link` и URL в `storage_path`.
-- `GET /moderation` — очередь `pending` достижений и заявок (только модератор/админ; иначе 403, аноним → login).
-- `POST /moderation/achievements/{id}` и `POST /moderation/completions/{id}` — решение `approved`/`rejected`; решение фиксируется с `moderator_id` и `reason`.
-- При approve достижения completion создателя помечается `approved` автоматически (без новой модерации).
-- Просмотр файловых доказательств через signed URL (TTL 1 час); бакет не публичный. RLS `storage.objects`: владелец по первой части пути `(storage.foldername(name))[1] = auth.uid()`, модератор — через `public.is_moderator()`.
-- `app/services/completions.py` — submit/attach/декор proofs; `app/services/moderation.py` — очередь и решения; `app/routers/completions.py`, `app/routers/moderation.py`.
+- `POST /achievements/{id}/complete` — заявка `pending` + один proof (файл ≤ 4 МБ или ссылка). Лимит 4 МБ — потолок тела serverless-функции Vercel; bucket допускает 50 МБ, но приложение принимает 4 МБ.
+- Proof-файл: приватный bucket `proofs`, путь `{user_id}/{achievement_id}/{uuid}-{filename}`, строка в `proofs`. Ссылка: `proof_type=link`, URL в `storage_path`.
+- `GET /moderation` — очередь pending достижений и заявок (модератор/админ; аноним → login, остальные → 403).
+- `POST /moderation/achievements/{id}` — approve/reject. Approve сначала одобряет completion создателя (проверяя наличие proof), затем публикует достижение; reject отклоняет и заявку создателя.
+- `POST /moderation/achievements/{id}/hide` — soft-delete опубликованного/ожидающего достижения, отклонение его pending-заявок, запись в историю и пересчёт рангов.
+- `GET /moderation/history` — последние решения с целью, модератором и причиной.
+- Просмотр файловых доказательств — через signed URL (TTL 1 час). Строки `proofs` доступны только владельцу и модератору (политика `proofs_select_approved_public` удалена в 013).
+- Публикация достижения без `approved`-выполнения создателя с proof запрещена deferred constraint trigger-ом `achievements_require_creator_proof` (013).
+- RLS `storage.objects`: владелец по первой части пути, модератор — через `public.is_moderator()`.
 
-## Оценки (D6)
+## Оценки
 
-- `POST /achievements/{id}/evaluate` — оценка сложности в личной шкале: `p_harder_count` = сколько своих уже оценённых достижений ОБЩЕ сложнее. Позиция = `p_harder_count + 1`, существующие позиции сдвигаются (двухпроходный `submit_evaluation` в БД).
-- Первая оценка (нет личной шкалы) — «якорь №1» (позиция 1).
-- Оценка доступна только с `approved` completion; одно достижение = одна оценка (upsert до перехода).
-- При 3+ оценках достижение переходит `unknown → ranked`: оценки `locked`, фиксируется ти-брейкер `rank_order`, присваивается `rank=max(rank)+1`, затем `recompute_ranks()` компактно перенумеровывает все `ranked` по `average_position asc, rank_order asc, id asc`.
-- Ошибки RPC: `AUTH_REQUIRED` / `NOT_APPROVED` / `LOCKED` → маппятся в `EvaluationError` и показываются как flash.
-- Атомарная логика — security definer функция `public.submit_evaluation` (директива `#variable_conflict use_column` обязательна: `RETURNS TABLE` создаёт OUT-переменные, конфликтующие с колонками — см. миграцию 006).
-- `app/services/evaluation.py` — сервис; `app/routers/evaluations.py` — GET/POST; шаблон `evaluations/evaluate.html`.
+- `POST /achievements/{id}/evaluate` — оценка сложности в личной шкале: `p_harder_count` = сколько своих оценённых достижений общо сложнее; позиция = `p_harder_count + 1`, существующие позиции сдвигаются (двухпроходный `submit_evaluation`).
+- Первая оценка — «якорь №1». Оценка доступна только с `approved` completion; одно достижение = одна оценка.
+- При 3+ оценках достижение переходит `unknown → ranked`: оценки `locked`, фиксируется `rank_order`, присваивается `rank=max(rank)+1`, `recompute_ranks()` перенумеровывает все ranked.
+- Ошибки RPC (`AUTH_REQUIRED` / `NOT_APPROVED` / `NOT_FOUND` / `LOCKED`) маппятся в `EvaluationError` и показываются flash-сообщением.
+- Атомарная логика — security definer функция `public.submit_evaluation` (директива `#variable_conflict use_column` обязательна).
 
-## Ранкинг (D7)
+## Ранкинг и лидерборды
 
-- `app/services/ranking.py` — чистые функции: `eligible_for_ranking` (published + ranked + числовая средняя), `compute_ranks` (порядок `average_position asc, rank_order asc, id asc` → ранг 1 = самая низкая средняя), `player_score(rank)` = `1000/rank` (round 2; без ранга → 0).
-- Пересчёт рангов атомарен: выполняется внутри `public.submit_evaluation()` при переходе в `ranked` (`recompute_ranks()`), фоновых задач нет.
-- При равных средних порядок фиксируется `rank_order` — случайный ти-брейкер, зафиксированный в момент перехода.
+- `app/services/ranking.py` — чистые функции: `eligible_for_ranking`, `compute_ranks` (порядок `average_position asc, rank_order asc, id asc`), `player_score(rank) = 1000/rank`.
+- Пересчёт рангов выполняется внутри `submit_evaluation()` и при скрытии достижения/принятии жалобы; фоновых задач нет.
+- `GET /leaderboard` — две секции с независимой пагинацией по 25: топ достижений (rank/avg/оценки/категория) и топ игроков.
+- Очки игрока = `1000 / rank` за каждое `approved` выполнение ранжированного опубликованного достижения.
+- `public.player_leaderboard_page(p_limit, p_offset)` — постраничный security definer-агрегат (013); до применения миграции сервис откатывается на `player_leaderboard()`.
+- Две секции грузятся параллельно (`ThreadPoolExecutor`), поэтому время страницы ограничено одним таймаутом Supabase.
 
-## Лидерборды (D8)
+## Жалобы
 
-- `GET /leaderboard` — две секции: top achievements (ranked+published, сортировка по `rank`; колонки rank / avg position / evaluations / category) и top players (позиция, score, кол-во достижений).
-- Oчки игрока = `1000 / rank` за каждый `approved` completion ранжированного опубликованного достижения (unknown → 0).
-- `public.player_leaderboard()` — security definer функция в БД (агрегат недоступных под RLS completions), `grant execute to anon, authenticated`; ранжирование `score desc, username asc`.
-- `app/services/rankings.py` — `leaderboard_achievements` (REST anon) + `player_leaderboard` (rpc); `app/routers/rankings.py`.
+- `GET/POST /achievements/{id}/report` — причины `duplicate/incorrect/spam/offensive/other`; одна pending-жалоба на достижение от пользователя.
+- `GET /reports` — очередь модератора; `POST /reports/{id}/accept|reject`.
+- Принятие скрывает достижение (`status=deleted`), отклоняет его pending-заявки и пересчитывает ранги; ошибка пересчёта логируется.
 
-## Жалобы (D9)
+## Безопасность
 
-- `GET/POST /achievements/{id}/report` — форма жалобы (причины: duplicate/incorrect/spam/offensive/other), подача под своим JWT; одна жалоба на достижение от пользователя.
-- `GET /reports` — очередь модератора (аноним → login, не-модератор → 403); `POST /reports/{id}/accept|reject` — принятие скрывает достижение (`status=deleted`, публичные списки фильтруют `published`).
-- `app/services/reports.py` — `create_report`, `list_pending_reports` (embed achievement/reporter), `decide_report`; `app/routers/reports.py`.
+- **CSRF:** double-submit cookie `gal_csrf`; проверка в app-level зависимости `csrf_protect` (`app/main.py`), а не в middleware — чтение тела не ломает multipart-загрузку. Enforcement только при `APP_ENV=production`. Токен доступен шаблонам через `request.state.csrf_token`.
+- **Регистрация:** `validate_username` (3–32 симв., `[A-Za-z0-9_.-]`) + регистронезависимая проверка занятости; подтверждение пароля в форме.
+- **RLS:** служебные колонки достижений защищены guard-триггером (010); заявки/оценки/proofs видны владельцу и модератору; история модерации пишется только от имени модератора (013).
+- **Cookies:** удаление битой сессии выполняется с `max-age=0`; `Secure` в проде.
+- **Ошибки:** HTML-страницы 403/404 (`errors/403.html`, `errors/404.html`) и 503 при сбое Supabase (`errors/upstream.html`); API-пути (`/auth/me`, `/health`, `/docs`) отвечают JSON.
 
-## Безопасность и polish (D10)
+## Устойчивость к сбоям Supabase
 
-- **CSRF:** double-submit cookie `gal_csrf` (httpOnly, SameSite=Lax, secure в проде); проверка токена из формы (`_csrf`) или заголовка (`X-CSRF-Token`) константным сравнением в `UserContextMiddleware`. Enforcement только при `APP_ENV=production`. Токен доступен в шаблонах через `request.state.csrf_token`.
-- **Регистрация:** `validate_username` (3–32 симв., `[A-Za-z0-9_.-]`) + регистронезависимая проверка занятости `username_available` перед `sign_up`.
-- **Recover:** `reset_password_for_email` получает `redirect_to = APP_URL/auth/login` (setting `app_url`).
-- **Сеть:** `resolve_user` повторяет транзиентные ошибки (`_retry_network`, до 3 попыток), невалидный токен — сразу отсутствие пользователя.
+- PostgREST-таймаут задаётся `SUPABASE_TIMEOUT_SECONDS` (по умолчанию `6`) через `ClientOptions(postgrest_client_timeout=...)`.
+- Глобальные обработчики `httpx.HTTPError`, `postgrest.exceptions.APIError` и `SupabaseNotConfiguredError` отдают `errors/upstream.html` с кодом **503** и пишут причину в лог `gal.upstream`.
+- Лендинг не зависит от БД: топы подгружаются best-effort, при сбое показывается статическая часть.
+- `/health` не обращается к БД и всегда отвечает JSON.
 
-## Устойчивость к сбоям Supabase (D10)
+## UI
 
-- PostgREST-таймаут задаётся явно через `SUPABASE_TIMEOUT_SECONDS` (по умолчанию `6`) и прокидывается в `create_client(..., options=ClientOptions(postgrest_client_timeout=...))` (`app/services/auth.py`). Без него библиотека ждёт 120 с и бросает `httpx.ReadTimeout`.
-- Глобальные обработчики `httpx.HTTPError` и `postgrest.exceptions.APIError` (`app/main.py`) отдают `errors/upstream.html` с кодом **503** и пишут причину в лог `gal.upstream`. Сбой Supabase не превращается в голый 500 «Internal Server Error» (покрывает все БД-страницы).
-- `/leaderboard` грузит две независимые секции (achievements + players) параллельно (`ThreadPoolExecutor`), поэтому время страницы ограничено одним таймаутом, а не двумя.
+- Русскоязычный интерфейс; подписи статусов, причин жалоб, типов proof и даты — через фильтры `presentation.py`.
+- Тёмная тема, адаптивная шапка с мобильным меню, горизонтальный скролл таблиц, видимый фокус, skip-link, `aria`-атрибуты таблиц.
+- `static/js/main.js` — мобильное меню, pre-check размера файла (4 МБ), подтверждение необратимых действий, кнопка обновления на 503.
 
 ## Миграции
 
-- `001_init.sql` — схема и seed категорий.
+- `001_init.sql` — схема, enum-типы, seed категорий, триггеры.
 - `002_rls.sql` — RLS-политики, grants, helper-функции.
-- `003_fix_handle_new_user.sql` — `handle_new_user` помечен `security definer` (иначе вставка в `profiles` под RLS ломает регистрацию).
-- `004_storage_proofs.sql` — bucket `proofs` (private, лимит 50 МБ) + политики `storage.objects` (insert/delete владельца, select владельца и модератора).
-- `005_evaluation_rpc.sql` — движок оценок: `rank_order`, `recompute_ranks()`, `submit_evaluation()`, grants.
-- `006_fix_evaluation_rpc.sql` — фикс `42702 ambiguous` (OUT-параметры `RETURNS TABLE` vs колонки): `#variable_conflict use_column` + алиасы.
-- `007_player_leaderboard.sql` — `public.player_leaderboard()`: агрегат очков игроков (1000/rank), grant anon/authenticated.
-- `008_hardening.sql` — хардинг (bug-hunt 2026-09-28): revoke execute на security definer RPC от лишних ролей; `recompute_ranks` перестроен через deferred constraint trigger (immediate-вариант нарушал `achievements_rank_unique`); запрет прямого REST-обновления `rank`/`ranking_status` и др. служебных колонок `achievements`.
-- `009_retry_completion_rpc.sql` — lifecycle повтора/cleanup отклонённого completion: security definer RPC вместо прямых DELETE/UPDATE, запрещённых RLS.
-- `010_ranking_integrity.sql` — целостность рейтинга: `recompute_ranks_internal()` (без guard) + guarded-обёртка `recompute_ranks()`, trigger `guard_ranking_fields` (column-level REVOKE из 008 не действует на table-level grant из 002), data-fix lock-нутых записей. **Порядок критичен: применять после 008.**
-- `011_evaluation_lock.sql` — lock-режим оценок: `submit_evaluation` учитывает `locked` у achievement.
-- `012_revoke_internal_execute.sql` — `revoke execute` на `recompute_ranks_internal()` от `anon`/`authenticated`/`service_role` (default privileges Supabase выдают execute всем ролям, revoke от PUBLIC не снимает).
+- `003_fix_handle_new_user.sql` — `handle_new_user` как `security definer`.
+- `004_storage_proofs.sql` — bucket `proofs` (private, 50 МБ) + политики `storage.objects`.
+- `005_evaluation_rpc.sql` — движок оценок: `rank_order`, `recompute_ranks()`, `submit_evaluation()`.
+- `006_fix_evaluation_rpc.sql` — фикс `42702 ambiguous`.
+- `007_player_leaderboard.sql` — `public.player_leaderboard()`.
+- `008_hardening.sql` — revoke лишних RPC, двухфазный пересчёт рангов (`rank + 1 000 000 000`), запрет прямого REST-обновления служебных колонок.
+- `009_retry_completion_rpc.sql` — `reset_rejected_completion`, `remove_empty_pending_completion`.
+- `010_ranking_integrity.sql` — column-level grants, `recompute_ranks_internal()`, guarded `recompute_ranks()`, trigger `guard_ranking_fields`, data-fix.
+- `011_evaluation_lock.sql` — lock-режим оценок.
+- `012_revoke_internal_execute.sql` — revoke execute на `recompute_ranks_internal()`.
+- `013_ui_features_and_hardening.sql` — soft-delete своих pending, удаление публичной политики proofs, авторство истории модерации, deferred trigger proof создателя, `player_leaderboard_page`.
+
+**Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013** (008 содержит `create or replace` устаревших функций, после неё обязательно переприменение 010/011).
 
 ## Данные
 
@@ -157,7 +177,7 @@ moderation_reviews
 reports
 ```
 
-**Производные значения** (не канон): `achievements.rank`, `achievements.average_position`, суммы очков игроков — пересчитываются из первичных данных.
+**Производные значения** (не канон): `achievements.rank`, `average_position`, суммы очков игроков — пересчитываются из первичных данных.
 
 ## Главная цепочка
 
@@ -170,17 +190,17 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Ключевые правила
 
-- Достижение публикуется только после подтверждения собственного выполнения создателем.
+- Достижение публикуется только после подтверждения собственного выполнения создателем (закреплено триггером 013).
 - Оценка доступна только обладателю `approved` completion; одно достижение = одна оценка.
 - Минимум 3 оценки для числовой позиции (иначе `?`).
 - После появления числового рейтинга оценки фиксируются (`locked`).
 - При равных средних порядок фиксируется случайно при разрешении конфликта.
-- Очки игрока = `1000 / rank` каждого уникального подтверждённого достижения, пересчитываются автоматически.
-- Достижения со статусом `unknown` (`?`) дают 0 очков в MVP.
+- Очки игрока = `1000 / rank` каждого уникального подтверждённого достижения.
+- Достижения со статусом `unknown` (`?`) дают 0 очков.
 
 ## Жизненные циклы
 
-- Achievement: `pending → published` / `rejected`; модератор → `deleted`.
+- Achievement: `pending → published` / `rejected`; `deleted` — автором (pending) или модератором.
 - Completion: `pending → approved` / `rejected`.
 - Evaluation: editable пока достижение `unknown`; `locked` после `ranked`.
 - Report: `pending → accepted` / `rejected`.
@@ -188,9 +208,15 @@ Achievement → Creator Proof → Moderation → Published
 ## Развёртывание
 
 - Vercel: `vercel.json`, ASGI = `app.main:app`.
-- Переменные: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, опц. `SUPABASE_TIMEOUT_SECONDS` (таймаут PostgREST, дефолт `6`).
+- Переменные: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, опц. `SUPABASE_TIMEOUT_SECONDS`, `APP_ENV=production`, `APP_URL`.
 - `SERVICE_ROLE_KEY` только на сервере.
+
+## Качество
+
+- `pytest` — 121 тест: юнит-тесты ранкинга, роуты, CSRF, resilience, новые сценарии.
+- `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
+- Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py` (нужен доступ к БД).
 
 ## Статус
 
-Документация соответствует состоянию на завершение MVP v1.0 (D1–D10): каркас FastAPI, клиенты Supabase, миграции `001`–`012`, аутентификация, достижения + профили, доказательства + модерация, движок оценок, ранк-движок, лидерборды (`/leaderboard`), жалобы (`/reports`), CSRF/username/recover-полировка. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию после v1.1 (D1–D12): каркас, миграции 001–013, аутентификация и сброс пароля, достижения + профили + настройки, доказательства и модерация (включая историю и скрытие), движок оценок, ранкинг, лидерборды с пагинацией, жалобы, CSRF/ошибки/адаптивный UI, CI. Обновлять при изменениях архитектуры, маршрутов и модулей.

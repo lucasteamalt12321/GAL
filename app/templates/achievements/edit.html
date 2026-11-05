@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Редактирование: {{ achievement.title }}{% endblock %}
+
+{% block content %}
+<section class="auth-card auth-card-wide">
+  <h1>Редактирование достижения</h1>
+  <p class="muted">Пока достижение на модерации, вы можете исправить его описание и категорию.</p>
+  <form method="post" action="{{ action }}" class="stack">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label class="field">
+      <span class="field-label">Название</span>
+      <input type="text" name="title" value="{{ title }}" required maxlength="200">
+    </label>
+    <label class="field">
+      <span class="field-label">Категория</span>
+      <select name="category_id">
+        <option value="">— не выбрана —</option>
+        {% for c in categories %}
+          <option value="{{ c.id }}" {% if category_id|string == c.id|string %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">
+      <span class="field-label">Описание</span>
+      <textarea name="description" rows="4" maxlength="4000">{{ description }}</textarea>
+    </label>
+    <label class="field">
+      <span class="field-label">Требования / критерии выполнения</span>
+      <textarea name="requirements" rows="3" maxlength="4000">{{ requirements }}</textarea>
+    </label>
+    <div class="row">
+      <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
+      <a class="btn" href="/achievements/{{ achievement.id }}">Отмена</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

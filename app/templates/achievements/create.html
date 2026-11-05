@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Новое достижение{% endblock %}
+{% block title %}Предложить достижение{% endblock %}
 
 {% block content %}
 <section class="auth-card auth-card-wide">
@@ -30,9 +30,15 @@
     </label>
     <fieldset class="field proof-field">
       <legend class="field-label">Ваше доказательство</legend>
-      <p class="muted">Приложите файл (фото, видео, документ — до 4 МБ) или ссылку.</p>
-      <input type="file" name="file">
-      <input type="url" name="external_url" value="{{ external_url }}" placeholder="https://...">
+      <p class="muted">Приложите файл (до {{ max_proof_bytes // 1048576 }} МБ) или ссылку.</p>
+      <label class="field">
+        <span class="field-label">Файл</span>
+        <input type="file" name="file" data-max-bytes="{{ max_proof_bytes }}">
+      </label>
+      <label class="field">
+        <span class="field-label">Ссылка на доказательство</span>
+        <input type="url" name="external_url" value="{{ external_url }}" placeholder="https://...">
+      </label>
     </fieldset>
     <button type="submit" class="btn btn-primary">Отправить на модерацию</button>
   </form>

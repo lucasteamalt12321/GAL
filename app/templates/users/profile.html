@@ -3,13 +3,25 @@
 {% block title %}{{ profile.display_name or profile.username }}{% endblock %}
 
 {% block content %}
-<section class="page-head">
-  <h1>{{ profile.display_name or profile.username }}</h1>
-  <span class="muted">@{{ profile.username }}{% if profile.role != 'user' %} · {{ profile.role }}{% endif %}</span>
+<section class="page-head profile-head">
+  <div class="profile-identity">
+    {% if profile.avatar_url %}
+      <img class="avatar" src="{{ profile.avatar_url }}" alt="Аватар {{ profile.username }}" width="72" height="72" referrerpolicy="no-referrer">
+    {% else %}
+      <span class="avatar avatar-placeholder" aria-hidden="true">{{ (profile.display_name or profile.username)[:1]|upper }}</span>
+    {% endif %}
+    <div>
+      <h1>{{ profile.display_name or profile.username }}</h1>
+      <span class="muted">@{{ profile.username }}{% if profile.role != 'user' %} · {{ profile.role }}{% endif %}</span>
+    </div>
+  </div>
+  {% if is_owner %}
+    <a class="btn" href="/settings/profile">Изменить профиль</a>
+  {% endif %}
 </section>
 
 {% if is_owner %}
-  <div class="flash flash-info">Это ваш профиль. Достижения на модерации видны только вам.</div>
+  <div class="flash flash-info">Это ваш профиль. Достижения на модерации и отклонённые видны только вам.</div>
 {% endif %}
 
 {% if achievements %}
@@ -21,7 +33,9 @@
           <h2 class="card-title">{{ a.title }}</h2>
           <div class="card-meta">
             {% if a.category %}<span class="tag">{{ a.category.name }}</span>{% endif %}
-            <span class="badge badge-{{ a.status }}">{{ a.status }}</span>
+            {% if a.status != 'published' %}
+              <span class="badge badge-{{ a.status }}">{{ a.status|status_label }}</span>
+            {% endif %}
           </div>
         </div>
       </a>

@@ -77,6 +77,16 @@ async def register(request: Request) -> HTMLResponse:
     display_name = (await body_field(request, "display_name")).strip()
     email = (await body_field(request, "email")).strip()
     password = await body_field(request, "password")
+    password_confirm = await body_field(request, "password_confirm")
+    if password_confirm and password != password_confirm:
+        return _page(
+            request,
+            "auth/register.html",
+            error="Пароли не совпадают.",
+            username=username,
+            display_name=display_name,
+            email=email,
+        )
     username_error = auth_service.validate_username(username)
     if username_error:
         return _page(
@@ -140,9 +150,9 @@ def recover_page(request: Request) -> HTMLResponse:
 async def recover(request: Request) -> HTMLResponse:
     email = (await body_field(request, "email")).strip()
     options = {}
-    app_url = get_settings().app_url.strip()
+    app_url = get_settings().app_url.strip() or str(request.base_url).rstrip("/")
     if app_url:
-        options["redirect_to"] = f"{app_url.rstrip('/')}/auth/login"
+        options["redirect_to"] = f"{app_url.rstrip('/')}/auth/update-password"
     try:
         client = auth_service.new_anon_client()
         client.auth.reset_password_for_email(email, options=options)
@@ -155,6 +165,23 @@ async def recover(request: Request) -> HTMLResponse:
         "auth/recover.html",
         info="Если такой email зарегистрирован, мы отправили ссылку для сброса пароля.",
         email="",
+    )
+
+
+@router.get("/update-password", response_class=HTMLResponse, include_in_schema=False)
+def update_password_page(request: Request) -> HTMLResponse:
+    """Страница завершения сброса пароля.
+
+    GoTrue присылает токены восстановления во фрагменте URL (#access_token=...),
+    который не попадает на сервер. Поэтому новый пароль отправляется из браузера
+    напрямую в Supabase Auth, а сервер только отдаёт публичные URL/anon key.
+    """
+    settings = get_settings()
+    return _page(
+        request,
+        "auth/update_password.html",
+        supabase_url=settings.supabase_url,
+        supabase_anon_key=settings.supabase_anon_key,
     )
 
 

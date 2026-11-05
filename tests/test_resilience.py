@@ -24,14 +24,16 @@ def test_leaderboard_read_timeout_returns_503(monkeypatch) -> None:
         "leaderboard_achievements",
         _raise(httpx.ReadTimeout("The read operation timed out")),
     )
-    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda *_: [])
+    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: ([], 0))
     resp = client.get("/leaderboard")
     assert resp.status_code == 503
     assert "временно недоступен" in resp.text
 
 
 def test_leaderboard_remote_protocol_error_returns_503(monkeypatch) -> None:
-    monkeypatch.setattr(rankings_service, "leaderboard_achievements", lambda *_: [])
+    monkeypatch.setattr(
+        rankings_service, "leaderboard_achievements", lambda **_: ([], 0)
+    )
     monkeypatch.setattr(
         rankings_service,
         "player_leaderboard",
@@ -47,7 +49,7 @@ def test_leaderboard_postgrest_error_returns_503(monkeypatch) -> None:
         "leaderboard_achievements",
         _raise(APIError({"message": "upstream boom", "code": "57014"})),
     )
-    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda *_: [])
+    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: ([], 0))
     resp = client.get("/leaderboard")
     assert resp.status_code == 503
 

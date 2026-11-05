@@ -47,8 +47,8 @@ def test_ilike_literal_escapes_wildcards() -> None:
 def test_anonymous_nav_shows_auth_links() -> None:
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "Sign in" in resp.text
-    assert "Register" in resp.text
+    assert "Войти" in resp.text
+    assert "Регистрация" in resp.text
 
 
 def test_validate_username_rules() -> None:
@@ -180,11 +180,11 @@ def test_recover_passes_redirect_to(monkeypatch) -> None:
     assert captured[0]["email"] == "user@example.com"
     assert (
         captured[0]["options"].get("redirect_to")
-        == "https://gal-inky.vercel.app/auth/login"
+        == "https://gal-inky.vercel.app/auth/update-password"
     )
 
 
-def test_recover_without_app_url_omits_redirect_to(monkeypatch) -> None:
+def test_recover_without_app_url_uses_request_base(monkeypatch) -> None:
     import app.routers.auth as auth_router
 
     captured: list[dict] = []
@@ -200,7 +200,9 @@ def test_recover_without_app_url_omits_redirect_to(monkeypatch) -> None:
     monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
     resp = client.post("/auth/recover", data={"email": "user@example.com"})
     assert resp.status_code == 200
-    assert "redirect_to" not in captured[0]["options"]
+    redirect_to = captured[0]["options"].get("redirect_to")
+    assert redirect_to is not None
+    assert redirect_to.endswith("/auth/update-password")
 
 
 def test_register_accepts_json(monkeypatch) -> None:
