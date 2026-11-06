@@ -63,7 +63,7 @@ def recompute_global_ratings() -> dict | None:
         client,
         "evaluations",
         "achievement_id,user_id,position",
-        "user_id",
+        "id",
     )
     scales: dict[str, list[tuple[int, float]]] = defaultdict(list)
     for row in evaluations:
