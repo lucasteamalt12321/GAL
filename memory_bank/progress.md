@@ -187,4 +187,4 @@
 
 ## last_checked_commit
 
-`eed7c69 fix(lthub): import username from LTHub login instead of lthub_<subject>` (2026-11-06)
+`9a9738f fix(achievements): skip proof URL signing when own completion has no proofs` (2026-11-06)
