@@ -4,7 +4,17 @@
 
 Глобальная платформа для рейтинга человеческих достижений. Сравнение достижений из разных сфер (Geometry Dash, музыка, шахматы, программирование, Minecraft, образование, спорт) через единую относительную шкалу сложности, построенную на личных сравнениях пользователей.
 
-> **Статус: MVP v1.0 и v1.1 (D1–D12) завершены.** Код v1.1.0 задеплоен на прод, миграция 013 применена. `pytest` — 123 passed, `ruff check`/`format` — чисто, CI зелёный.
+> **Статус: MVP v1.0, v1.1 и v1.2 (D1–D13) завершены.** Код v1.2.0 задеплоен на прод, миграции 013–014 применены. `pytest` — 135 passed, `ruff check`/`format` — чисто, CI зелёный.
+
+## Рамки v1.2 (D13) — Bradley–Terry
+
+- построение попарных сравнений из индивидуальных шкал (все пары, вес `1/(k-1)`);
+- оценка глобальных сил регуляризованным MM-алгоритмом (prior κ=0.5, центрирование);
+- колонки `bt_strength`, `bt_rating` (1000 + 400·s/ln10), `bt_comparisons`, `bt_updated_at`;
+- ранжирование по `bt_strength desc` с fallback на среднюю позицию;
+- атомарное применение через RPC `apply_bt_ratings(jsonb)` (service role) + advisory lock;
+- автопересчёт после оценок, модерации и принятия жалоб; ручной `scripts/recompute_bt.py`;
+- эксперимент точности/устойчивости (`scripts/bt_experiment.py`) и docs/bradley_terry.md.
 
 ## Рамки v1.1 (D12)
 
@@ -65,9 +75,10 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D8  | Player Score + Leaderboard        | completed | 8   |
 | D9  | Reports                           | completed | 4   |
 | D10 | Polish (UI, security, errors)     | completed | 4   |
-| D11 | Bugfix по итогам bug-hunt 09-28   | completed | 10  |
-| D12 | v1.1: функции, безопасность, CI   | completed | 10  |
+| D11 | Bugfix по итогам bug-hunt 09-28   | completed | 5   |
+| D12 | v1.1: функции, безопасность, CI   | completed | 5   |
+| D13 | v1.2: Bradley–Terry ранкинг       | completed | 10  |
 
 ## Success Criteria MVP
 
-Пользователь способен полностью пройти цикл: регистрация → создание достижения → proof → модерация → публикация → выполнение другим пользователем → proof → модерация → личная оценка → глобальный рейтинг → очки → player leaderboard.
+Пользователь способен полностью пройти цикл: регистрация → создание достижения → proof → модерация → публикация → выполнение другим пользователем → proof → модерация → личная оценка → попарные сравнения → глобальная сила Bradley–Terry → ранг → очки → player leaderboard.

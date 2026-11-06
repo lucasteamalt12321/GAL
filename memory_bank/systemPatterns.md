@@ -45,7 +45,9 @@ gal/
 │   │   ├── reports.py
 │   │   └── moderation.py
 │   ├── services/
-│   │   ├── ranking.py      ← ядро системы (player_score здесь)
+│   │   ├── bradley_terry.py ← попарные сравнения + MM-оценка
+│   │   ├── bt_recompute.py  ← пересчёт по БД через service role
+│   │   ├── ranking.py      ← порядок рангов по BT, player_score
 │   │   ├── achievements.py
 │   │   ├── evaluation.py
 │   │   ├── moderation.py
@@ -72,10 +74,12 @@ gal/
 - Storage — файлы доказательств.
 - **Rank** и **Player Score** — производные, пересчитываются из первичных данных, не хранятся как канон.
 
-### 2. Данные: Rank vs Average Position
+### 2. Данные: Rank vs BT-сила
 
-- `average_position` — среднее арифметическое оценок пользователей.
-- `rank` — фактическое место в рейтинге (может отличаться от average из-за tie-resolution и соседних позиций).
+- `bt_strength` — логит-сила Bradley–Terry (`s_i`), больше = сложнее; `bt_rating = 1000 + 400·s/ln10` — Elo-подобное отображение.
+- `bt_comparisons` — число попарных сравнений достижения (надёжность).
+- `average_position` — устаревшее среднее позиций, остаётся как fallback и tie-break, если BT ещё не посчитан.
+- `rank` — фактическое место: `bt_strength desc, average_position asc, rank_order asc, id asc`.
 
 ### 3. Жизненный цикл сущностей
 
@@ -85,19 +89,21 @@ gal/
 - **Report:** `pending → accepted` / `rejected`.
 - **Moderation review:** пишется при каждом решении (achievement/completion), только от имени текущего модератора (RLS 013), виден модераторам в `/moderation/history`.
 
-### 4. Ranking recompute (цепочка при новой оценке)
+### 4. Ranking recompute (Bradley–Terry)
 
 ```text
-1. Save evaluation
-2. Calculate averages
-3. Sort achievements (average ASC)
-4. Resolve equal positions (фиксированный случайный порядок)
-5. Assign ranks
-6. Update achievement ranks
-7. Recalculate player scores
+1. submit_evaluation сохраняет позицию в личной шкале (SQL, атомарно)
+2. Python собирает все шкалы: published achievements + evaluations
+3. Строит попарные сравнения (A выше B ⇒ A сложнее), вес пары 1/(k-1)
+4. MM-оценка сил: θ_i ← (W_i+α)/(Σ n_ij/(θ_i+θ_j)+α/(θ_i+1)), центрирование
+5. RPC apply_bt_ratings(jsonb): пишет bt_* и вызывает recompute_ranks_internal()
+6. Ранги: bt_strength desc, fallback average_position/rank_order/id
+7. Очки игроков выводятся из rank (1000/rank)
 ```
 
-Пересчёт должен быть атомарным (в одной транзакции/функции).
+Пересчёт запускается после оценки, модерации и принятия жалобы; запись
+атомарна (advisory lock), ошибка пересчёта не ломает пользовательский сценарий.
+При росте данных полный пересчёт нужно вынести в батч/материализацию.
 
 ### 5. Security / RLS
 
@@ -106,6 +112,7 @@ gal/
 - Backend не доверяет frontend: `rank`, `points`, `approved` вычисляет только сервер.
 - proofs видны владельцу и модератору; публичная политика `proofs_select_approved_public` удалена в 013.
 - Публикация достижения без `approved`-выполнения создателя с proof запрещена deferred constraint trigger-ом (013).
+- `bt_*` меняются только RPC `apply_bt_ratings` (security definer, execute у `service_role`); guard-триггер откатывает прямые изменения.
 - `SERVICE_ROLE_KEY` никогда не попадает во frontend.
 
 ### 6. Оценка достижения (Personal Scale)

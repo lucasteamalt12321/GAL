@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D12 completed).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D13 completed).
 
 ## Deliverables статус
 
@@ -20,8 +20,25 @@
 | D10 | Polish (UI, security, errors)     | completed |
 | D11 | Bugfix по итогам bug-hunt 09-28   | completed |
 | D12 | v1.1: функции, безопасность, CI   | completed |
+| D13 | v1.2: Bradley–Terry ранкинг       | completed |
 
 ## Changelog
+
+### 2026-11-06 — v1.2 (D13): глобальный ранкинг Bradley–Terry
+
+**Зачем.** `docs/idea.md` задаёт исследовательскую рамку: индивидуальные шкалы → попарные сравнения → модель Bradley–Terry. Прежний ранкинг по средней позиции заменён BT-силой.
+
+**Модель.** Для каждой шкалы из `k` достижений строятся все пары (`A` выше `B` ⇒ `A` сложнее), вес пары `1/(k-1)`. Оценка — регуляризованный MM (Hunter, 2004), prior κ=0.5 против среднего, центрирование `mean(s)=0`; `P(A>B)=σ(s_A-s_B)`, `bt_rating = 1000 + 400·s/ln10`. Реализация — `app/services/bradley_terry.py` (чистый Python).
+
+**Данные и пересчёт.** `migrations/014_bradley_terry.sql`: колонки `bt_strength/bt_rating/bt_comparisons/bt_updated_at`, guard новых полей, `recompute_ranks_internal()` сортирует по `bt_strength desc` с fallback на `average_position`, RPC `apply_bt_ratings(jsonb)` (security definer, только `service_role`, advisory lock). `app/services/bt_recompute.py` читает все оценки service role, считает силы и применяет результат. Автозапуск после оценки, модерации и принятия жалобы; ошибка только логируется. Ручной запуск — `scripts/recompute_bt.py`.
+
+**UI.** Карточка достижения: BT-рейтинг, сила (логит), число попарных сравнений. Лидерборд: колонки BT-рейтинг и сравнения + пояснение шкалы. Порог 3 оценок сохранён.
+
+**Эксперимент.** `scripts/bt_experiment.py` (40 достижений, 20 игр/пару, 15 600 сравнений): Spearman **0.9908**, Kendall **0.9333**, Brier **0.193**, bootstrap Spearman **0.9910** (min 0.9869), top-10 overlap **0.93**. Подробно — `docs/bradley_terry.md`.
+
+**Проверка.** `pytest` — **135 passed**, ruff check/format — чисто. Миграция 014 проверена на проде в транзакции с `rollback` (201): колонки/функция создаются, `apply_bt_ratings` переставляет ранги по BT, anon получает `42501`, `service_role` — 0. Миграция применена к проду (201); объекты подтверждены. Деплой v1.2.0: `/leaderboard` содержит BT-колонки, ключевые маршруты 200. Live-проверка UI: временное достижение с `bt_rating=1217`, `bt_strength=1.25`, 42 сравнениями отобразилось в лидерборде и карточке; данные удалены (`achievements=0`, `profiles=0`).
+
+**Ограничения.** Пары внутри шкалы зависимы; связность графа обеспечивается prior-ом; пересчёт полный (O(N·iter)) — при росте данных нужен батч/материализация; доверительных интервалов пока нет.
 
 ### 2026-11-06 — D12 закрыт: CI зелёный, пагинация без 416, миграция 013 подтверждена
 
@@ -135,4 +152,4 @@
 
 ## last_checked_commit
 
-`7ed168d fix(ci,pagination): pin ruff 0.17.4, modernize datetime, avoid PostgREST 416` (2026-11-06)
+`0eee286 chore: bump version to 1.2.0 (Bradley-Terry)` (2026-11-06)

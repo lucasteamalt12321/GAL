@@ -13,7 +13,7 @@
 | Линтер       | ruff                                |
 | Пакеты       | pip (requirements.txt)              |
 
-## Зависимости (Plan)
+## Зависимости
 
 ```text
 fastapi
@@ -23,16 +23,16 @@ pydantic-settings
 supabase
 httpx
 python-multipart
-python-jose[cryptography]   # при необходимости верификации токенов
 ```
 
-Тестовые: `pytest`, `httpx`.
+Тестовые: `pytest`, `ruff==0.17.4`. Bradley–Terry реализован на чистом Python
+(без numpy/scipy): `app/services/bradley_terry.py`.
 
 ## Доступ к БД (решение, D1)
 
 - Пользовательские операции: клиент `supabase` (PostgREST) с anon key + user JWT — RLS применяется.
-- Привилегированные серверные операции (модерация, пересчёт ранкинга) — service role.
-- Транзакционный пересчёт ранкинга (§57): решить на D7 (Postgres RPC либо контролируемый серверный пересчёт).
+- Привилегированные серверные операции (модерация, BT-пересчёт) — service role.
+- Пересчёт рангов транзакционный: SQL-функции `submit_evaluation` / `apply_bt_ratings`.
 
 ## Переменные окружения
 
@@ -64,7 +64,8 @@ DISPLAY_UTC_OFFSET_HOURS=3   # даты в UI
   - `003_fix_handle_new_user.sql` — `handle_new_user` → `security definer`;
   - `004_storage_proofs.sql` — bucket `proofs` (private, 50 МБ) + политики `storage.objects`;
   - `005`–`012` — движок оценок, хардинг, integrity, lock, revoke internal execute;
-  - `013_ui_features_and_hardening.sql` — soft-delete своих pending, приватность proofs, авторство истории модерации, deferred trigger «публикация только с approved proof создателя», постраничный `player_leaderboard_page`.
+  - `013_ui_features_and_hardening.sql` — soft-delete своих pending, приватность proofs, авторство истории модерации, deferred trigger «публикация только с approved proof создателя», постраничный `player_leaderboard_page`;
+  - `014_bradley_terry.sql` — `bt_strength/bt_rating/bt_comparisons`, guard, ранжирование по BT, RPC `apply_bt_ratings(jsonb)` для `service_role`.
 - Storage bucket `proofs` — приватный; файлы по пути `{user_id}/{achievement_id}/{uuid}-{file}`; доступ по signed URL (TTL 3600), RLS на `storage.objects`.
 - Миграции применяются через Management API: `POST https://api.supabase.com/v1/projects/{ref}/database/query` с `Authorization: Bearer <PAT>` (успех = 201), т.к. `psql`/supabase CLI недоступны.
 - API supabase-py 2.31: auth = `supabase_auth.SyncGoTrueClient` (`SyncClient`/`SyncSupabaseAuthClient` — импорт падает); Storage = `client.storage.from_("proofs")` (`storage3._sync.file_api.SyncBucketProxy`, `upload(path, bytes, FileOptions)`, `create_signed_url(path, expires_in)` → dict с `signedURL`/`signedUrl`, `remove`, `list`); исключения `storage3.exceptions.StorageException`/`StorageApiError`.
@@ -82,7 +83,8 @@ DISPLAY_UTC_OFFSET_HOURS=3   # даты в UI
 - GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
 - Push → Vercel (production).
 - Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .`.
-- Тесты: 123 (юнит-ранкинг, роуты, CSRF, resilience, v1.1-сценарии).
+- Тесты: 135 (ранкинг/BT, роуты, CSRF, resilience, v1.1–v1.2 сценарии).
+- Bradley–Terry: `scripts/recompute_bt.py` (service role), эксперимент `scripts/bt_experiment.py`; формула/ограничения — `docs/bradley_terry.md`.
 - `ruff` закреплён версией `0.17.4` в `requirements-dev.txt` (CI и локальная проверка совпадают).
 
 ## Правила проверки кода
