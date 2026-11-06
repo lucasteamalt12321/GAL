@@ -97,13 +97,10 @@ def list_page(
     )
     active = next((c for c in categories if c["slug"] == category), None)
     pages = max(1, math.ceil(total / achievements_service.PAGE_SIZE))
-    if page > pages and total:
+    if page > pages:
+        redirect_url = request.url.include_query_params(page=pages)
         return RedirectResponse(
-            f"/achievements?page={pages}"
-            + (f"&category={quote(category)}" if category else "")
-            + (f"&sort={sort}" if sort else "")
-            + (f"&q={quote(query)}" if query else ""),
-            status_code=303,
+            f"{redirect_url.path}?{redirect_url.query}", status_code=303
         )
     return templates.TemplateResponse(
         request=request,

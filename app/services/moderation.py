@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from fastapi import Request
@@ -157,7 +157,7 @@ def _titles_by_id(client, table: str, select: str, key: str, ids) -> dict:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _creator_completion(client, achievement_id: int, creator_id: str) -> dict | None:

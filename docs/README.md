@@ -216,7 +216,7 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 121 тест: юнит-тесты ранкинга, роуты, CSRF, resilience, новые сценарии.
+- `pytest` — 123 теста: юнит-тесты ранкинга, роуты, CSRF, resilience, новые сценарии v1.1.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py` (нужен доступ к БД).
 

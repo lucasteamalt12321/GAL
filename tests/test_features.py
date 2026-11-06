@@ -282,6 +282,14 @@ def test_list_page_redirects_to_last_page(monkeypatch) -> None:
     assert resp.headers["location"].startswith("/achievements?page=2")
 
 
+def test_empty_catalog_out_of_range_redirects(monkeypatch) -> None:
+    monkeypatch.setattr(achievements_service, "list_categories", list)
+    monkeypatch.setattr(achievements_service, "list_achievements", lambda **_: ([], 0))
+    resp = client.get("/achievements?page=2", follow_redirects=False)
+    assert resp.status_code == 303
+    assert "page=1" in resp.headers["location"]
+
+
 def test_status_labels_are_human_readable(monkeypatch) -> None:
     _login(monkeypatch, USER)
     item = _pending()

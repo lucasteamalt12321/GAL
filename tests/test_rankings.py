@@ -104,3 +104,18 @@ def test_leaderboard_pagination_links(monkeypatch) -> None:
     assert "Страница 2 из 4" in resp.text
     assert "page=3" in resp.text
     assert "players_page=3" in resp.text
+
+
+def test_leaderboard_out_of_range_redirects(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rankings_service, "leaderboard_achievements", lambda **_: ([], 0)
+    )
+    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: ([], 0))
+
+    resp = client.get("/leaderboard?page=2", follow_redirects=False)
+    assert resp.status_code == 303
+    assert "page=1" in resp.headers["location"]
+
+    resp = client.get("/leaderboard?players_page=3", follow_redirects=False)
+    assert resp.status_code == 303
+    assert "players_page=1" in resp.headers["location"]

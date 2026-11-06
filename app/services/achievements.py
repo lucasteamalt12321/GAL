@@ -49,6 +49,13 @@ def get_category_by_slug(slug: str) -> dict | None:
     return res.data
 
 
+def _category_filter(slug: str | None) -> int | None:
+    if not slug:
+        return None
+    category = get_category_by_slug(slug)
+    return category["id"] if category else None
+
+
 def list_achievements(
     *,
     category_slug: str | None = None,
@@ -57,28 +64,42 @@ def list_achievements(
     limit: int = PAGE_SIZE,
     query: str | None = None,
 ) -> tuple[list[dict], int]:
-    """Возвращает (страница достижений, всего найдено)."""
+    """Возвращает (страница достижений, всего найдено).
+
+    Сначала отдельно запрашивается count, затем данные: PostgREST отвечает
+    416 на range за пределами выборки, а 416 нельзя отличить от сбоя БД
+    в глобальном обработчике.
+    """
     client = auth_service.new_anon_client()
-    base = (
-        client.table("achievements")
-        .select(ACHIEVEMENT_SELECT, count="exact")
-        .eq("status", "published")
+    category_id = _category_filter(category_slug)
+    if category_slug and category_id is None:
+        return [], 0
+
+    def _apply_filters(request):
+        request = request.eq("status", "published")
+        if category_id is not None:
+            request = request.eq("category_id", category_id)
+        if query:
+            request = request.ilike("title", f"%{auth_service.ilike_literal(query)}%")
+        return request
+
+    count_res = (
+        _apply_filters(client.table("achievements").select("id", count="exact"))
+        .limit(1)
+        .execute()
     )
-    if category_slug:
-        category = get_category_by_slug(category_slug)
-        if category is None:
-            return [], 0
-        base = base.eq("category_id", category["id"])
-    if query:
-        base = base.ilike("title", f"%{auth_service.ilike_literal(query)}%")
-    if sort == SORT_NEW:
-        base = base.order("created_at", desc=True)
-    else:
-        base = base.order("rank").order("created_at", desc=True)
+    total = count_res.count if count_res.count is not None else 0
     page = max(1, page)
     start = (page - 1) * limit
-    res = base.range(start, start + limit - 1).execute()
-    total = res.count if res.count is not None else len(res.data or [])
+    if start >= total:
+        return [], total
+
+    data_query = _apply_filters(client.table("achievements").select(ACHIEVEMENT_SELECT))
+    if sort == SORT_NEW:
+        data_query = data_query.order("created_at", desc=True)
+    else:
+        data_query = data_query.order("rank").order("created_at", desc=True)
+    res = data_query.range(start, start + limit - 1).execute()
     return res.data or [], total
 
 

@@ -4,7 +4,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services import rankings as rankings_service
 from app.templating import templates
@@ -49,6 +49,17 @@ def leaderboard_page(
         1, math.ceil(achievements_total / rankings_service.PAGE_SIZE)
     )
     players_pages = max(1, math.ceil(players_total / rankings_service.PAGE_SIZE))
+
+    if page > achievements_pages:
+        redirect_url = request.url.include_query_params(page=achievements_pages)
+        return RedirectResponse(
+            f"{redirect_url.path}?{redirect_url.query}", status_code=303
+        )
+    if players_page > players_pages:
+        redirect_url = request.url.include_query_params(players_page=players_pages)
+        return RedirectResponse(
+            f"{redirect_url.path}?{redirect_url.query}", status_code=303
+        )
 
     return templates.TemplateResponse(
         request=request,

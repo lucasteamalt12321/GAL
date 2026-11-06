@@ -22,19 +22,34 @@ PAGE_SIZE = 25
 def leaderboard_achievements(
     *, page: int = 1, limit: int = PAGE_SIZE
 ) -> tuple[list[dict], int]:
+    """Возвращает (страница достижений, всего в рейтинге).
+
+    Count запрашивается отдельно: range за пределами выборки даёт 416,
+    который глобальный обработчик принял бы за сбой Supabase.
+    """
     client = auth_service.new_anon_client()
+    count_res = (
+        client.table("achievements")
+        .select("id", count="exact")
+        .eq("status", "published")
+        .eq("ranking_status", "ranked")
+        .limit(1)
+        .execute()
+    )
+    total = count_res.count if count_res.count is not None else 0
     page = max(1, page)
     start = (page - 1) * limit
+    if start >= total:
+        return [], total
     res = (
         client.table("achievements")
-        .select(RANKED_SELECT, count="exact")
+        .select(RANKED_SELECT)
         .eq("status", "published")
         .eq("ranking_status", "ranked")
         .order("rank")
         .range(start, start + limit - 1)
         .execute()
     )
-    total = res.count if res.count is not None else len(res.data or [])
     return res.data or [], total
 
 
