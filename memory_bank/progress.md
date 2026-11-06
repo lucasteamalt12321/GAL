@@ -37,7 +37,7 @@
 
 **GAL (коммит `3fd8a74`).** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie, редиректит на LTHub; `GET /auth/lthub/callback` проверяет state, меняет код на токен, читает userinfo и логинит/создаёт Supabase-пользователя (`app/services/lthub_accounts.py`). Привязка хранится в `external_identities` (миграция 015, доступ только service_role). Кнопки добавлены на вход/регистрацию; ошибки OAuth показываются на логине.
 
-**Дополнение (username).** Изначально username жёстко строился как `lthub_<subject>` (пользователь увидел `lthub_8`). Исправлено: username берётся из логина LTHub (`shadowraven`), при занятости — суффикс, крайний fallback — `lthub_<subject>`; для уже созданных аккаунтов с дефолтным `lthub_<subject>` ник подтягивается при следующем входе (`_sync_profile`). Тест 141.
+**Дополнение (username).** Изначально username жёстко строился как `lthub_<subject>` (пользователь увидел `lthub_8`). Исправлено: username берётся из логина LTHub (`shadowraven`), при занятости — суффикс, крайний fallback — `lthub_<subject>`; для уже созданных аккаунтов с дефолтным `lthub_<subject>` ник подтягивается при следующем входе (`_sync_profile`). Прод-E2E подтвердил: `/auth/me` нового входа → `username: shadowraven`, `display_name: ShadowRaven`. Тестовый пользователь удалён; аккаунт пользователя subject 8 (`lthub_8`) не тронут — ник обновится при следующем входе. Тест 141.
 
 **Проверка.** Локально: 4 теста OAuth-provider (BankBot, зелёные), 5 тестов GAL (140 всего), ruff чист. Прод: LTHub `/oauth/authorize` и metadata — 200; полный E2E на проде — LTHub-логин `shadowraven` → authorize → code → GAL callback → `gal_session`; `/auth/me` вернул `lthub_23` / `ShadowRaven`, навигация авторизована. Тестовый GAL-пользователь и identity удалены (`external_identities=0`, `lthub_%` profiles=0). Миграция 015 применена (201).
 
@@ -172,4 +172,4 @@
 
 ## last_checked_commit
 
-`0eee286 chore: bump version to 1.2.0 (Bradley-Terry)` (2026-11-06)
+`eed7c69 fix(lthub): import username from LTHub login instead of lthub_<subject>` (2026-11-06)
