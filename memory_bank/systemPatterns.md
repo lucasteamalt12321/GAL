@@ -113,6 +113,7 @@ gal/
 - proofs видны владельцу и модератору; публичная политика `proofs_select_approved_public` удалена в 013.
 - Публикация достижения без `approved`-выполнения создателя с proof запрещена deferred constraint trigger-ом (013).
 - `bt_*` меняются только RPC `apply_bt_ratings` (security definer, execute у `service_role`); guard-триггер откатывает прямые изменения.
+- LTHub OAuth: публичный клиент + PKCE S256, одноразовые коды (TTL 5 мин), opaque tokens (30 дней); GAL проверяет state и создаёт Supabase-сессию через service role; привязка в `external_identities` недоступна anon/authenticated.
 - `SERVICE_ROLE_KEY` никогда не попадает во frontend.
 
 ### 6. Оценка достижения (Personal Scale)

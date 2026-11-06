@@ -130,13 +130,14 @@ python scripts/bt_experiment.py         # синтетический экспе�
 - `012_revoke_internal_execute.sql` — запрет вызова внутренней функции пересчёта;
 - `013_ui_features_and_hardening.sql` — soft-delete своих pending, приватность proofs, история модерации, инвариант proof создателя, постраничный лидерборд.
 - `014_bradley_terry.sql` — BT-колонки, guard, ранжирование по силе Bradley–Terry, RPC `apply_bt_ratings`.
+- `015_external_identities.sql` — привязка LTHub-identity к профилю (только `service_role`).
 
 Применение:
 
 ```bash
 python scripts/apply_migrations.py            # все миграции по порядку
-python scripts/apply_migrations.py 014        # только 014 (префикс номера)
-python scripts/apply_migrations.py migrations/014_bradley_terry.sql
+python scripts/apply_migrations.py 015        # только 015 (префикс номера)
+python scripts/apply_migrations.py migrations/015_external_identities.sql
 ```
 
 Скрипт использует Supabase Management API (`SUPABASE_ACCESS_TOKEN`) и последовательно выполняет SQL. Повторное применение `001` на существующей БД ожидаемо упадёт на `create type` — для существующего проекта применяйте только новые файлы.

@@ -10,7 +10,7 @@
 |-----|-----------------------------------|-----------|
 | D1  | Foundation + Memory Bank          | completed |
 | D2  | Database Schema + RLS             | completed |
-| D3  | Authentication                    | completed |
+| D3  | Authentication + LThub OAuth      | completed |
 | D4  | Achievements CRUD                 | completed |
 | D5  | Proofs + Moderation               | completed |
 | D6  | Evaluation Engine + Creator Eval  | completed |
@@ -23,6 +23,24 @@
 | D13 | v1.2: Bradley–Terry ранкинг       | completed |
 
 ## Changelog
+
+### 2026-11-06 — v1.3: вход через LTHub (OAuth 2.0 + PKCE)
+
+**Зачем.** Пользователь попросил «войти через LThub», используя аккаунты LTHub (`lthub.vercel.app`).
+
+**LTHub (BankBot, коммит `f1746ed`).** Добавлен самостоятельный OAuth-provider `core/oauth.py`, зарегистрированный из `api/index.py`:
+- `GET /oauth/authorize` — consent-страница; использует `localStorage.web_token`, при отсутствии сессии ведёт на `/login?redirect=...` (страница логина теперь уважает `redirect`);
+- `POST /api/oauth/authorize` — проверяет сессию и параметры, выдаёт одноразовый код (SHA-256 в `oauth_codes`, TTL 5 мин);
+- `POST /oauth/token` — authorization_code + PKCE S256, проверка redirect_uri/client_id/verifier, одноразовость, opaque token в `oauth_tokens` (30 дней);
+- `GET /oauth/userinfo`, `/.well-known/oauth-authorization-server`;
+- клиент `gal` — публичный (без client_secret), redirect URIs: прод GAL + localhost.
+
+**GAL (коммит `3fd8a74`).** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie, редиректит на LTHub; `GET /auth/lthub/callback` проверяет state, меняет код на токен, читает userinfo и логинит/создаёт Supabase-пользователя (`app/services/lthub_accounts.py`). Привязка хранится в `external_identities` (миграция 015, доступ только service_role). Кнопки добавлены на вход/регистрацию; ошибки OAuth показываются на логине.
+
+**Проверка.** Локально: 4 теста OAuth-provider (BankBot, зелёные), 5 тестов GAL (140 всего), ruff чист. Прод: LTHub `/oauth/authorize` и metadata — 200; полный E2E на проде — LTHub-логин `shadowraven` → authorize → code → GAL callback → `gal_session`; `/auth/me` вернул `lthub_23` / `ShadowRaven`, навигация авторизована. Тестовый GAL-пользователь и identity удалены (`external_identities=0`, `lthub_%` profiles=0). Миграция 015 применена (201).
+
+**Замечание.** Холодный старт LTHub-функции может занимать ~57 с (большое Flask-приложение); повторный E2E-прогон упёрся в лимит Vercel 60 с на холодном старте. Это инфраструктурное ограничение LTHub, не ошибка OAuth-кода; после прогрева authorize отвечает ~1.4 с.
+
 
 ### 2026-11-06 — v1.2 (D13): глобальный ранкинг Bradley–Terry
 

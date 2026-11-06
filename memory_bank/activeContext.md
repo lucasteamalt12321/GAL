@@ -2,6 +2,8 @@
 
 ## Текущий фокус
 
+**2026-11-06 — v1.3: вход через LTHub (OAuth 2.0 + PKCE).** В BankBot добавлен OAuth-provider (`core/oauth.py`, коммит `f1746ed`): authorize-страница на базе `localStorage.web_token`, одноразовые коды (TTL 5 мин, SHA-256), `/oauth/token` с PKCE S256, `/oauth/userinfo`, metadata. В GAL — `GET /auth/lthub` + `/auth/lthub/callback` (`app/routers/lthub_auth.py`), привязка identity через `external_identities` (миграция 015, service_role), создание Supabase-сессии (`app/services/lthub_accounts.py`), кнопки на входе/регистрации. Прод-E2E пройден: LTHub `shadowraven` → code → GAL callback → `gal_session`; `/auth/me` = `lthub_23` / `ShadowRaven`; тестовый GAL-пользователь удалён. `pytest` — 140 passed. Холодный старт LTHub ~57 с (Vercel-лимит 60 с), после прогрева authorize ~1.4 с.
+
 **2026-11-06 — v1.2 (D13): Bradley–Terry внедрён и задеплоен.** Глобальный ранкинг переведён с средней позиции на силу BT. `app/services/bradley_terry.py` строит попарные сравнения из личных шкал (все пары, вес `1/(k-1)`) и оценивает силы регуляризованным MM (prior κ=0.5, центрирование). `app/services/bt_recompute.py` читает все оценки service role и применяет результат через RPC `apply_bt_ratings(jsonb)`. Миграция `014` (колонки `bt_*`, guard, ранжирование по BT, RPC) применена к проду (201) и проверена: функция переставляет ранги, anon получает `42501`, `service_role` — 0. UI проверен на проде временным достижением: лидерборд показал «BT-рейтинг 1217», карточка — силу 1.250 и 42 сравнения; тестовые данные удалены (`achievements=0`, `profiles=0`). Эксперимент: Spearman 0.9908, Kendall 0.9333, bootstrap Spearman 0.9910, top-10 overlap 0.93. Прод v1.2.0, CI зелёный, `pytest` — 135 passed.
 
 **2026-11-06 — v1.1 (D12) завершён и проверен на проде.** CI зелёный на `7ed168d`: `ruff==0.17.4` закреплён, UP017/FURB162 исправлены, `pytest` — **123 passed**. Live-дефект 416 закрыт: каталог и оба лидерборда сначала запрашивают count, затем данные; `/achievements?page=2` и `/leaderboard?page=2` теперь 303 на валидную страницу вместо 503. Миграция `013` применена к проду (201) и проверена SQL. Прод: `/openapi.json` — v1.1.0, ключевые маршруты 200, 404 — HTML.
@@ -27,7 +29,17 @@
   - [x] пагинация/поиск (count-first, 303 вместо 416/503)
   - [x] RLS proofs/история, инвариант proof создателя
   - [x] адаптивная вёрстка, JS, CI, docs
+- D3 (Authentication): **completed** — включая LTHub OAuth (v1.3): PKCE, state, external_identities, автологин/создание Supabase-пользователя.
 - D1–D11: **completed**
+
+## Ключевые изменения (v1.3)
+
+1. BankBot `core/oauth.py` — OAuth 2.0 provider: authorize/consent, one-time hashed codes, token + PKCE S256, userinfo, metadata; регистрация из `api/index.py`.
+2. BankBot login page учитывает `?redirect=` (возврат в authorize-flow).
+3. GAL `app/routers/lthub_auth.py` — state/PKCE cookies, обмен кода, userinfo, ошибки на логине.
+4. GAL `app/services/lthub_accounts.py` — сервисный Supabase admin: create/update password, сессия, привязка `external_identities`.
+5. `migrations/015_external_identities.sql` — таблица привязок, RLS + service_role only.
+6. Login/register: кнопки «Войти через LTHub»; env-настройки LTHub.
 
 ## Ключевые изменения (v1.2)
 
@@ -56,6 +68,7 @@
 - Прогнать `scripts/bt_experiment.py` на реальных данных после наполнения прода; сравнить BT с Plackett–Luce/средней позицией.
 - Добавить доверительные интервалы/SE для BT (bootstrap на батче или гессиан) и показывать надёжность рядом с `bt_comparisons`.
 - Наполнить прод реальными достижениями и проверить полный цикл с обычным пользователем и модератором.
+- Проверить повторный вход через LTHub (переиспользование `external_identities`) после прогрева LThub; закрыть cold-start 57 с (оптимизация импорта/перенос OAuth в отдельную функцию).
 
 ## Риски
 
@@ -65,3 +78,5 @@
 - **Bradley–Terry vs fallback:** пока `apply_bt_ratings` не выполнился (нет service role/данных), ранги считаются по `average_position`; это осознанный fallback, а не ошибка. После миграции 014 на существующей БД нужно один раз запустить `scripts/recompute_bt.py`.
 - **Стоимость пересчёта:** BT пересчитывается целиком после каждой оценки/решения (O(N·iter) + чтение всех evaluations). На малых данных нормально; при росте — батч/материализация и, возможно, инкрементальные обновления.
 - **Зависимость наблюдений:** все пары одной шкалы зависимы; весовое нормирование `1/(k-1)` не заменяет Plackett–Luce. Для отчётности это надо явно указывать.
+- **LTHub OAuth:** холодный старт BankBot-функции бывает ~57 с при лимите Vercel 60 с → authorize может отдать 504; после прогрева ~1.4 с. OAuth-коды/токены хранятся в БД LThub; при недоступности LThub вход через него не работает, парольный вход GAL остаётся.
+- **Служебные GAL-аккаунты LTHub:** email `lthub-oauth-<sub>@example.com`, пароль ротируется при каждом входе; это OAuth-only аккаунты, сброс пароля по email для них бессмыслен. Удаление auth-пользователя каскадно чистит профиль и identity.
