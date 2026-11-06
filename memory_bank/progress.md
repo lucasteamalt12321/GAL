@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **90%** (D1–D11 completed, D12 in_progress — код v1.1.0 задеплоен; осталось: подтвердить миграцию 013 на проде, починить CI-ruff и пагинацию за последней страницей).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D12 completed).
 
 ## Deliverables статус
 
@@ -19,9 +19,19 @@
 | D9  | Reports                           | completed |
 | D10 | Polish (UI, security, errors)     | completed |
 | D11 | Bugfix по итогам bug-hunt 09-28   | completed |
-| D12 | v1.1: функции, безопасность, CI   | in_progress |
+| D12 | v1.1: функции, безопасность, CI   | completed |
 
 ## Changelog
+
+### 2026-11-06 — D12 закрыт: CI зелёный, пагинация без 416, миграция 013 подтверждена
+
+**CI.** Причина красных прогонов — незапиннутый `ruff` (в CI ставился 0.17.4 с новыми правилами). Исправлено: `ruff==0.17.4` в `requirements-dev.txt`; `datetime.UTC` вместо `timezone.utc` (UP017), убран лишний `replace("Z", "+00:00")` (FURB162). Прогон `7ed168d` — **success** (ruff check, ruff format, pytest).
+
+**Пагинация.** PostgREST отвечал 416 на `range` за пределами выборки, глобальный обработчик превращал это в 503. Теперь список и оба лидерборда сначала запрашивают `count`, затем данные; страница за последней делает 303-редирект на валидную (`/achievements?page=2` → `?page=1`, `/leaderboard?players_page=2` → `?players_page=1`). Проверено на проде.
+
+**Миграция 013 применена к проду** (`scripts/apply_migrations.py 013`, 201). Проверено SQL-запросами: публичная политика proofs удалена (`0`), `player_leaderboard_page` и trigger `achievements_require_creator_proof` существуют; deferred trigger в тестовой транзакции отдаёт `PUBLISH_REQUIRES_CREATOR_PROOF`; anon не видит proofs (`0`); автор может soft-delete свой pending (`1`); RPC вызывается от anon. Тестовые данные откатаны (`achievements=0`, `profiles=0`).
+
+**Состояние.** `pytest` — **123 passed**, ruff check/format — чисто; прод отдаёт v1.1.0 (`/openapi.json`), все ключевые маршруты 200, 404 — HTML-страница. D12 completed.
 
 ### 2026-11-06 — Документация: идея и исследовательская рамка проекта
 
@@ -125,4 +135,4 @@
 
 ## last_checked_commit
 
-`2d7afed docs: add project idea and research framing (Bradley-Terry)` (2026-11-06)
+`7ed168d fix(ci,pagination): pin ruff 0.17.4, modernize datetime, avoid PostgREST 416` (2026-11-06)

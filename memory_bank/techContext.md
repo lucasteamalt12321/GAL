@@ -82,7 +82,8 @@ DISPLAY_UTC_OFFSET_HOURS=3   # даты в UI
 - GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
 - Push → Vercel (production).
 - Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .`.
-- Тесты: 121 (юнит-ранкинг, роуты, CSRF, resilience, v1.1-сценарии).
+- Тесты: 123 (юнит-ранкинг, роуты, CSRF, resilience, v1.1-сценарии).
+- `ruff` закреплён версией `0.17.4` в `requirements-dev.txt` (CI и локальная проверка совпадают).
 
 ## Правила проверки кода
 
