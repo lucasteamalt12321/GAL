@@ -11,9 +11,10 @@
 - редактирование и удаление своего достижения, пока оно на модерации;
 - модерация достижений и proofs, скрытие опубликованных достижений, история решений;
 - личная шкала сложности: оценка доступна только после подтверждённого выполнения;
-- глобальный рейтинг достижений (`1000 / rank`), очки игроков и два лидерборда;
+- глобальный рейтинг достижений по модели **Bradley–Terry** (попарные сравнения из личных шкал, BT-рейтинг и число сравнений), очки игроков (`1000 / rank`) и два лидерборда;
 - жалобы на достижения и их рассмотрение;
-- профили, настройки профиля, пагинация и поиск по каталогу.
+- профили, настройки профиля, пагинация и поиск по каталогу;
+- эксперимент по точности/устойчивости рейтинга (`scripts/bt_experiment.py`).
 
 ## Стек
 
@@ -37,7 +38,7 @@ app/
 ├── templates/             # Jinja2-шаблоны
 └── static/                # CSS/JS/favicon
 
-migrations/                # SQL-миграции Supabase (001–013)
+migrations/                # SQL-миграции Supabase (001–014)
 scripts/                   # применение миграций и live-e2e
 tests/                     # pytest
 ```
@@ -94,6 +95,15 @@ ruff format --check .
 
 CI (`.github/workflows/ci.yml`) запускает ruff и pytest на каждый push в `main` и каждый pull request.
 
+## Bradley–Terry
+
+Глобальная сложность считается моделью Bradley–Terry по попарным сравнениям из личных шкал; подробности и математика — [docs/bradley_terry.md](docs/bradley_terry.md). Пересчёт выполняется автоматически после оценок/модерации; вручную:
+
+```bash
+python scripts/recompute_bt.py          # нужны URL и service role key
+python scripts/bt_experiment.py         # синтетический эксперимент точности/устойчивости
+```
+
 ## База данных
 
 Миграции лежат в `migrations/` и применяются **по порядку**:
@@ -111,13 +121,14 @@ CI (`.github/workflows/ci.yml`) запускает ruff и pytest на кажд�
 - `011_evaluation_lock.sql` — блокировка оценок после перехода в `ranked`;
 - `012_revoke_internal_execute.sql` — запрет вызова внутренней функции пересчёта;
 - `013_ui_features_and_hardening.sql` — soft-delete своих pending, приватность proofs, история модерации, инвариант proof создателя, постраничный лидерборд.
+- `014_bradley_terry.sql` — BT-колонки, guard, ранжирование по силе Bradley–Terry, RPC `apply_bt_ratings`.
 
 Применение:
 
 ```bash
 python scripts/apply_migrations.py            # все миграции по порядку
-python scripts/apply_migrations.py 013        # только 013 (префикс номера)
-python scripts/apply_migrations.py migrations/013_ui_features_and_hardening.sql
+python scripts/apply_migrations.py 014        # только 014 (префикс номера)
+python scripts/apply_migrations.py migrations/014_bradley_terry.sql
 ```
 
 Скрипт использует Supabase Management API (`SUPABASE_ACCESS_TOKEN`) и последовательно выполняет SQL. Повторное применение `001` на существующей БД ожидаемо упадёт на `create type` — для существующего проекта применяйте только новые файлы.

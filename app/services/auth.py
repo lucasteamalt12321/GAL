@@ -107,6 +107,23 @@ def new_user_client(access_token: str, refresh_token: str) -> Client:
     return client
 
 
+def new_service_client() -> Client:
+    """Серверный клиент с service role key (обходит RLS).
+
+    Нужен только для фоновых агрегатов (Bradley–Terry): читает все оценки,
+    которые не видны обычному пользователю, и применяет результат через
+    security definer RPC. Ключ никогда не покидает сервер.
+    """
+    settings = get_settings()
+    if not settings.service_role_configured:
+        raise SupabaseNotConfiguredError("Supabase service role is not configured")
+    return create_client(
+        settings.supabase_url,
+        settings.supabase_service_role_key,
+        options=_client_options(),
+    )
+
+
 def user_client_from_request(request: Request) -> Client | None:
     access = request.cookies.get(SESSION_COOKIE)
     refresh = request.cookies.get(REFRESH_COOKIE)

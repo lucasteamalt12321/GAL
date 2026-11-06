@@ -58,6 +58,22 @@ def test_compute_ranks_single() -> None:
     assert compute_ranks([RankCandidate(id=7, average_position=3.0)]) == {7: 1}
 
 
+def test_compute_ranks_bit_strength_wins_over_average() -> None:
+    candidates = [
+        RankCandidate(id=1, average_position=1.0, bt_strength=-0.5),
+        RankCandidate(id=2, average_position=3.0, bt_strength=1.5),
+    ]
+    assert compute_ranks(candidates) == {2: 1, 1: 2}
+
+
+def test_compute_ranks_bt_none_falls_back_to_average() -> None:
+    candidates = [
+        RankCandidate(id=1, average_position=2.0),
+        RankCandidate(id=2, average_position=1.0, bt_strength=0.2),
+    ]
+    assert compute_ranks(candidates) == {2: 1, 1: 2}
+
+
 # --- eligible_for_ranking ----------------------------------------------------
 
 

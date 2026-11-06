@@ -2,19 +2,25 @@
 {% block title %}Рейтинг{% endblock %}
 {% block content %}
   <h1>Рейтинг</h1>
+  <p class="muted">
+    Место определяется силой Bradley–Terry: она оценивается по попарным сравнениям
+    из личных шкал участников. BT-рейтинг 1000 — средний уровень; разница 400
+    очков означает примерно десятикратное превосходство в шансах быть сложнее.
+  </p>
 
   <section class="leaderboard-section">
     <h2>Топ достижений</h2>
     {% if achievements %}
       <div class="table-scroll">
         <table class="leaderboard-table">
-          <caption class="visually-hidden">Достижения, отсортированные по глобальному рангу</caption>
+          <caption class="visually-hidden">Достижения, отсортированные по силе Bradley–Terry</caption>
           <thead>
             <tr>
               <th scope="col">#</th>
               <th scope="col">Достижение</th>
               <th scope="col">Категория</th>
-              <th scope="col">Средняя позиция</th>
+              <th scope="col">BT-рейтинг</th>
+              <th scope="col">Сравнений</th>
               <th scope="col">Оценок</th>
             </tr>
           </thead>
@@ -24,7 +30,8 @@
                 <td class="lb-rank">#{{ a.rank }}</td>
                 <td><a href="/achievements/{{ a.id }}">{{ a.title }}</a></td>
                 <td>{{ a.category.name if a.category else '—' }}</td>
-                <td>{{ a.average_position|round(2) if a.average_position is not none else '?' }}</td>
+                <td>{{ "%.0f"|format(a.bt_rating) if a.bt_rating|default(none, true) is not none else '—' }}</td>
+                <td>{{ a.bt_comparisons|default(0, true) }}</td>
                 <td>{{ a.evaluation_count }}</td>
               </tr>
             {% endfor %}

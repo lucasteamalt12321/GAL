@@ -15,6 +15,7 @@ from fastapi import Request
 from postgrest.exceptions import APIError
 
 from app.services import auth as auth_service
+from app.services import bt_recompute
 
 logger = logging.getLogger(__name__)
 
@@ -180,3 +181,4 @@ def decide_report(
                     report_id,
                     exc_info=True,
                 )
+            bt_recompute.try_recompute_global_ratings()

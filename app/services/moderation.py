@@ -7,6 +7,7 @@ from postgrest.exceptions import APIError
 from storage3.exceptions import StorageException
 
 from app.services import auth as auth_service
+from app.services import bt_recompute
 from app.services import completions as completions_service
 
 logger = logging.getLogger(__name__)
@@ -284,6 +285,9 @@ def decide_achievement(
     if decision == "rejected":
         _reject_creator_completion(client, achievement_id, creator_id, user.id, reason)
 
+    # Публикация/отклонение меняет состав достижений в глобальной модели.
+    bt_recompute.try_recompute_global_ratings()
+
 
 def hide_achievement(request: Request, achievement_id: int, reason: str) -> None:
     """Скрывает опубликованное достижение (soft-delete) с записью в историю."""
@@ -325,6 +329,7 @@ def hide_achievement(request: Request, achievement_id: int, reason: str) -> None
             achievement_id,
             exc_info=True,
         )
+    bt_recompute.try_recompute_global_ratings()
 
 
 def decide_completion(

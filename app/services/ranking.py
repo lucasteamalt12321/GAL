@@ -1,13 +1,15 @@
 """GAL ranking engine — pure, unit-testable core.
 
-Глобальный ранг достижения: «меньше средняя позиция = сложнее». Порядок:
-1. average_position asc
-2. rank_order asc    (фиксированный при переходе в 'ranked' ти-брейкер)
-3. id asc            (стабильность при абсолютной ничьей)
+Глобальный ранг достижения определяется силой Bradley–Terry (чем выше сила,
+тем сложнее). Порядок:
+1. bt_strength desc (None — в конце, fallback на среднюю позицию)
+2. average_position asc
+3. rank_order asc    (фиксированный при переходе в 'ranked' ти-брейкер)
+4. id asc
 
 Производное в БД хранится в `achievements.rank`; эта логика повторяет
-`public.recompute_ranks()`. Пересчёт выполняется атомарно внутри
-`public.submit_evaluation()` при переходе в 'ranked'.
+`public.recompute_ranks_internal()`. Сами силы считает
+`app/services/bradley_terry.py`, пересчёт применяется RPC `apply_bt_ratings`.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ class RankCandidate:
     id: int
     average_position: float
     rank_order: float = 0.0
+    bt_strength: float | None = None
 
 
 def eligible_for_ranking(
@@ -37,19 +40,30 @@ def eligible_for_ranking(
         avg = row.get("average_position")
         if avg is None:
             continue
+        bt = row.get("bt_strength")
         candidates.append(
             RankCandidate(
                 id=int(row["id"]),
                 average_position=float(avg),
                 rank_order=float(row.get("rank_order") or 0.0),
+                bt_strength=float(bt) if bt is not None else None,
             )
         )
     return candidates
 
 
 def compute_ranks(candidates: Iterable[RankCandidate]) -> dict[int, int]:
-    """Возвращает {id: rank}; лучшая (минимальная) средняя позиция = ранг 1."""
-    ordered = sorted(candidates, key=lambda c: (c.average_position, c.rank_order, c.id))
+    """Возвращает {id: rank}; лучшая (наибольшая BT-сила) = ранг 1."""
+    ordered = sorted(
+        candidates,
+        key=lambda c: (
+            c.bt_strength is None,
+            -(c.bt_strength or 0.0),
+            c.average_position,
+            c.rank_order,
+            c.id,
+        ),
+    )
     return {c.id: i + 1 for i, c in enumerate(ordered)}
 
 

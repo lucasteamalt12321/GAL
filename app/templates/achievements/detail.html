@@ -20,16 +20,28 @@
       <span class="stat-value">{% if achievement.rank %}#{{ achievement.rank }}{% else %}?{% endif %}</span>
     </div>
     <div class="stat">
-      <span class="stat-label">Средняя позиция</span>
+      <span class="stat-label">BT-рейтинг</span>
       <span class="stat-value">
-        {% if achievement.average_position %}{{ "%.2f"|format(achievement.average_position) }}{% else %}?{% endif %}
+        {% if achievement.bt_rating|default(none, true) is not none %}{{ "%.0f"|format(achievement.bt_rating) }}{% else %}?{% endif %}
       </span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Попарных сравнений</span>
+      <span class="stat-value">{{ achievement.bt_comparisons|default(0, true) }}</span>
     </div>
     <div class="stat">
       <span class="stat-label">Оценок</span>
       <span class="stat-value">{{ achievement.evaluation_count }}</span>
     </div>
   </div>
+
+  {% if achievement.bt_rating|default(none, true) is not none %}
+    <p class="muted">
+      Сила Bradley–Terry: {{ "%.3f"|format(achievement.bt_strength|default(0, true)) }} (логит).
+      Рейтинг 1000 — средний уровень, +400 очков ≈ в 10 раз выше шансы быть
+      сложнее среднего достижения.
+    </p>
+  {% endif %}
 
   {% if is_creator and achievement.status == 'pending' %}
     <div class="flash flash-info">

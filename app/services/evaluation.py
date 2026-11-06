@@ -3,6 +3,7 @@ from fastapi import Request
 from postgrest.exceptions import APIError
 
 from app.services import auth as auth_service
+from app.services import bt_recompute
 from app.services import completions as completions_service
 
 EVALUATION_ERRORS = (
@@ -122,6 +123,8 @@ def submit(request: Request, achievement_id: int, harder_count: int) -> dict:
         ) from exc
     if not res.data:
         raise EvaluationError("Не удалось сохранить оценку. Попробуйте ещё раз.")
+    # Личная шкала изменилась -> обновляем глобальные силы Bradley–Terry.
+    bt_recompute.try_recompute_global_ratings()
     return res.data[0]
 
 
