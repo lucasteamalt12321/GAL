@@ -270,6 +270,23 @@ body {
   color: var(--text);
 }
 
+.btn-small {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.submission-actions {
+  margin-top: 0.4rem;
+}
+
+.submissions-table td {
+  vertical-align: top;
+}
+
+.submissions-filters {
+  margin-top: 1rem;
+}
+
 .page-head {
   display: flex;
   align-items: center;

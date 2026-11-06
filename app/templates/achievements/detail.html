@@ -143,31 +143,20 @@
           {% endfor %}
         </ul>
       {% endif %}
+      {% if own_completion.status == 'rejected' %}
+        <div class="flash flash-error">
+          Заявка отклонена{% if rejection_reason %}: {{ rejection_reason }}{% endif %}.
+        </div>
+        <p class="muted">Можно исправить доказательство и отправить заявку снова — прежняя заявка и её файлы будут заменены.</p>
+        {% with form_title="Отправить исправленное доказательство", submit_label="Отправить снова" %}
+          {% include "achievements/_proof_form.html" %}
+        {% endwith %}
+      {% endif %}
     </section>
   {% elif can_submit %}
-    <section class="prose">
-      <h2>Я выполнил это</h2>
-      <form method="post" action="/achievements/{{ achievement.id }}/complete" class="stack" enctype="multipart/form-data">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <fieldset class="field proof-field">
-          <legend class="field-label">Доказательство</legend>
-          <p class="muted">Приложите файл (до {{ max_proof_bytes // 1048576 }} МБ) или ссылку.</p>
-          <label class="field">
-            <span class="field-label">Файл</span>
-            <input type="file" name="file" data-max-bytes="{{ max_proof_bytes }}">
-          </label>
-          <label class="field">
-            <span class="field-label">Ссылка</span>
-            <input type="url" name="external_url" placeholder="https://...">
-          </label>
-        </fieldset>
-        <label class="field">
-          <span class="field-label">Комментарий</span>
-          <textarea name="description" rows="3" maxlength="2000"></textarea>
-        </label>
-        <button type="submit" class="btn btn-primary">Отправить на модерацию</button>
-      </form>
-    </section>
+    {% with form_title="Я выполнил это", form_hint="Приложите доказательство своего выполнения." %}
+      {% include "achievements/_proof_form.html" %}
+    {% endwith %}
   {% elif not request.state.user %}
     <div class="detail-actions">
       <a class="btn btn-primary" href="/auth/login">Войдите, чтобы отправить доказательство</a>

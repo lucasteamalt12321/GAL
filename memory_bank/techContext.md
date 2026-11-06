@@ -90,7 +90,7 @@ LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
 - GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
 - Push → Vercel (production).
 - Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .`.
-- Тесты: 141 (ранкинг/BT, OAuth, роуты, CSRF, resilience, v1.1–v1.3 сценарии).
+- Тесты: 146 (ранкинг/BT, OAuth, «Мои заявки», роуты, CSRF, resilience, v1.1–v1.3 сценарии).
 - Bradley–Terry: `scripts/recompute_bt.py` (service role), эксперимент `scripts/bt_experiment.py`; формула/ограничения — `docs/bradley_terry.md`.
 - LTHub OAuth: публичный PKCE-клиент `gal`, provider в BankBot `core/oauth.py`; GAL-клиент — `app/routers/lthub_auth.py` + `app/services/lthub_accounts.py`.
 - `ruff` закреплён версией `0.17.4` в `requirements-dev.txt` (CI и локальная проверка совпадают).

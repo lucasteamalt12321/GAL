@@ -22,6 +22,7 @@
         <a class="nav-link" href="/leaderboard">Рейтинг</a>
         {% if request.state.user %}
           <a class="nav-link" href="/achievements/create">Предложить</a>
+          <a class="nav-link" href="/submissions">Мои заявки</a>
           {% if request.state.user.role in ('moderator', 'admin') %}
             <a class="nav-link" href="/moderation">Модерация</a>
             <a class="nav-link" href="/reports">Жалобы</a>

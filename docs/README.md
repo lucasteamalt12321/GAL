@@ -35,6 +35,7 @@ PostgreSQL  Auth     Storage
 | `auth.py`        | Вход, регистрация, выход, recover/update-password      |
 | `users.py`       | Публичные профили                                      |
 | `settings.py`    | Настройки профиля и смена пароля                       |
+| `submissions.py` | «Мои заявки»: статусы, причины, переотправка           |
 | `achievements.py`| Каталог, создание, редактирование/удаление pending      |
 | `completions.py` | Выполнения + доказательства                             |
 | `evaluations.py` | Личная шкала и оценки                                   |
@@ -174,6 +175,7 @@ PostgreSQL  Auth     Storage
 - `013_ui_features_and_hardening.sql` — soft-delete своих pending, удаление публичной политики proofs, авторство истории модерации, deferred trigger proof создателя, `player_leaderboard_page`.
 - `014_bradley_terry.sql` — колонки `bt_strength/bt_rating/bt_comparisons/bt_updated_at`, guard новых полей, ранжирование по BT, RPC `apply_bt_ratings(jsonb)` для `service_role`.
 - `015_external_identities.sql` — привязка внешних identity (LTHub) к профилям; доступ только `service_role`.
+- `016_completion_review_visibility.sql` — автор заявки видит `moderation_reviews` по своей заявке (причина отклонения).
 
 **Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014** (008 содержит `create or replace` устаревших функций, после неё обязательно переприменение 010/011).
 
@@ -227,7 +229,7 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 141 тест: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, сценарии v1.1–v1.3.
+- `pytest` — 146 тестов: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сценарии v1.1–v1.3.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 

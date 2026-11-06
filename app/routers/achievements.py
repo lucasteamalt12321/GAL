@@ -398,6 +398,12 @@ def detail(
         "report-submitted": "Жалоба отправлена. Модератор её рассмотрит.",
         "hidden": "Достижение скрыто из каталога и рейтинга.",
     }
+    rejection_reason = None
+    if own_completion is not None and own_completion.get("status") == "rejected":
+        rejection_reason = completions_service.get_rejection_reason(
+            request, own_completion["id"]
+        )
+        can_submit = True
     return templates.TemplateResponse(
         request=request,
         name="achievements/detail.html",
@@ -410,6 +416,7 @@ def detail(
             "own_completion": own_completion,
             "proofs": proof_views,
             "can_submit": can_submit,
+            "rejection_reason": rejection_reason,
             "my_evaluation": my_evaluation,
             "can_evaluate": can_evaluate,
             "eval_reason": eval_reason,

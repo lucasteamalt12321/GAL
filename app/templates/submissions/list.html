@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Мои заявки{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <h1>Мои заявки</h1>
+  <a class="btn" href="/achievements">К достижениям</a>
+</section>
+
+<p class="muted">
+  Здесь все ваши заявки о выполнении: статус, доказательства и причина отклонения.
+  Отклонённую заявку можно исправить и отправить снова — старая замена не нужна.
+</p>
+
+<div class="chips submissions-filters">
+  <a class="chip {% if not status %}chip-active{% endif %}" href="/submissions">Все</a>
+  <a class="chip {% if status == 'pending' %}chip-active{% endif %}" href="/submissions?status=pending">На проверке</a>
+  <a class="chip {% if status == 'approved' %}chip-active{% endif %}" href="/submissions?status=approved">Подтверждённые</a>
+  <a class="chip {% if status == 'rejected' %}chip-active{% endif %}" href="/submissions?status=rejected">Отклонённые</a>
+</div>
+
+{% if submissions %}
+  <div class="table-scroll">
+    <table class="leaderboard-table submissions-table">
+      <caption class="visually-hidden">Мои заявки о выполнении достижений</caption>
+      <thead>
+        <tr>
+          <th scope="col">Достижение</th>
+          <th scope="col">Статус</th>
+          <th scope="col">Отправлена</th>
+          <th scope="col">Доказательства</th>
+          <th scope="col">Комментарий</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in submissions %}
+          <tr>
+            <td>
+              {% if item.achievement %}
+                <a href="/achievements/{{ item.achievement.id }}">{{ item.achievement.title }}</a>
+                {% if item.achievement.category %}<span class="muted">· {{ item.achievement.category.name }}</span>{% endif %}
+              {% else %}
+                <span class="muted">Достижение #{{ item.achievement_id }} недоступно</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-{{ item.status }}">{{ item.status|completion_status_label }}</span>
+            </td>
+            <td>{{ item.created_at|datetime_local }}</td>
+            <td>
+              {% if item.proof_count %}
+                {{ item.proof_count }} {{ item.proof_count|plural_ru(('файл', 'файла', 'файлов')) }}
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if item.status == 'rejected' %}
+                {% if item.rejection_reason %}<span class="muted">{{ item.rejection_reason }}</span>{% endif %}
+                <div class="submission-actions">
+                  <a class="btn btn-small" href="/achievements/{{ item.achievement_id }}#proof">Исправить и отправить снова</a>
+                </div>
+              {% elif item.status == 'pending' %}
+                <span class="muted">Ждёт проверки модератора</span>
+              {% elif item.status == 'approved' %}
+                <span class="muted">Можно оценить сложность на странице достижения</span>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <section class="placeholder">
+    <p>
+      {% if status %}Заявок с таким статусом нет.{% else %}Вы ещё не отправляли заявки о выполнении.{% endif %}
+    </p>
+    <p><a class="btn btn-primary" href="/achievements">Найти достижение</a></p>
+  </section>
+{% endif %}
+{% endblock %}

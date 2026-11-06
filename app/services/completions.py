@@ -104,6 +104,80 @@ def list_proofs(request: Request, completion_id: int) -> list[dict]:
     return res.data or []
 
 
+def list_user_completions(request: Request, limit: int = 200) -> list[dict]:
+    """Все заявки текущего пользователя (для раздела «Мои заявки»)."""
+    user = request.state.user
+    client = auth_service.user_client_from_request(request)
+    if user is None or client is None:
+        return []
+    res = (
+        client.table("achievement_completions")
+        .select(
+            "id,achievement_id,status,created_at,approved_at,"
+            "achievement:achievements(id,title,status,creator_id,"
+            "category:categories(name)),"
+            "proofs(id,proof_type,description,created_at)"
+        )
+        .eq("user_id", user.id)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    rows = res.data or []
+    if not rows:
+        return rows
+    rejected_ids = [row["id"] for row in rows if row.get("status") == "rejected"]
+    reasons = _latest_rejection_reasons(client, rejected_ids)
+    for row in rows:
+        row["rejection_reason"] = reasons.get(row["id"])
+        row["proof_count"] = len(row.get("proofs") or [])
+    return rows
+
+
+def _latest_rejection_reasons(client, completion_ids: list[int]) -> dict[int, str]:
+    if not completion_ids:
+        return {}
+    try:
+        res = (
+            client.table("moderation_reviews")
+            .select("completion_id,decision,reason,created_at")
+            .in_("completion_id", completion_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+    except COMPLETION_ERRORS:
+        return {}
+    reasons: dict[int, str] = {}
+    for row in res.data or []:
+        completion_id = row.get("completion_id")
+        if completion_id is None or completion_id in reasons:
+            continue
+        if row.get("decision") == "rejected":
+            reasons[int(completion_id)] = row.get("reason") or ""
+    return reasons
+
+
+def get_rejection_reason(request: Request, completion_id: int) -> str | None:
+    """Причина последнего отклонения заявки (видна только её владельцу/модератору)."""
+    client = auth_service.user_client_from_request(request)
+    if client is None:
+        return None
+    try:
+        res = (
+            client.table("moderation_reviews")
+            .select("reason,decision")
+            .eq("completion_id", completion_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except COMPLETION_ERRORS:
+        return None
+    if not res.data or res.data[0].get("decision") != "rejected":
+        return None
+    return res.data[0].get("reason") or None
+
+
 def proof_view(client: Client, proof: dict) -> dict:
     url = proof.get("storage_path")
     if proof.get("proof_type") != LINK_PROOF and url:

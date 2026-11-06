@@ -1,0 +1,24 @@
+<section class="prose proof-section" id="proof">
+  <h2>{{ form_title|default("Доказательство выполнения") }}</h2>
+  {% if form_hint %}<p class="muted">{{ form_hint }}</p>{% endif %}
+  <form method="post" action="/achievements/{{ achievement.id }}/complete" class="stack" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <fieldset class="field proof-field">
+      <legend class="field-label">Доказательство</legend>
+      <p class="muted">Приложите файл (до {{ max_proof_bytes // 1048576 }} МБ) или ссылку. Для видео лучше ссылка на YouTube/Диск.</p>
+      <label class="field">
+        <span class="field-label">Файл</span>
+        <input type="file" name="file" data-max-bytes="{{ max_proof_bytes }}">
+      </label>
+      <label class="field">
+        <span class="field-label">Ссылка</span>
+        <input type="url" name="external_url" placeholder="https://...">
+      </label>
+    </fieldset>
+    <label class="field">
+      <span class="field-label">Комментарий</span>
+      <textarea name="description" rows="3" maxlength="2000"></textarea>
+    </label>
+    <button type="submit" class="btn btn-primary">{{ submit_label|default("Отправить на модерацию") }}</button>
+  </form>
+</section>

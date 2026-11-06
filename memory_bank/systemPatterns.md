@@ -84,7 +84,7 @@ gal/
 ### 3. Жизненный цикл сущностей
 
 - **Achievement:** `pending → published` (после модерации), либо `rejected`; `deleted` — автором (только `pending`) или модератором (hide/принятие жалобы).
-- **Completion:** `pending → approved` / `rejected` (модерация proof). `UNIQUE(achievement, user)`. При reject/hide достижения его pending-заявки отклоняются.
+- **Completion:** `pending → approved` / `rejected` (модерация proof). `UNIQUE(achievement, user)`. При reject/hide достижения его pending-заявки отклоняются; автор может переотправить rejected-заявку (reset RPC + замена proof) из карточки или `/submissions`.
 - **Evaluation:** `UNIQUE(achievement, user)`. `locked=true` после перехода достижения `unknown → ranked`.
 - **Report:** `pending → accepted` / `rejected`.
 - **Moderation review:** пишется при каждом решении (achievement/completion), только от имени текущего модератора (RLS 013), виден модераторам в `/moderation/history`.

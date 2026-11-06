@@ -21,6 +21,7 @@ from app.routers import (
     moderation,
     rankings,
     reports,
+    submissions,
     users,
 )
 from app.routers import (
@@ -131,6 +132,7 @@ app.include_router(moderation.router)
 app.include_router(rankings.router)
 app.include_router(reports.router)
 app.include_router(settings_router.router)
+app.include_router(submissions.router)
 app.include_router(users.router)
 
 
