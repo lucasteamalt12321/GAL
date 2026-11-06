@@ -3,10 +3,13 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from app import presentation
+from app.config import get_settings
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+templates.env.globals["lthub_oauth_enabled"] = get_settings().lthub_oauth_enabled
 
 templates.env.filters["status_label"] = presentation.achievement_status
 templates.env.filters["completion_status_label"] = presentation.completion_status

@@ -39,10 +39,10 @@ def _page(request: Request, name: str, **ctx) -> HTMLResponse:
 
 
 @router.get("/login", response_class=HTMLResponse, include_in_schema=False)
-def login_page(request: Request) -> HTMLResponse:
+def login_page(request: Request, error: str | None = None) -> HTMLResponse:
     if request.state.user:
         return RedirectResponse(AUTH_REDIRECT, status_code=303)
-    return _page(request, "auth/login.html", email="")
+    return _page(request, "auth/login.html", email="", error=error)
 
 
 @router.post("/login", response_class=HTMLResponse, include_in_schema=False)

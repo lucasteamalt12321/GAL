@@ -17,6 +17,7 @@ from app.routers import (
     completions,
     evaluations,
     health,
+    lthub_auth,
     moderation,
     rankings,
     reports,
@@ -122,6 +123,7 @@ async def _handle_supabase_not_configured(
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(lthub_auth.router)
 app.include_router(achievements.router)
 app.include_router(completions.router)
 app.include_router(evaluations.router)

@@ -76,6 +76,7 @@ PostgreSQL  Auth     Storage
 ## Аутентификация
 
 - `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `Secure` в проде).
+- **Вход через LTHub:** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie и редиректит на LTHub `/oauth/authorize`; `GET /auth/lthub/callback` проверяет state, меняет код на токен (PKCE S256), читает `/oauth/userinfo` и логинит/создаёт Supabase-пользователя через `external_identities` (миграция 015). LTHub — публичный PKCE-клиент, client secret не используется.
 - `POST /auth/logout` — `sign_out` + удаление cookie.
 - `POST /auth/recover` — письмо со ссылкой на `/auth/update-password` (`APP_URL` или текущий origin).
 - `GET /auth/update-password` — страница завершения сброса: токены приходят во фрагменте URL, пароль отправляется из браузера напрямую в Supabase Auth (`PUT /auth/v1/user`), anon key публичен.
@@ -172,6 +173,7 @@ PostgreSQL  Auth     Storage
 - `012_revoke_internal_execute.sql` — revoke execute на `recompute_ranks_internal()`.
 - `013_ui_features_and_hardening.sql` — soft-delete своих pending, удаление публичной политики proofs, авторство истории модерации, deferred trigger proof создателя, `player_leaderboard_page`.
 - `014_bradley_terry.sql` — колонки `bt_strength/bt_rating/bt_comparisons/bt_updated_at`, guard новых полей, ранжирование по BT, RPC `apply_bt_ratings(jsonb)` для `service_role`.
+- `015_external_identities.sql` — привязка внешних identity (LTHub) к профилям; доступ только `service_role`.
 
 **Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014** (008 содержит `create or replace` устаревших функций, после неё обязательно переприменение 010/011).
 

@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     # Часовой пояс отображения дат в UI (смещение от UTC, часы).
     display_utc_offset_hours: int = 3
 
+    # LTHub OAuth (публичный PKCE-клиент, без client_secret).
+    lthub_oauth_enabled: bool = True
+    lthub_client_id: str = "gal"
+    lthub_authorize_url: str = "https://lthub.vercel.app/oauth/authorize"
+    lthub_token_url: str = "https://lthub.vercel.app/oauth/token"
+    lthub_userinfo_url: str = "https://lthub.vercel.app/oauth/userinfo"
+    # Пусто — берётся APP_URL (или origin запроса) + /auth/lthub/callback.
+    lthub_redirect_uri: str = ""
+
     @property
     def is_production(self) -> bool:
         """Единая точка истины для production-поведения.

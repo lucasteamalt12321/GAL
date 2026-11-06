@@ -6,7 +6,7 @@
 
 ## Что умеет
 
-- регистрация, вход, выход, восстановление пароля и смена пароля;
+- регистрация, вход (включая **вход через LTHub**), выход, восстановление пароля и смена пароля;
 - предложение достижения с доказательством собственного выполнения (файл или ссылка);
 - редактирование и удаление своего достижения, пока оно на модерации;
 - модерация достижений и proofs, скрытие опубликованных достижений, история решений;
@@ -72,6 +72,10 @@ cp .env.example .env
 | `APP_URL` | публичный URL (для ссылки сброса пароля); по умолчанию берётся из запроса |
 | `SUPABASE_TIMEOUT_SECONDS` | таймаут PostgREST, по умолчанию `6` |
 | `DISPLAY_UTC_OFFSET_HOURS` | смещение дат в UI, по умолчанию `3` |
+| `LTHUB_OAUTH_ENABLED` | включить кнопку «Войти через LTHub» (по умолчанию `true`) |
+| `LTHUB_CLIENT_ID` | OAuth client id в LTHub, по умолчанию `gal` |
+| `LTHUB_AUTHORIZE_URL` / `LTHUB_TOKEN_URL` / `LTHUB_USERINFO_URL` | endpoints LTHub |
+| `LTHUB_REDIRECT_URI` | callback; пусто — `APP_URL` + `/auth/lthub/callback` |
 
 Без ключей приложение запустится, но страницы с данными вернут `503`, а `/health` покажет `supabase.configured: false`.
 
@@ -94,6 +98,10 @@ ruff format --check .
 ```
 
 CI (`.github/workflows/ci.yml`) запускает ruff и pytest на каждый push в `main` и каждый pull request.
+
+## Вход через LTHub
+
+GAL — публичный OAuth-клиент LTHub (authorization code + PKCE, без client secret). Кнопка есть на страницах входа и регистрации; при первом входе создаётся Supabase-аккаунт, привязанный к LTHub-профилю в `external_identities`. Подробности протокола — в `core/oauth.py` LTHub и `app/routers/lthub_auth.py`.
 
 ## Bradley–Terry
 

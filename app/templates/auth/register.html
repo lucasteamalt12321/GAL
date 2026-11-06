@@ -31,6 +31,10 @@
     </label>
     <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
   </form>
+  {% if lthub_oauth_enabled %}
+    <div class="auth-divider"><span>или</span></div>
+    <a class="btn btn-lthub" href="/auth/lthub">Зарегистрироваться через LThub</a>
+  {% endif %}
   <p class="muted">Уже есть аккаунт? <a href="/auth/login">Войти</a></p>
 </section>
 {% endblock %}
