@@ -378,7 +378,8 @@ def detail(
         )
         if own_completion is not None:
             proofs = completions_service.list_proofs(request, own_completion["id"])
-            proof_views = completions_service.decorate_proofs(request, proofs)
+            if proofs:
+                proof_views = completions_service.decorate_proofs(request, proofs)
         can_evaluate, eval_reason, my_evaluation = evaluation_service.evaluate_context(
             request, item
         )
