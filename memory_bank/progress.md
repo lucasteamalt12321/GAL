@@ -125,4 +125,4 @@
 
 ## last_checked_commit
 
-`e216724 chore: bump version to 1.1.0` (2026-11-05; проверено 2026-11-06)
+`2d7afed docs: add project idea and research framing (Bradley-Terry)` (2026-11-06)
