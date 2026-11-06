@@ -28,7 +28,13 @@ def complete(
         return RedirectResponse(LOGIN_URL, status_code=303)
 
     achievement = achievements_service.get_achievement(request, achievement_id)
-    if achievement is None or achievement["status"] != "published":
+    if achievement is None:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+    is_creator = str(request.state.user.id) == str(achievement["creator_id"])
+    allowed = achievement["status"] == "published" or (
+        achievement["status"] == "pending" and is_creator
+    )
+    if not allowed:
         raise HTTPException(status_code=404, detail="Achievement not found")
 
     try:

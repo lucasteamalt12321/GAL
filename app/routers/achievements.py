@@ -384,7 +384,12 @@ def detail(
         )
 
     can_submit = (
-        user is not None and own_completion is None and item["status"] == "published"
+        user is not None
+        and own_completion is None
+        and (
+            item["status"] == "published"
+            or (is_creator and item["status"] == "pending")
+        )
     )
     info_messages = {
         "submitted": "Доказательство отправлено на модерацию.",
