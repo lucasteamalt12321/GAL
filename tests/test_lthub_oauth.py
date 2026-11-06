@@ -116,3 +116,12 @@ def test_username_and_email_are_deterministic() -> None:
     long_subject = "a" * 64
     assert len(lthub_accounts._username_for(long_subject)) <= 32
     assert lthub_accounts._username_for(long_subject).startswith("lthub_")
+
+
+def test_username_prefers_lthub_login() -> None:
+    assert lthub_accounts._username_for("8", "shadowraven") == "shadowraven"
+    assert lthub_accounts._sanitize_username("shadow raven!") == "shadowraven"
+    assert lthub_accounts._sanitize_username("ab") is None
+    candidates = lthub_accounts._username_candidates("8", "shadowraven")
+    assert candidates[0] == "shadowraven"
+    assert candidates[-1] == "lthub_8"

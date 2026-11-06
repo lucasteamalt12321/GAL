@@ -3,6 +3,10 @@
 LTHub не отдаёт пароль и не хранит GAL-сессии. Мы создаём (или находим)
 служебного Supabase-пользователя с детерминированным email, привязываем его к
 `external_identities` и выдаём обычную cookie-сессию Supabase Auth.
+
+Username берётся из логина LTHub (например, `shadowraven`), а не из внутреннего
+subject. Если логин занят в GAL, добавляется суффикс; `lthub_<subject>` —
+только последний fallback.
 """
 
 from __future__ import annotations
@@ -29,12 +33,40 @@ def _email_for(subject: str) -> str:
     return f"lthub-oauth-{subject}@example.com"
 
 
-def _username_for(subject: str) -> str:
-    candidate = f"lthub_{subject}"
-    if len(candidate) <= 32:
+def _sanitize_username(value: str) -> str | None:
+    """Приводит ник LTHub к допустимому username GAL (3–32, ascii)."""
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]", "", (value or "").strip())
+    if not (3 <= len(cleaned) <= 32):
+        return None
+    if not USERNAME_RE.fullmatch(cleaned):
+        return None
+    return cleaned
+
+
+def _username_for(subject: str, login: str = "") -> str:
+    """Username по умолчанию: логин LTHub, иначе lthub_<subject>."""
+    candidate = _sanitize_username(login)
+    if candidate:
         return candidate
+    fallback = f"lthub_{subject}"
+    if len(fallback) <= 32:
+        return fallback
     digest = hashlib.sha256(subject.encode("utf-8")).hexdigest()[:20]
     return f"lthub_{digest}"
+
+
+def _username_candidates(subject: str, login: str) -> list[str]:
+    candidates: list[str] = []
+    base = _sanitize_username(login)
+    if base:
+        candidates.append(base)
+        suffixed = f"{base[:24]}_{subject}"[:32]
+        if suffixed not in candidates:
+            candidates.append(suffixed)
+    fallback = _username_for(subject, "")
+    if fallback not in candidates:
+        candidates.append(fallback)
+    return candidates
 
 
 def _validate_subject(subject: str) -> str:
@@ -58,12 +90,79 @@ def _find_identity(service, subject: str) -> str | None:
     return None
 
 
+def _find_profile_by_username(service, username: str) -> str | None:
+    res = (
+        service.table("profiles")
+        .select("id")
+        .ilike("username", auth_service.ilike_literal(username))
+        .limit(1)
+        .execute()
+    )
+    if res.data:
+        return str(res.data[0]["id"])
+    return None
+
+
+def _username_taken(service, username: str, *, exclude_id: str | None = None) -> bool:
+    query = (
+        service.table("profiles")
+        .select("id")
+        .ilike("username", auth_service.ilike_literal(username))
+        .limit(1)
+    )
+    if exclude_id:
+        query = query.neq("id", exclude_id)
+    res = query.execute()
+    return bool(res.data)
+
+
+def _pick_username(
+    service, *, subject: str, login: str, exclude_id: str | None = None
+) -> str:
+    for candidate in _username_candidates(subject, login):
+        if not _username_taken(service, candidate, exclude_id=exclude_id):
+            return candidate
+    return _username_for(subject, "")
+
+
+def _sync_profile(
+    service,
+    *,
+    profile_id: str,
+    subject: str,
+    login: str,
+    display_name: str,
+) -> None:
+    """Обновляет display_name и подтягивает ник LTHub для старых аккаунтов."""
+    res = (
+        service.table("profiles")
+        .select("id,username")
+        .eq("id", profile_id)
+        .maybe_single()
+        .execute()
+    )
+    current = None if res is None else res.data
+    if not current:
+        return
+    display = (display_name or login or "").strip()[:64]
+    payload: dict = {"display_name": display or None}
+    current_username = str(current.get("username") or "")
+    default_username = _username_for(subject, "")
+    if current_username.lower() == default_username.lower():
+        candidate = _username_for(subject, login)
+        if candidate.lower() != current_username.lower() and not _username_taken(
+            service, candidate, exclude_id=profile_id
+        ):
+            payload["username"] = candidate
+    service.table("profiles").update(payload).eq("id", profile_id).execute()
+
+
 def _create_or_reuse_user(
     service, *, subject: str, login: str, display_name: str
 ) -> str:
     email = _email_for(subject)
     password = secrets.token_urlsafe(32)
-    username = _username_for(subject)
+    username = _pick_username(service, subject=subject, login=login)
     display = (display_name or login or "").strip()[:64] or username
 
     try:
@@ -81,16 +180,22 @@ def _create_or_reuse_user(
         user_id = str(created.user.id)
     except auth_service.AUTH_ERRORS as exc:
         # Пользователь мог остаться от прерванного первого входа — ищем по
-        # детерминированному username и переиспользуем.
-        user_id = _find_profile_by_username(service, username)
+        # выбранному username или по старому lthub_<subject>.
+        user_id = _find_profile_by_username(
+            service, username
+        ) or _find_profile_by_username(service, _username_for(subject, ""))
         if user_id is None:
             raise LthubAccountError(
                 "Не удалось создать аккаунт GAL для LTHub."
             ) from exc
 
-    service.table("profiles").update({"display_name": display, "avatar_url": None}).eq(
-        "id", user_id
-    ).execute()
+    _sync_profile(
+        service,
+        profile_id=user_id,
+        subject=subject,
+        login=login,
+        display_name=display,
+    )
     try:
         service.table("external_identities").insert(
             {
@@ -108,19 +213,6 @@ def _create_or_reuse_user(
     return user_id
 
 
-def _find_profile_by_username(service, username: str) -> str | None:
-    res = (
-        service.table("profiles")
-        .select("id")
-        .eq("username", username)
-        .limit(1)
-        .execute()
-    )
-    if res.data:
-        return str(res.data[0]["id"])
-    return None
-
-
 def login_with_lthub(
     request: Request,
     *,
@@ -134,13 +226,20 @@ def login_with_lthub(
         raise LthubAccountError("Вход через LTHub временно недоступен.")
 
     subject = _validate_subject(subject)
-    login = (login or "lthub").strip()[:64]
+    login = (login or "").strip()[:64]
     display_name = (display_name or "").strip()[:64]
     service = auth_service.new_service_client()
     password = secrets.token_urlsafe(32)
 
     profile_id = _find_identity(service, subject)
     if profile_id is not None:
+        _sync_profile(
+            service,
+            profile_id=profile_id,
+            subject=subject,
+            login=login,
+            display_name=display_name,
+        )
         try:
             service.auth.admin.update_user_by_id(profile_id, {"password": password})
         except auth_service.AUTH_ERRORS:

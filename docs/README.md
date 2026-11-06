@@ -76,7 +76,7 @@ PostgreSQL  Auth     Storage
 ## Аутентификация
 
 - `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `Secure` в проде).
-- **Вход через LTHub:** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie и редиректит на LTHub `/oauth/authorize`; `GET /auth/lthub/callback` проверяет state, меняет код на токен (PKCE S256), читает `/oauth/userinfo` и логинит/создаёт Supabase-пользователя через `external_identities` (миграция 015). LTHub — публичный PKCE-клиент, client secret не используется.
+- **Вход через LTHub:** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie и редиректит на LTHub `/oauth/authorize`; `GET /auth/lthub/callback` проверяет state, меняет код на токен (PKCE S256), читает `/oauth/userinfo` и логинит/создаёт Supabase-пользователя через `external_identities` (миграция 015). Username берётся из логина LTHub (при занятости — суффикс/subject), display_name — из профиля LTHub. LTHub — публичный PKCE-клиент, client secret не используется.
 - `POST /auth/logout` — `sign_out` + удаление cookie.
 - `POST /auth/recover` — письмо со ссылкой на `/auth/update-password` (`APP_URL` или текущий origin).
 - `GET /auth/update-password` — страница завершения сброса: токены приходят во фрагменте URL, пароль отправляется из браузера напрямую в Supabase Auth (`PUT /auth/v1/user`), anon key публичен.
@@ -227,7 +227,7 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 140 тестов: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, сценарии v1.1–v1.3.
+- `pytest` — 141 тест: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, сценарии v1.1–v1.3.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 

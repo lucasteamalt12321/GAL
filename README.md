@@ -101,7 +101,7 @@ CI (`.github/workflows/ci.yml`) запускает ruff и pytest на кажд�
 
 ## Вход через LTHub
 
-GAL — публичный OAuth-клиент LTHub (authorization code + PKCE, без client secret). Кнопка есть на страницах входа и регистрации; при первом входе создаётся Supabase-аккаунт, привязанный к LTHub-профилю в `external_identities`. Подробности протокола — в `core/oauth.py` LTHub и `app/routers/lthub_auth.py`.
+GAL — публичный OAuth-клиент LTHub (authorization code + PKCE, без client secret). Кнопка есть на страницах входа и регистрации; при первом входе создаётся Supabase-аккаунт с **ником из LTHub** (если он свободен; иначе добавляется суффикс), привязанный к LTHub-профилю в `external_identities`. Подробности протокола — в `core/oauth.py` LTHub и `app/routers/lthub_auth.py`.
 
 ## Bradley–Terry
 
