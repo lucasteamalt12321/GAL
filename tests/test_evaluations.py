@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import achievements as achievements_service
 from app.services import auth as auth_service
+from app.services import completions as completions_service
 from app.services import evaluation as evaluation_service
 
 client = TestClient(app)
@@ -105,6 +106,31 @@ def test_evaluate_page_shows_scale(monkeypatch) -> None:
     assert "Other" in resp.text
     assert "data-scale-picker" in resp.text
     assert 'name="harder_count"' in resp.text
+
+
+def test_evaluate_page_suggests_unevaluated_completions(monkeypatch) -> None:
+    _login_as(monkeypatch)
+    monkeypatch.setattr(
+        achievements_service, "get_achievement", lambda *_: _achievement()
+    )
+    monkeypatch.setattr(
+        evaluation_service, "evaluate_context", lambda *_a: (True, None, None)
+    )
+    monkeypatch.setattr(evaluation_service, "list_user_scale", lambda *_a: [])
+    monkeypatch.setattr(
+        completions_service,
+        "list_approved_unevaluated",
+        lambda *_a: [
+            {
+                "achievement_id": 9,
+                "achievement": {"title": "Supersonic", "category": None},
+            }
+        ],
+    )
+    resp = client.get("/achievements/1/evaluate")
+    assert resp.status_code == 200
+    assert "Supersonic" in resp.text
+    assert "подтверждённые, но ещё не оценённые" in resp.text
 
 
 def test_evaluate_post_requires_auth() -> None:

@@ -16,6 +16,20 @@
     <strong>{{ achievement.title }}</strong>?
   </p>
 
+  {% if unevaluated %}
+    <div class="flash flash-info">
+      <p>У вас есть подтверждённые, но ещё не оценённые достижения. Чтобы шкала была точной, сначала оцените их:</p>
+      <ul class="proof-list">
+        {% for row in unevaluated %}
+          <li>
+            <a href="/achievements/{{ row.achievement_id }}/evaluate">{{ row.achievement.title }}</a>
+            {% if row.achievement.category %}<span class="muted">— {{ row.achievement.category.name }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
   {% if scale %}
     <section class="prose">
       <h2>Ваша личная шкала</h2>
@@ -31,7 +45,7 @@
     </section>
   {% else %}
     <section class="prose">
-      <p class="muted">Это ваша первая оценка — личная шкала ещё пуста, поэтому достижение станет её точкой отсчёта.</p>
+      <p class="muted">Это ваша первая оценка — личная шкала ещё пуста, поэтому достижение станет её точкой отсчёта.{% if unevaluated %} Если хотите сравнивать с уже выполненным, сначала оцените достижения из списка выше.{% endif %}</p>
     </section>
   {% endif %}
 

@@ -64,7 +64,14 @@
               {% elif item.status == 'pending' %}
                 <span class="muted">Ждёт проверки модератора</span>
               {% elif item.status == 'approved' %}
-                <span class="muted">Можно оценить сложность на странице достижения</span>
+                {% if item.has_evaluation %}
+                  <span class="muted">Оценка сложности уже сохранена</span>
+                {% else %}
+                  <div class="submission-actions">
+                    <a class="btn btn-small" href="/achievements/{{ item.achievement_id }}/evaluate">Оценить сложность</a>
+                  </div>
+                  <span class="muted">Подтверждено, но ещё не оценено — добавьте в личную шкалу.</span>
+                {% endif %}
               {% else %}
                 <span class="muted">—</span>
               {% endif %}

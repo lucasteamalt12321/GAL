@@ -131,10 +131,68 @@ def list_user_completions(request: Request, limit: int = 200) -> list[dict]:
         return rows
     rejected_ids = [row["id"] for row in rows if row.get("status") == "rejected"]
     reasons = _latest_rejection_reasons(client, rejected_ids)
+    approved_ids = [
+        int(row["achievement_id"])
+        for row in rows
+        if row.get("status") == "approved" and row.get("achievement_id")
+    ]
+    evaluated: set[int] = set()
+    if approved_ids:
+        try:
+            eval_res = (
+                client.table("evaluations")
+                .select("achievement_id")
+                .eq("user_id", user.id)
+                .in_("achievement_id", approved_ids)
+                .execute()
+            )
+            evaluated = {int(row["achievement_id"]) for row in eval_res.data or []}
+        except COMPLETION_ERRORS:
+            evaluated = set()
     for row in rows:
         row["rejection_reason"] = reasons.get(row["id"])
         row["proof_count"] = len(row.get("proofs") or [])
+        row["has_evaluation"] = int(row["achievement_id"]) in evaluated
     return rows
+
+
+def list_approved_unevaluated(request: Request) -> list[dict]:
+    """Подтверждённые выполнения без личной оценки (нужны как якоря шкалы)."""
+    user = request.state.user
+    client = auth_service.user_client_from_request(request)
+    if user is None or client is None:
+        return []
+    res = (
+        client.table("achievement_completions")
+        .select(
+            "achievement_id,achievement:achievements(id,title,status,"
+            "category:categories(name))"
+        )
+        .eq("user_id", user.id)
+        .eq("status", "approved")
+        .execute()
+    )
+    rows = [
+        row
+        for row in (res.data or [])
+        if row.get("achievement")
+        and row["achievement"].get("status") == "published"
+    ]
+    if not rows:
+        return []
+    ids = [int(row["achievement_id"]) for row in rows]
+    try:
+        eval_res = (
+            client.table("evaluations")
+            .select("achievement_id")
+            .eq("user_id", user.id)
+            .in_("achievement_id", ids)
+            .execute()
+        )
+        evaluated = {int(row["achievement_id"]) for row in eval_res.data or []}
+    except COMPLETION_ERRORS:
+        evaluated = set()
+    return [row for row in rows if int(row["achievement_id"]) not in evaluated]
 
 
 def _latest_rejection_reasons(client, completion_ids: list[int]) -> dict[int, str]:

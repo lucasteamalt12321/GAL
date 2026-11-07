@@ -232,7 +232,7 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 151 тест: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, сценарии v1.1–v1.4.
+- `pytest` — 152 теста: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, сценарии v1.1–v1.4.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 

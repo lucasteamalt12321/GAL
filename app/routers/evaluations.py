@@ -4,6 +4,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services import achievements as achievements_service
+from app.services import completions as completions_service
 from app.services import evaluation as evaluation_service
 from app.templating import templates
 
@@ -54,12 +55,18 @@ def evaluate_page(
 
     scale = evaluation_service.list_user_scale(request)
     others = [e for e in scale if e["achievement_id"] != achievement_id]
+    unevaluated = [
+        row
+        for row in completions_service.list_approved_unevaluated(request)
+        if int(row["achievement_id"]) != achievement_id
+    ]
     return templates.TemplateResponse(
         request=request,
         name="evaluations/evaluate.html",
         context={
             "achievement": item,
             "scale": others,
+            "unevaluated": unevaluated,
             "my_evaluation": my_eval,
             "error": error,
         },
