@@ -112,7 +112,7 @@ PostgreSQL  Auth     Storage
 ## Оценки
 
 - **Сложность спрашивается сразу:** при создании достижения — «Ожидаемая сложность», при прохождении существующего — «Сложность». Пользователь не вводит номер, а отвечает на серию сравнений «сложнее/легче, чем …» относительно своей личной шкалы (бинарный поиск позиции вставки).
-- Выбор сохраняется в `achievement_completions.requested_harder_count`; после approve модератором RPC `apply_completion_evaluation` применяет его как обычную оценку (сдвиг позиций, переход `unknown → ranked` при 3+, lock, пересчёт рангов).
+- Выбор сохраняется в `achievement_completions.requested_harder_count`; после approve модератором RPC `apply_completion_evaluation` применяет его как обычную оценку. Если у пользователя ещё нет ни одной оценки и сложность не была указана, первая approved-заявка автоматически становится якорем (позиция 1).
 - `POST /achievements/{id}/evaluate` — ручная правка оценки; та же шкала и сравнения, `p_harder_count` = число своих оценённых достижений, которые сложнее нового.
 - Оценка доступна только с `approved` completion; одно достижение = одна оценка.
 - При 3+ оценках достижение переходит `unknown → ranked`: оценки `locked`, фиксируется `rank_order`, `recompute_ranks()` перенумеровывает все ranked.
@@ -179,6 +179,7 @@ PostgreSQL  Auth     Storage
 - `015_external_identities.sql` — привязка внешних identity (LTHub) к профилям; доступ только `service_role`.
 - `016_completion_review_visibility.sql` — автор заявки видит `moderation_reviews` по своей заявке (причина отклонения).
 - `017_completion_difficulty.sql` — `requested_harder_count`, RPC `apply_completion_evaluation` (сложность из заявки → оценка после approve).
+- `018_auto_first_evaluation.sql` — первая approved-заявка без сохранённой сложности автоматически становится якорем (позиция 1); backfill для существующих пользователей.
 
 **Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014** (008 содержит `create or replace` устаревших функций, после неё обязательно переприменение 010/011).
 

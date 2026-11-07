@@ -74,7 +74,8 @@ LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
   - `014_bradley_terry.sql` — `bt_strength/bt_rating/bt_comparisons`, guard, ранжирование по BT, RPC `apply_bt_ratings(jsonb)` для `service_role`;
   - `015_external_identities.sql` — привязка LTHub identity к профилю (RLS, только `service_role`);
   - `016_completion_review_visibility.sql` — автор видит причину отклонения заявки;
-  - `017_completion_difficulty.sql` — `requested_harder_count` + RPC `apply_completion_evaluation`.
+  - `017_completion_difficulty.sql` — `requested_harder_count` + RPC `apply_completion_evaluation`;
+  - `018_auto_first_evaluation.sql` — авто-якорь первой approved-заявки + backfill.
 - Storage bucket `proofs` — приватный; файлы по пути `{user_id}/{achievement_id}/{uuid}-{file}`; доступ по signed URL (TTL 3600), RLS на `storage.objects`.
 - Миграции применяются через Management API: `POST https://api.supabase.com/v1/projects/{ref}/database/query` с `Authorization: Bearer <PAT>` (успех = 201), т.к. `psql`/supabase CLI недоступны.
 - API supabase-py 2.31: auth = `supabase_auth.SyncGoTrueClient` (`SyncClient`/`SyncSupabaseAuthClient` — импорт падает); Storage = `client.storage.from_("proofs")` (`storage3._sync.file_api.SyncBucketProxy`, `upload(path, bytes, FileOptions)`, `create_signed_url(path, expires_in)` → dict с `signedURL`/`signedUrl`, `remove`, `list`); исключения `storage3.exceptions.StorageException`/`StorageApiError`.

@@ -133,7 +133,8 @@ python scripts/bt_experiment.py         # синтетический экспе�
 - `014_bradley_terry.sql` — BT-колонки, guard, ранжирование по силе Bradley–Terry, RPC `apply_bt_ratings`.
 - `015_external_identities.sql` — привязка LTHub-identity к профилю (только `service_role`);
 - `016_completion_review_visibility.sql` — автор видит причину отклонения своей заявки;
-- `017_completion_difficulty.sql` — сложность, указанная при создании/прохождении, и её автоприменение после approve.
+- `017_completion_difficulty.sql` — сложность, указанная при создании/прохождении, и её автоприменение после approve;
+- `018_auto_first_evaluation.sql` — первая подтверждённая заявка автоматически становится якорем личной шкалы + backfill.
 
 Применение:
 
