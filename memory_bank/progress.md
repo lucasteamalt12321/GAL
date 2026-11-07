@@ -203,4 +203,4 @@
 
 ## last_checked_commit
 
-`9a9738f fix(achievements): skip proof URL signing when own completion has no proofs` (2026-11-06)
+`8fb00ba feat(difficulty): ask personal-scale position at creation/completion with comparisons` (2026-11-07)
