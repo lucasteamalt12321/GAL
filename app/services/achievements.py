@@ -118,24 +118,23 @@ def list_achievements(
         all_achievements.reverse()  # reverse чтобы created_at desc
     else:
         # Сортировка по рангу:
-        # - ranked: rank asc (от 1), затем created_at desc
-        # - unknown: average_position asc (если есть), иначе created_at desc
-        # Используем key для правильной сортировки
+        # Сортируем все достижения по позиции (rank для ranked, average_position для unknown).
+        # Unknown вставляются между ranked на основе average_position, но не занимают место в rank.
         def sort_key(a):
             if a.get("ranking_status") == "ranked":
-                # ranked: сначала по rank, потом по created_at
+                # ranked: используем rank как дробное число для сортировки
                 rank = a.get("rank")
                 created_at = a.get("created_at") or ""
                 if rank is None:
-                    return (1, float("inf"), created_at)
-                return (0, rank, created_at)
+                    return (float("inf"), created_at)
+                return (float(rank), created_at)
             else:
-                # unknown: сначала average_position, потом created_at
+                # unknown: используем average_position для вставки между ranked
                 avg_pos = a.get("average_position")
                 created_at = a.get("created_at") or ""
                 if avg_pos is None:
-                    return (2, float("inf"), created_at)
-                return (1, avg_pos, created_at)
+                    return (float("inf"), created_at)
+                return (float(avg_pos), created_at)
 
         all_achievements.sort(key=sort_key)
 
