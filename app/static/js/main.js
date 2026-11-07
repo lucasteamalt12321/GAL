@@ -87,7 +87,7 @@
       function showResult() {
         input.value = String(lo);
         if (!scale.length) {
-          result.textContent = "Личная шкала пока пуста — это будет первая точка отсчёта.";
+          result.textContent = "";
           compare.hidden = true;
           reset.hidden = true;
           return;

@@ -1,6 +1,10 @@
 <div class="scale-picker" data-scale-picker data-scale="{{ difficulty_scale|tojson }}">
   <p class="field-label">{{ difficulty_label|default("Сложность") }}</p>
-  <p class="muted">Сравните с достижениями, которые вы уже оценили. Не нужно вводить номер — просто отвечайте «сложнее» или «легче».</p>
+  {% if difficulty_scale %}
+    <p class="muted">Сравните с достижениями, которые вы уже оценили. Не нужно вводить номер — просто отвечайте «сложнее» или «легче».</p>
+  {% else %}
+    <p class="muted">Сравнивать пока не с чем — это ваша первая оценка. Достижение станет точкой отсчёта; следующие оценки будут сравниваться с ним. Просто сохраните.</p>
+  {% endif %}
   <div class="scale-compare" hidden>
     <p class="scale-question" aria-live="polite"></p>
     <div class="row">
