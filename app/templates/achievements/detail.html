@@ -88,9 +88,6 @@
     <div class="evaluation-box">
       <p>
         Ваша оценка сохранена в личной шкале.
-        {% if my_evaluation.locked %}
-          <span class="muted">Оценка зафиксирована — достижение уже ранжировано.</span>
-        {% endif %}
       </p>
     </div>
   {% elif eval_reason and request.state.user and achievement.status == 'published' %}
@@ -164,8 +161,6 @@
     <div class="detail-actions">
       <a class="btn btn-primary" href="/auth/login">Войдите, чтобы отправить доказательство</a>
     </div>
-  {% elif achievement.ranking_status == 'ranked' %}
-    <p class="muted">Достижение уже в глобальном рейтинге — новые доказательства и оценки не принимаются.</p>
   {% elif achievement.status == 'published' %}
     <p class="muted">Вы уже отправляли доказательство по этому достижению.</p>
   {% endif %}

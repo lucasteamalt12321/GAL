@@ -134,7 +134,8 @@ python scripts/bt_experiment.py         # синтетический экспе�
 - `015_external_identities.sql` — привязка LTHub-identity к профилю (только `service_role`);
 - `016_completion_review_visibility.sql` — автор видит причину отклонения своей заявки;
 - `017_completion_difficulty.sql` — сложность, указанная при создании/прохождении, и её автоприменение после approve;
-- `018_auto_first_evaluation.sql` — первая подтверждённая заявка автоматически становится якорем личной шкалы + backfill.
+- `018_auto_first_evaluation.sql` — первая подтверждённая заявка автоматически становится якорем личной шкалы + backfill;
+- `019_live_evaluations.sql` — новые оценки принимаются и после выхода в рейтинг; топ пересчитывается, lock снят.
 
 Применение:
 

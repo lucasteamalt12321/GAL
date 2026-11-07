@@ -162,18 +162,25 @@ def test_creator_can_attach_proof_to_pending(monkeypatch) -> None:
     assert resp.headers["location"] == "/achievements/1?info=submitted"
 
 
-def test_complete_ranked_achievement_404(monkeypatch) -> None:
+def test_complete_ranked_achievement_allowed(monkeypatch) -> None:
     _login_as(monkeypatch, "user")
     from app.services import achievements as achievements_service
 
     item = _published()
     item["ranking_status"] = "ranked"
     monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(
+        completions_service,
+        "submit_completion",
+        lambda *_a, **_k: {"id": 10},
+    )
     resp = client.post(
         "/achievements/1/complete",
         data={"external_url": "https://example.org/proof"},
+        follow_redirects=False,
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/achievements/1?info=submitted"
 
 
 def test_complete_success_redirects(monkeypatch) -> None:

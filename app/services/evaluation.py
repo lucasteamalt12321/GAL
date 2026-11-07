@@ -93,15 +93,8 @@ def can_evaluate(request: Request, achievement: dict) -> tuple[bool, str | None]
         return False, "Требуется вход в систему."
     if achievement.get("status") != "published":
         return False, "Это достижение ещё не опубликовано."
-    # Ранжированное достижение закрыто (миграция 011): иначе average_position
-    # и мировой rank можно было бы переигрывать после перехода в ranked.
-    if achievement.get("ranking_status") == "ranked":
-        return False, "Оценка зафиксирована — достижение уже ранжировано."
     if not _has_approved_completion(request, achievement["id"]):
         return False, "Оценивать можно только подтверждённо выполненные достижения."
-    my_eval = get_user_evaluation(request, achievement["id"])
-    if my_eval is not None and my_eval.get("locked"):
-        return False, "Оценка зафиксирована — достижение уже ранжировано."
     return True, None
 
 

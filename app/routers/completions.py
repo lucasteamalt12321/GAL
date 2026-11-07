@@ -33,10 +33,8 @@ def complete(
     if achievement is None:
         raise HTTPException(status_code=404, detail="Achievement not found")
     is_creator = str(request.state.user.id) == str(achievement["creator_id"])
-    ranked = achievement.get("ranking_status") == "ranked"
-    allowed = not ranked and (
-        achievement["status"] == "published"
-        or (achievement["status"] == "pending" and is_creator)
+    allowed = achievement["status"] == "published" or (
+        achievement["status"] == "pending" and is_creator
     )
     if not allowed:
         raise HTTPException(status_code=404, detail="Achievement not found")

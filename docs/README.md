@@ -113,9 +113,9 @@ PostgreSQL  Auth     Storage
 
 - **Сложность спрашивается сразу:** при создании достижения — «Ожидаемая сложность», при прохождении существующего — «Сложность». Пользователь не вводит номер, а отвечает на серию сравнений «сложнее/легче, чем …» относительно своей личной шкалы (бинарный поиск позиции вставки).
 - Выбор сохраняется в `achievement_completions.requested_harder_count`; после approve модератором RPC `apply_completion_evaluation` применяет его как обычную оценку. Если у пользователя ещё нет ни одной оценки и сложность не была указана, первая approved-заявка автоматически становится якорем (позиция 1).
+- **Новые оценки принимаются в любой момент**, в том числе после выхода достижения в `ranked`: каждая новая заявка/оценка пересчитывает среднее, ранги и BT-рейтинг. Оценки не блокируются (`locked` всегда false).
 - `POST /achievements/{id}/evaluate` — ручная правка оценки; та же шкала и сравнения, `p_harder_count` = число своих оценённых достижений, которые сложнее нового.
-- Оценка доступна только с `approved` completion; одно достижение = одна оценка.
-- При 3+ оценках достижение переходит `unknown → ranked`: оценки `locked`, фиксируется `rank_order`, `recompute_ranks()` перенумеровывает все ranked.
+- Оценка доступна только с `approved` completion; одно достижение = одна оценка (новые пользователи добавляют новые оценки).
 - Ошибки RPC (`AUTH_REQUIRED` / `NOT_APPROVED` / `NOT_FOUND` / `LOCKED`) маппятся в `EvaluationError` и показываются flash-сообщением.
 - Атомарная логика — security definer функции `public.submit_evaluation` и `public.apply_completion_evaluation`.
 
@@ -180,6 +180,7 @@ PostgreSQL  Auth     Storage
 - `016_completion_review_visibility.sql` — автор заявки видит `moderation_reviews` по своей заявке (причина отклонения).
 - `017_completion_difficulty.sql` — `requested_harder_count`, RPC `apply_completion_evaluation` (сложность из заявки → оценка после approve).
 - `018_auto_first_evaluation.sql` — первая approved-заявка без сохранённой сложности автоматически становится якорем (позиция 1); backfill для существующих пользователей.
+- `019_live_evaluations.sql` — снятие lock, приём новых оценок после `ranked`, пересчёт рангов при каждой новой оценке.
 
 **Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014** (008 содержит `create or replace` устаревших функций, после неё обязательно переприменение 010/011).
 
@@ -233,7 +234,7 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 152 теста: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, сценарии v1.1–v1.4.
+- `pytest` — 153 теста: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, сценарии v1.1–v1.4.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 
