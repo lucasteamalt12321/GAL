@@ -120,6 +120,7 @@ def list_achievements(
         # Сортировка по рангу:
         # Сортируем все достижения по позиции (rank для ranked, average_position для unknown).
         # Unknown вставляются между ranked на основе average_position, но не занимают место в rank.
+        # Для unknown сдвигаем позицию на -0.5, чтобы они вставались между ranked.
         def sort_key(a):
             if a.get("ranking_status") == "ranked":
                 # ranked: используем rank как дробное число для сортировки
@@ -129,12 +130,13 @@ def list_achievements(
                     return (float("inf"), "ranked", created_at)
                 return (float(rank), "ranked", created_at)
             else:
-                # unknown: используем average_position для вставки между ranked
+                # unknown: используем average_position - 0.5 для вставки между ranked
+                # например: avg_pos=1 -> 0.5 (перед rank=1), avg_pos=1.5 -> 1.0 (между rank=1 и rank=2)
                 avg_pos = a.get("average_position")
                 created_at = a.get("created_at") or ""
                 if avg_pos is None:
                     return (float("inf"), "unknown", created_at)
-                return (float(avg_pos), "unknown", created_at)
+                return (float(avg_pos) - 0.5, "unknown", created_at)
 
         all_achievements.sort(key=sort_key)
 
