@@ -138,16 +138,6 @@ def list_achievements(
 
         all_achievements.sort(key=sort_key)
 
-        # Отладка: вывести порядок сортировки
-        import logging
-
-        logger = logging.getLogger(__name__)
-        for i, a in enumerate(all_achievements):
-            key = sort_key(a)
-            logger.debug(
-                f"Sort {i}: id={a.get('id')}, status={a.get('ranking_status')}, rank={a.get('rank')}, avg_pos={a.get('average_position')}, key={key}"
-            )
-
     # Применяем pagination
     paginated = all_achievements[start : start + limit]
     return paginated, total
