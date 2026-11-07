@@ -287,6 +287,28 @@ body {
   margin-top: 1rem;
 }
 
+.scale-picker {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  background: rgba(76, 141, 255, 0.04);
+}
+
+.scale-question {
+  font-size: 1.05rem;
+  margin-bottom: 0.6rem;
+}
+
+.scale-result {
+  margin-top: 0.6rem;
+  min-height: 1.2rem;
+}
+
+.scale-picker .btn-small {
+  margin-top: 0.5rem;
+}
+
 .page-head {
   display: flex;
   align-items: center;

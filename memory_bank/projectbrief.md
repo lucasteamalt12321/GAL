@@ -4,7 +4,7 @@
 
 Глобальная платформа для рейтинга человеческих достижений. Сравнение достижений из разных сфер (Geometry Dash, музыка, шахматы, программирование, Minecraft, образование, спорт) через единую относительную шкалу сложности, построенную на личных сравнениях пользователей.
 
-> **Статус: MVP v1.0–v1.3 завершены.** Код задеплоен, миграции 013–016 применены. Вход через LTHub, раздел «Мои заявки» с переотправкой отклонённых. `pytest` — 146 passed, `ruff check`/`format` — чисто, CI зелёный.
+> **Статус: MVP v1.0–v1.4 завершены.** Код задеплоен, миграции 013–017 применены. Вход через LTHub, «Мои заявки», сложность при создании/прохождении и сравнительный выбор «сложнее/легче». `pytest` — 151 passed, `ruff check`/`format` — чисто.
 
 ## Рамки v1.2 (D13) — Bradley–Terry
 
@@ -70,7 +70,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D3  | Authentication + LThub OAuth      | completed | 8   |
 | D4  | Achievements CRUD                 | completed | 8   |
 | D5  | Proofs + Moderation               | completed | 12  |
-| D6  | Evaluation Engine + Creator Eval  | completed | 12  |
+| D6  | Evaluation + difficulty flow     | completed | 12  |
 | D7  | Ranking Engine (тесты)            | completed | 12  |
 | D8  | Player Score + Leaderboard        | completed | 8   |
 | D9  | Reports                           | completed | 4   |

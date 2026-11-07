@@ -1,0 +1,14 @@
+<div class="scale-picker" data-scale-picker data-scale="{{ difficulty_scale|tojson }}">
+  <p class="field-label">{{ difficulty_label|default("Сложность") }}</p>
+  <p class="muted">Сравните с достижениями, которые вы уже оценили. Не нужно вводить номер — просто отвечайте «сложнее» или «легче».</p>
+  <div class="scale-compare" hidden>
+    <p class="scale-question" aria-live="polite"></p>
+    <div class="row">
+      <button type="button" class="btn btn-primary" data-scale-answer="harder">Сложнее</button>
+      <button type="button" class="btn" data-scale-answer="easier">Легче</button>
+    </div>
+  </div>
+  <p class="scale-result muted" aria-live="polite"></p>
+  <button type="button" class="btn btn-small" data-scale-reset hidden>Изменить выбор</button>
+  <input type="hidden" name="harder_count" value="{{ harder_count|default('') }}">
+</div>

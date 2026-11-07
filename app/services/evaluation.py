@@ -34,6 +34,22 @@ class LockedError(EvaluationError):
     pass
 
 
+def parse_harder_count(raw: str | None, max_count: int) -> int | None:
+    """Строгий разбор позиции из формы (0..max_count)."""
+    value = (raw or "").strip()
+    if not value:
+        return 0 if max_count <= 0 else None
+    if not value.isascii() or not value.isdigit():
+        return None
+    try:
+        number = int(value)
+    except ValueError:
+        return None
+    if number < 0 or number > max_count or number > 10**6:
+        return None
+    return number
+
+
 def get_user_evaluation(request: Request, achievement_id: int) -> dict | None:
     user = request.state.user
     client = auth_service.user_client_from_request(request)

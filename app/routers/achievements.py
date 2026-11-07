@@ -46,6 +46,9 @@ def _form_context(
     achievement: dict | None = None,
     action: str = "/achievements/create",
     submit_label: str = "Отправить на модерацию",
+    scale: list[dict] | None = None,
+    harder_count: str = "",
+    difficulty_label: str = "Ожидаемая сложность",
 ) -> dict:
     return {
         "categories": achievements_service.list_categories(),
@@ -59,6 +62,9 @@ def _form_context(
         "action": action,
         "submit_label": submit_label,
         "max_proof_bytes": completions_service.MAX_REQUEST_PROOF_BYTES,
+        "difficulty_scale": scale or [],
+        "harder_count": harder_count,
+        "difficulty_label": difficulty_label,
     }
 
 
@@ -127,7 +133,7 @@ def create_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name=CREATE_TEMPLATE,
-        context=_create_context(),
+        context=_create_context(scale=evaluation_service.list_user_scale(request)),
     )
 
 
@@ -139,6 +145,7 @@ def create(
     requirements: str = Form(""),
     category_id: str = Form(""),
     external_url: str = Form(""),
+    harder_count: str = Form(""),
     file: Annotated[UploadFile | None, File()] = None,
 ) -> HTMLResponse:
     if request.state.user is None:
@@ -150,6 +157,8 @@ def create(
     external_url = external_url.strip()
     has_file = bool(file is not None and file.filename)
     parsed_category = _parse_category_id(category_id)
+    scale = evaluation_service.list_user_scale(request)
+    parsed_harder = evaluation_service.parse_harder_count(harder_count, len(scale))
 
     field_error = _validate_fields(title, description, requirements)
     if field_error:
@@ -163,6 +172,24 @@ def create(
                 requirements=requirements,
                 category_id=category_id,
                 external_url=external_url,
+                scale=scale,
+                harder_count=harder_count,
+            ),
+        )
+
+    if parsed_harder is None:
+        return templates.TemplateResponse(
+            request=request,
+            name=CREATE_TEMPLATE,
+            context=_create_context(
+                error="Укажите, где достижение стоит в вашей шкале сложности.",
+                title=title,
+                description=description,
+                requirements=requirements,
+                category_id=category_id,
+                external_url=external_url,
+                scale=scale,
+                harder_count=harder_count,
             ),
         )
 
@@ -177,6 +204,8 @@ def create(
                 requirements=requirements,
                 category_id=category_id,
                 external_url=external_url,
+                scale=scale,
+                harder_count=harder_count,
             ),
         )
 
@@ -204,6 +233,8 @@ def create(
                 requirements=requirements,
                 category_id=category_id,
                 external_url=external_url,
+                scale=scale,
+                harder_count=harder_count,
             ),
         )
 
@@ -214,6 +245,7 @@ def create(
             description="Доказательство создателя",
             external_url=external_url,
             uploaded=file,
+            harder_count=parsed_harder,
         )
     except completions_service.CompletionError as exc:
         return RedirectResponse(
@@ -405,6 +437,24 @@ def detail(
             request, own_completion["id"]
         )
         can_submit = True
+
+    difficulty_scale: list[dict] = []
+    if user is not None:
+        difficulty_scale = [
+            row
+            for row in evaluation_service.list_user_scale(request)
+            if row["achievement_id"] != achievement_id
+        ]
+    difficulty_label = (
+        "Ожидаемая сложность"
+        if is_creator and item["status"] == "pending"
+        else "Сложность"
+    )
+    existing_harder_count = ""
+    if own_completion is not None:
+        value = own_completion.get("requested_harder_count")
+        if value is not None:
+            existing_harder_count = str(value)
     return templates.TemplateResponse(
         request=request,
         name="achievements/detail.html",
@@ -418,6 +468,9 @@ def detail(
             "proofs": proof_views,
             "can_submit": can_submit,
             "rejection_reason": rejection_reason,
+            "difficulty_scale": difficulty_scale,
+            "difficulty_label": difficulty_label,
+            "harder_count": existing_harder_count,
             "my_evaluation": my_evaluation,
             "can_evaluate": can_evaluate,
             "eval_reason": eval_reason,

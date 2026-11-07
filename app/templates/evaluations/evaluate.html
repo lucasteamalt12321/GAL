@@ -19,11 +19,10 @@
   {% if scale %}
     <section class="prose">
       <h2>Ваша личная шкала</h2>
-      <p class="muted">От самого сложного (№1) к более простому. Новое достижение встанет в верх списка по соседству с теми, чей уровень сложности оно повторяет.</p>
+      <p class="muted">Сверху — более сложные для вас достижения, снизу — более простые. Новое достижение нужно сравнить с ними, а не выбирать номер.</p>
       <ol class="scale-list">
         {% for e in scale %}
           <li>
-            <span class="tag">№{{ e.position }}</span>
             <a href="/achievements/{{ e.achievement_id }}">{{ e.achievement.title }}</a>
             {% if e.achievement.category %}<span class="muted">— {{ e.achievement.category.name }}</span>{% endif %}
           </li>
@@ -32,25 +31,15 @@
     </section>
   {% else %}
     <section class="prose">
-      <p class="muted">Это ваша первая оценка — личная шкала ещё пуста, поэтому достижение станет вашей точкой отсчёта (позиция №1).</p>
+      <p class="muted">Это ваша первая оценка — личная шкала ещё пуста, поэтому достижение станет её точкой отсчёта.</p>
     </section>
   {% endif %}
 
   <form method="post" action="/achievements/{{ achievement.id }}/evaluate" class="stack eval-form">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <label class="field">
-      <span class="field-label">Позиция в вашем личном топе (№1 — самое сложное из сделанного вами)</span>
-      <select name="harder_count" required>
-        <option value="" selected disabled>— выберите —</option>
-        {% if scale %}
-          {% for i in range(scale|length + 1) %}
-            <option value="{{ i }}">№{{ i + 1 }}</option>
-          {% endfor %}
-        {% else %}
-          <option value="0">№1</option>
-        {% endif %}
-      </select>
-    </label>
+    {% with difficulty_scale=scale, difficulty_label="Сложность", harder_count=(my_evaluation.position - 1)|int if my_evaluation else '' %}
+      {% include "partials/scale_picker.html" %}
+    {% endwith %}
     <div class="row">
       <button type="submit" class="btn btn-primary">Сохранить оценку</button>
       <a class="btn" href="/achievements/{{ achievement.id }}">Отмена</a>
@@ -58,7 +47,7 @@
   </form>
 
   {% if my_evaluation and not my_evaluation.locked %}
-    <p class="muted">Ваша текущая оценка — позиция №{{ my_evaluation.position }}. Вы можете изменить её, пока достижение не ранжировано.</p>
+    <p class="muted">Ваша текущая оценка сохранена. Можно изменить её, пока достижение не ранжировано — просто пройдите сравнения заново.</p>
   {% endif %}
 </article>
 {% endblock %}

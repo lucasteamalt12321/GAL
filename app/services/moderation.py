@@ -177,7 +177,7 @@ def _creator_completion(client, achievement_id: int, creator_id: str) -> dict | 
 
 def _approve_creator_completion(
     client, achievement_id: int, creator_id: str, moderator_id: str
-) -> None:
+) -> int | None:
     """Одобряет выполнение создателя до публикации достижения.
 
     Порядок важен: публикация без approved-completion запрещена deferred
@@ -197,7 +197,7 @@ def _approve_creator_completion(
             "Нельзя опубликовать достижение: доказательство автора было отклонено."
         )
     if comp["status"] == "approved":
-        return
+        return int(comp["id"])
     client.table("achievement_completions").update(
         {"status": "approved", "approved_at": _now_iso()}
     ).eq("id", comp["id"]).execute()
@@ -209,6 +209,24 @@ def _approve_creator_completion(
             "reason": "Creator completion auto-approved with achievement",
         }
     ).execute()
+    return int(comp["id"])
+
+
+def _apply_completion_evaluation(client, completion_id: int | None) -> None:
+    """Применяет сохранённую сложность заявки к личной шкале автора."""
+    if completion_id is None:
+        return
+    try:
+        client.rpc(
+            "apply_completion_evaluation",
+            {"p_completion_id": completion_id},
+        ).execute()
+    except MODERATION_ERRORS:
+        logger.warning(
+            "apply_completion_evaluation failed for completion %s",
+            completion_id,
+            exc_info=True,
+        )
 
 
 def _reject_creator_completion(
@@ -260,8 +278,11 @@ def decide_achievement(
         raise ModerationError("Достижение не найдено или уже рассмотрено.")
     creator_id = target["creator_id"]
 
+    creator_completion_id = None
     if decision == "approved":
-        _approve_creator_completion(client, achievement_id, creator_id, user.id)
+        creator_completion_id = _approve_creator_completion(
+            client, achievement_id, creator_id, user.id
+        )
 
     updated = (
         client.table("achievements")
@@ -284,6 +305,10 @@ def decide_achievement(
 
     if decision == "rejected":
         _reject_creator_completion(client, achievement_id, creator_id, user.id, reason)
+    else:
+        # Достижение уже published — теперь сохранённая ожидаемая сложность
+        # создателя может стать его первой оценкой.
+        _apply_completion_evaluation(client, creator_completion_id)
 
     # Публикация/отклонение меняет состав достижений в глобальной модели.
     bt_recompute.try_recompute_global_ratings()
@@ -364,3 +389,7 @@ def decide_completion(
             "reason": reason,
         }
     ).execute()
+
+    if decision == "approved":
+        _apply_completion_evaluation(client, completion_id)
+        bt_recompute.try_recompute_global_ratings()

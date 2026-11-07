@@ -103,7 +103,8 @@ def test_evaluate_page_shows_scale(monkeypatch) -> None:
     resp = client.get("/achievements/1/evaluate")
     assert resp.status_code == 200
     assert "Other" in resp.text
-    assert '<select name="harder_count"' in resp.text
+    assert "data-scale-picker" in resp.text
+    assert 'name="harder_count"' in resp.text
 
 
 def test_evaluate_post_requires_auth() -> None:

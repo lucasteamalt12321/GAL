@@ -72,7 +72,9 @@ LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
   - `005`–`012` — движок оценок, хардинг, integrity, lock, revoke internal execute;
   - `013_ui_features_and_hardening.sql` — soft-delete своих pending, приватность proofs, авторство истории модерации, deferred trigger «публикация только с approved proof создателя», постраничный `player_leaderboard_page`;
   - `014_bradley_terry.sql` — `bt_strength/bt_rating/bt_comparisons`, guard, ранжирование по BT, RPC `apply_bt_ratings(jsonb)` для `service_role`;
-  - `015_external_identities.sql` — привязка LTHub identity к профилю (RLS, только `service_role`).
+  - `015_external_identities.sql` — привязка LTHub identity к профилю (RLS, только `service_role`);
+  - `016_completion_review_visibility.sql` — автор видит причину отклонения заявки;
+  - `017_completion_difficulty.sql` — `requested_harder_count` + RPC `apply_completion_evaluation`.
 - Storage bucket `proofs` — приватный; файлы по пути `{user_id}/{achievement_id}/{uuid}-{file}`; доступ по signed URL (TTL 3600), RLS на `storage.objects`.
 - Миграции применяются через Management API: `POST https://api.supabase.com/v1/projects/{ref}/database/query` с `Authorization: Bearer <PAT>` (успех = 201), т.к. `psql`/supabase CLI недоступны.
 - API supabase-py 2.31: auth = `supabase_auth.SyncGoTrueClient` (`SyncClient`/`SyncSupabaseAuthClient` — импорт падает); Storage = `client.storage.from_("proofs")` (`storage3._sync.file_api.SyncBucketProxy`, `upload(path, bytes, FileOptions)`, `create_signed_url(path, expires_in)` → dict с `signedURL`/`signedUrl`, `remove`, `list`); исключения `storage3.exceptions.StorageException`/`StorageApiError`.
@@ -90,7 +92,7 @@ LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
 - GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
 - Push → Vercel (production).
 - Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .`.
-- Тесты: 146 (ранкинг/BT, OAuth, «Мои заявки», роуты, CSRF, resilience, v1.1–v1.3 сценарии).
+- Тесты: 151 (ранкинг/BT, OAuth, «Мои заявки», сложность/сравнения, роуты, CSRF, resilience, v1.1–v1.4 сценарии).
 - Bradley–Terry: `scripts/recompute_bt.py` (service role), эксперимент `scripts/bt_experiment.py`; формула/ограничения — `docs/bradley_terry.md`.
 - LTHub OAuth: публичный PKCE-клиент `gal`, provider в BankBot `core/oauth.py`; GAL-клиент — `app/routers/lthub_auth.py` + `app/services/lthub_accounts.py`.
 - `ruff` закреплён версией `0.17.4` в `requirements-dev.txt` (CI и локальная проверка совпадают).

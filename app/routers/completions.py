@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services import achievements as achievements_service
 from app.services import completions as completions_service
+from app.services import evaluation as evaluation_service
 
 router = APIRouter(tags=["completions"])
 
@@ -22,6 +23,7 @@ def complete(
     achievement_id: int,
     description: str = Form(""),
     external_url: str = Form(""),
+    harder_count: str = Form(""),
     file: Annotated[UploadFile | None, File()] = None,
 ) -> HTMLResponse:
     if request.state.user is None:
@@ -37,6 +39,16 @@ def complete(
     if not allowed:
         raise HTTPException(status_code=404, detail="Achievement not found")
 
+    scale = evaluation_service.list_user_scale(request)
+    others = [row for row in scale if row["achievement_id"] != achievement_id]
+    parsed = evaluation_service.parse_harder_count(harder_count, len(others))
+    if parsed is None:
+        return RedirectResponse(
+            f"/achievements/{achievement_id}"
+            f"?error={quote('Выберите, сложнее или легче ваших достижений новое.')}",
+            status_code=303,
+        )
+
     try:
         completions_service.submit_completion(
             request,
@@ -44,6 +56,7 @@ def complete(
             description=description,
             external_url=external_url,
             uploaded=file,
+            harder_count=parsed,
         )
     except completions_service.CompletionError as exc:
         return RedirectResponse(

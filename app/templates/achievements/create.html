@@ -28,6 +28,7 @@
       <span class="field-label">Требования / критерии выполнения</span>
       <textarea name="requirements" rows="3" maxlength="4000">{{ requirements }}</textarea>
     </label>
+    {% include "partials/scale_picker.html" %}
     <fieldset class="field proof-field">
       <legend class="field-label">Ваше доказательство</legend>
       <p class="muted">Приложите файл (до {{ max_proof_bytes // 1048576 }} МБ) или ссылку.</p>

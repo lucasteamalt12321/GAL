@@ -111,11 +111,13 @@ PostgreSQL  Auth     Storage
 
 ## Оценки
 
-- `POST /achievements/{id}/evaluate` — оценка сложности в личной шкале: `p_harder_count` = сколько своих оценённых достижений общо сложнее; позиция = `p_harder_count + 1`, существующие позиции сдвигаются (двухпроходный `submit_evaluation`).
-- Первая оценка — «якорь №1». Оценка доступна только с `approved` completion; одно достижение = одна оценка.
-- При 3+ оценках достижение переходит `unknown → ranked`: оценки `locked`, фиксируется `rank_order`, присваивается `rank=max(rank)+1`, `recompute_ranks()` перенумеровывает все ranked.
+- **Сложность спрашивается сразу:** при создании достижения — «Ожидаемая сложность», при прохождении существующего — «Сложность». Пользователь не вводит номер, а отвечает на серию сравнений «сложнее/легче, чем …» относительно своей личной шкалы (бинарный поиск позиции вставки).
+- Выбор сохраняется в `achievement_completions.requested_harder_count`; после approve модератором RPC `apply_completion_evaluation` применяет его как обычную оценку (сдвиг позиций, переход `unknown → ranked` при 3+, lock, пересчёт рангов).
+- `POST /achievements/{id}/evaluate` — ручная правка оценки; та же шкала и сравнения, `p_harder_count` = число своих оценённых достижений, которые сложнее нового.
+- Оценка доступна только с `approved` completion; одно достижение = одна оценка.
+- При 3+ оценках достижение переходит `unknown → ranked`: оценки `locked`, фиксируется `rank_order`, `recompute_ranks()` перенумеровывает все ranked.
 - Ошибки RPC (`AUTH_REQUIRED` / `NOT_APPROVED` / `NOT_FOUND` / `LOCKED`) маппятся в `EvaluationError` и показываются flash-сообщением.
-- Атомарная логика — security definer функция `public.submit_evaluation` (директива `#variable_conflict use_column` обязательна).
+- Атомарная логика — security definer функции `public.submit_evaluation` и `public.apply_completion_evaluation`.
 
 ## Ранкинг и лидерборды
 
@@ -176,6 +178,7 @@ PostgreSQL  Auth     Storage
 - `014_bradley_terry.sql` — колонки `bt_strength/bt_rating/bt_comparisons/bt_updated_at`, guard новых полей, ранжирование по BT, RPC `apply_bt_ratings(jsonb)` для `service_role`.
 - `015_external_identities.sql` — привязка внешних identity (LTHub) к профилям; доступ только `service_role`.
 - `016_completion_review_visibility.sql` — автор заявки видит `moderation_reviews` по своей заявке (причина отклонения).
+- `017_completion_difficulty.sql` — `requested_harder_count`, RPC `apply_completion_evaluation` (сложность из заявки → оценка после approve).
 
 **Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014** (008 содержит `create or replace` устаревших функций, после неё обязательно переприменение 010/011).
 
@@ -229,10 +232,10 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 146 тестов: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сценарии v1.1–v1.3.
+- `pytest` — 151 тест: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, сценарии v1.1–v1.4.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 
 ## Статус
 
-Документация соответствует состоянию после v1.3: каркас, миграции 001–015, аутентификация и сброс пароля, вход через LTHub (OAuth + PKCE), достижения + профили + настройки, доказательства и модерация, движок оценок, глобальный ранкинг Bradley–Terry, лидерборды с пагинацией, жалобы, CSRF/ошибки/адаптивный UI, CI. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию после v1.4: каркас, миграции 001–017, аутентификация и сброс пароля, вход через LTHub (OAuth + PKCE), достижения + профили + настройки, сложность при создании/прохождении, доказательства и модерация, движок оценок, глобальный ранкинг Bradley–Terry, лидерборды с пагинацией, жалобы, «Мои заявки», CSRF/ошибки/адаптивный UI, CI. Обновлять при изменениях архитектуры, маршрутов и модулей.

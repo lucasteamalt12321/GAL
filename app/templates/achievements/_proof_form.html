@@ -2,6 +2,7 @@
   <h2>{{ form_title|default("Доказательство выполнения") }}</h2>
   {% if form_hint %}<p class="muted">{{ form_hint }}</p>{% endif %}
   <form method="post" action="/achievements/{{ achievement.id }}/complete" class="stack" enctype="multipart/form-data">
+    {% include "partials/scale_picker.html" %}
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <fieldset class="field proof-field">
       <legend class="field-label">Доказательство</legend>

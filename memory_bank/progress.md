@@ -13,7 +13,7 @@
 | D3  | Authentication + LThub OAuth      | completed |
 | D4  | Achievements CRUD                 | completed |
 | D5  | Proofs + Moderation               | completed |
-| D6  | Evaluation Engine + Creator Eval  | completed |
+| D6  | Evaluation + difficulty flow     | completed |
 | D7  | Ranking Engine (тесты)            | completed |
 | D8  | Player Score + Leaderboard        | completed |
 | D9  | Reports                           | completed |
@@ -23,6 +23,22 @@
 | D13 | v1.2: Bradley–Terry ранкинг       | completed |
 
 ## Changelog
+
+### 2026-11-07 — v1.4: сложность при создании/прохождении и сравнительный выбор
+
+**Запрос.** Спрашивать позицию достижения в личной шкале уже при создании и при прохождении; поле при прохождении — «Сложность», при верификации — «Ожидаемая сложность»; при оценке не вводить топ-1/2/3, а отвечать «сложнее/легче, чем …».
+
+**Реализовано.**
+- Общий виджет `partials/scale_picker.html` + JS: бинарный поиск позиции по ответам «Сложнее/Легче»; показывает, между какими достижениями встанет новое; без номеров.
+- Создание достижения: обязательный шаг «Ожидаемая сложность»; значение уходит в `submit_completion`.
+- Прохождение существующего: поле «Сложность»; значение сохраняется в `achievement_completions.requested_harder_count`.
+- Переотправка отклонённой заявки: значение можно изменить, оно перезаписывается.
+- `apply_completion_evaluation(completion_id)` (миграция 017): после approve модератором создаёт обычную оценку автора (сдвиг шкалы, порог 3, lock, пересчёт рангов). Вызывается при approve completion и approve достижения (creator completion).
+- Страница оценки: вместо select «№1/№2/…» — тот же сравнительный виджет; текст шкалы без номеров.
+- Тесты: `tests/test_difficulty.py` (5) + обновление evaluations; всего **151 passed**, ruff чист.
+
+**Прод.** Миграция 017 проверена в rollback (201) и применена (201); функция `apply_completion_evaluation` проверена в rollback-транзакции (создаёт 1 evaluation, счётчик достижения = 1).
+
 
 ### 2026-11-06 — «Мои заявки»: статусы, причины отклонения, переотправка
 

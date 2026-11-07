@@ -81,7 +81,10 @@ def get_user_completion(request: Request, achievement_id: int) -> dict | None:
         return None
     res = (
         client.table("achievement_completions")
-        .select("id,achievement_id,user_id,status,created_at,approved_at")
+        .select(
+            "id,achievement_id,user_id,status,created_at,approved_at,"
+            "requested_harder_count"
+        )
         .eq("achievement_id", achievement_id)
         .eq("user_id", user.id)
         .maybe_single()
@@ -197,22 +200,24 @@ def decorate_proofs(request: Request, proofs: list[dict]) -> list[dict]:
     return [proof_view(client, p) for p in proofs]
 
 
-def create_completion(request: Request, achievement_id: int, user_id: str) -> dict:
+def create_completion(
+    request: Request,
+    achievement_id: int,
+    user_id: str,
+    harder_count: int | None = None,
+) -> dict:
     client = auth_service.user_client_from_request(request)
     if client is None:
         raise CompletionError("Требуется вход в систему.")
+    payload = {
+        "achievement_id": achievement_id,
+        "user_id": user_id,
+        "status": "pending",
+    }
+    if harder_count is not None:
+        payload["requested_harder_count"] = harder_count
     try:
-        res = (
-            client.table("achievement_completions")
-            .insert(
-                {
-                    "achievement_id": achievement_id,
-                    "user_id": user_id,
-                    "status": "pending",
-                }
-            )
-            .execute()
-        )
+        res = client.table("achievement_completions").insert(payload).execute()
     except APIError as exc:
         if getattr(exc, "code", None) == "23505" or "duplicate" in str(exc).lower():
             raise AlreadyCompletedError(
@@ -339,6 +344,7 @@ def submit_completion(
     description: str,
     external_url: str,
     uploaded,
+    harder_count: int | None = None,
 ) -> dict:
     user = request.state.user
     if user is None:
@@ -376,12 +382,18 @@ def submit_completion(
                     exc_info=True,
                 )
         completion = {"id": res.data[0]["completion_id"]}
+        if harder_count is not None:
+            client.table("achievement_completions").update(
+                {"requested_harder_count": harder_count}
+            ).eq("id", completion["id"]).execute()
     elif existing is not None:
         raise AlreadyCompletedError(
             "Вы уже отправляли доказательство для этого достижения."
         )
     else:
-        completion = create_completion(request, achievement_id, user.id)
+        completion = create_completion(
+            request, achievement_id, user.id, harder_count=harder_count
+        )
 
     external_url = (external_url or "").strip()
     filename = getattr(uploaded, "filename", None)

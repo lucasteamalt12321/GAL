@@ -75,7 +75,7 @@
     <div class="evaluation-box">
       <p>
         Достижение подтверждено — поделитесь своей оценкой сложности.
-        {% if my_evaluation %} Ваша текущая оценка: позиция №{{ my_evaluation.position }}.{% endif %}
+        {% if my_evaluation %} Ваша оценка уже учтена в личной шкале.{% endif %}
       </p>
       <a class="btn btn-primary" href="/achievements/{{ achievement.id }}/evaluate">
         {% if my_evaluation %}Изменить оценку{% else %}Оценить сложность{% endif %}
@@ -84,7 +84,7 @@
   {% elif my_evaluation %}
     <div class="evaluation-box">
       <p>
-        Ваша оценка: позиция №{{ my_evaluation.position }}.
+        Ваша оценка сохранена в личной шкале.
         {% if my_evaluation.locked %}
           <span class="muted">Оценка зафиксирована — достижение уже ранжировано.</span>
         {% endif %}
