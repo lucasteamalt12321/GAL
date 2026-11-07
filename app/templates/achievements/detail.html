@@ -164,6 +164,8 @@
     <div class="detail-actions">
       <a class="btn btn-primary" href="/auth/login">Войдите, чтобы отправить доказательство</a>
     </div>
+  {% elif achievement.ranking_status == 'ranked' %}
+    <p class="muted">Достижение уже в глобальном рейтинге — новые доказательства и оценки не принимаются.</p>
   {% elif achievement.status == 'published' %}
     <p class="muted">Вы уже отправляли доказательство по этому достижению.</p>
   {% endif %}

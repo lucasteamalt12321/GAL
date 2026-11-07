@@ -419,6 +419,7 @@ def detail(
     can_submit = (
         user is not None
         and own_completion is None
+        and item.get("ranking_status") != "ranked"
         and (
             item["status"] == "published"
             or (is_creator and item["status"] == "pending")
@@ -436,7 +437,8 @@ def detail(
         rejection_reason = completions_service.get_rejection_reason(
             request, own_completion["id"]
         )
-        can_submit = True
+        if item.get("ranking_status") != "ranked":
+            can_submit = True
 
     difficulty_scale: list[dict] = []
     if user is not None:
