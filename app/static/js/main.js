@@ -81,7 +81,11 @@
 
       function titleAt(index) {
         var item = scale[index];
-        return item && item.title ? item.title : "достижение";
+        if (!item) return "достижение";
+        if (item.achievement && item.achievement.title) {
+          return item.achievement.title;
+        }
+        return item.title || "достижение";
       }
 
       function showResult() {
