@@ -346,22 +346,21 @@ def attach_proof(
 
     filename = getattr(uploaded, "filename", None)
     has_file = uploaded is not None and bool(filename)
+    
+    # Проверяем размер файла ДО его чтения в память
+    size = None
     if has_file:
         size = _uploaded_size(uploaded)
-        if size is not None and (
-            size > MAX_REQUEST_PROOF_BYTES or size > MAX_PROOF_BYTES
-        ):
+        if size is None:
+            raise ProofError("Не удалось определить размер файла.")
+        if size > MAX_REQUEST_PROOF_BYTES or size > MAX_PROOF_BYTES:
             raise ProofError(_too_large_message())
+    
+    # Теперь читаем файл
     content = uploaded.file.read() if has_file else b""
-    if has_file:
-        try:
-            uploaded.file.seek(0)
-        except (OSError, ValueError):
-            pass
+    
     if not content:
         raise ProofError("Приложите файл или укажите ссылку на доказательство.")
-    if len(content) > MAX_PROOF_BYTES:
-        raise ProofError(_too_large_message())
 
     content_type = getattr(uploaded, "content_type", None) or "application/octet-stream"
     path = f"{user.id}/{achievement_id}/{uuid.uuid4().hex}-{_safe_filename(filename)}"
@@ -369,8 +368,12 @@ def attach_proof(
         client.storage.from_(PROOFS_BUCKET).upload(
             path, content, {"content-type": content_type, "upsert": False}
         )
-    except COMPLETION_ERRORS as exc:
-        raise ProofError("Не удалось загрузить файл доказательства.") from exc
+    except StorageException as exc:
+        raise ProofError(f"Ошибка хранилища: {str(exc)}") from exc
+    except httpx.HTTPError as exc:
+        raise ProofError(f"Ошибка сети при загрузке: {str(exc)}") from exc
+    except Exception as exc:
+        raise ProofError(f"Не удалось загрузить файл доказательства: {str(exc)}") from exc
 
     try:
         res = (
@@ -481,9 +484,9 @@ def submit_completion(
             external_url=external_url,
             uploaded=uploaded,
         )
-    except CompletionError:
+    except CompletionError as exc:
         logger.warning(
-            "Proof attach failed for completion %s", completion["id"], exc_info=True
+            "Proof attach failed for completion %s: %s", completion["id"], str(exc), exc_info=True
         )
         try:
             client.rpc(
