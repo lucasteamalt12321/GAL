@@ -53,7 +53,7 @@
           <h2 class="card-title">{{ a.title }}</h2>
           <div class="card-meta">
             {% if a.category %}<span class="tag">{{ a.category.name }}</span>{% endif %}
-            <span class="muted">{{ a.evaluation_count }} {{ a.evaluation_count|plural_ru(('оценка', 'оценки', 'оценок')) }}</span>
+            <span class="muted">{{ a.evaluation_count }} {{ a.evaluation_count|plural_ru(('оценка', 'оценки', 'оценок')) }}{% if not a.rank and a.status == 'published' and a.evaluation_count < 3 %} · до рейтинга ещё {{ 3 - a.evaluation_count }}{% endif %}</span>
           </div>
         </div>
       </a>

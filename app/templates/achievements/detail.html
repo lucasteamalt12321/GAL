@@ -18,6 +18,9 @@
     <div class="stat">
       <span class="stat-label">Место в рейтинге</span>
       <span class="stat-value">{% if achievement.rank %}#{{ achievement.rank }}{% else %}?{% endif %}</span>
+      {% if not achievement.rank and achievement.status == 'published' and achievement.evaluation_count < 3 %}
+        <span class="hint muted">появится после 3 оценок (сейчас {{ achievement.evaluation_count }})</span>
+      {% endif %}
     </div>
     <div class="stat">
       <span class="stat-label">BT-рейтинг</span>
