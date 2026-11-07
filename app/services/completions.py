@@ -70,7 +70,8 @@ def _detect_proof_type(content_type: str | None, filename: str) -> str:
 
 def _safe_filename(filename: str) -> str:
     name = PurePosixPath(filename or "proof").name
-    cleaned = "".join(c for c in name if c.isalnum() or c in "._-")
+    # Разрешаем только латиницу, цифры и безопасные символы
+    cleaned = "".join(c for c in name if c.isascii() and (c.isalnum() or c in "._-"))
     return cleaned[:80] or "proof"
 
 
@@ -346,7 +347,7 @@ def attach_proof(
 
     filename = getattr(uploaded, "filename", None)
     has_file = uploaded is not None and bool(filename)
-    
+
     # Проверяем размер файла ДО его чтения в память
     size = None
     if has_file:
@@ -355,10 +356,10 @@ def attach_proof(
             raise ProofError("Не удалось определить размер файла.")
         if size > MAX_REQUEST_PROOF_BYTES or size > MAX_PROOF_BYTES:
             raise ProofError(_too_large_message())
-    
+
     # Теперь читаем файл
     content = uploaded.file.read() if has_file else b""
-    
+
     if not content:
         raise ProofError("Приложите файл или укажите ссылку на доказательство.")
 
@@ -373,7 +374,9 @@ def attach_proof(
     except httpx.HTTPError as exc:
         raise ProofError(f"Ошибка сети при загрузке: {str(exc)}") from exc
     except Exception as exc:
-        raise ProofError(f"Не удалось загрузить файл доказательства: {str(exc)}") from exc
+        raise ProofError(
+            f"Не удалось загрузить файл доказательства: {str(exc)}"
+        ) from exc
 
     try:
         res = (
@@ -486,7 +489,10 @@ def submit_completion(
         )
     except CompletionError as exc:
         logger.warning(
-            "Proof attach failed for completion %s: %s", completion["id"], str(exc), exc_info=True
+            "Proof attach failed for completion %s: %s",
+            completion["id"],
+            str(exc),
+            exc_info=True,
         )
         try:
             client.rpc(

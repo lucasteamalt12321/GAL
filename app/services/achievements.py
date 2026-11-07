@@ -69,6 +69,10 @@ def list_achievements(
     Сначала отдельно запрашивается count, затем данные: PostgREST отвечает
     416 на range за пределами выборки, а 416 нельзя отличить от сбоя БД
     в глобальном обработчике.
+
+    В список попадают опубликованные достижения с любым ranking_status:
+    - ranked (3+ оценок) — с рангом в топе
+    - unknown (1-2 оценки) — между ranked, но не влияют на нумерацию топа
     """
     client = auth_service.new_anon_client()
     category_id = _category_filter(category_slug)
@@ -83,6 +87,7 @@ def list_achievements(
             request = request.ilike("title", f"%{auth_service.ilike_literal(query)}%")
         return request
 
+    # Подсчет всех опубликованных достижений (включая unknown)
     count_res = (
         _apply_filters(client.table("achievements").select("id", count="exact"))
         .limit(1)
@@ -95,12 +100,48 @@ def list_achievements(
         return [], total
 
     data_query = _apply_filters(client.table("achievements").select(ACHIEVEMENT_SELECT))
+
+    # Получаем все данные без range (для сортировки в Python)
+    all_res = data_query.execute()
+    all_achievements = all_res.data or []
+
+    # Сортировка в Python
     if sort == SORT_NEW:
-        data_query = data_query.order("created_at", desc=True)
+        # Сначала ranked по created_at desc, потом unknown по created_at desc
+        # ranked идет первым в сортировке (ranking_status < 'unknown' lexicographically)
+        all_achievements.sort(
+            key=lambda a: (
+                a.get("ranking_status") or "unknown",
+                a.get("created_at") or "",
+            )
+        )
+        all_achievements.reverse()  # reverse чтобы created_at desc
     else:
-        data_query = data_query.order("rank").order("created_at", desc=True)
-    res = data_query.range(start, start + limit - 1).execute()
-    return res.data or [], total
+        # Сортировка по рангу:
+        # - ranked: rank asc (от 1), затем created_at desc
+        # - unknown: average_position asc (если есть), иначе created_at desc
+        # Используем key для правильной сортировки
+        def sort_key(a):
+            if a.get("ranking_status") == "ranked":
+                # ranked: сначала по rank, потом по created_at
+                rank = a.get("rank")
+                created_at = a.get("created_at") or ""
+                if rank is None:
+                    return (1, float("inf"), created_at)
+                return (0, rank, created_at)
+            else:
+                # unknown: сначала average_position, потом created_at
+                avg_pos = a.get("average_position")
+                created_at = a.get("created_at") or ""
+                if avg_pos is None:
+                    return (2, float("inf"), created_at)
+                return (1, avg_pos, created_at)
+
+        all_achievements.sort(key=sort_key)
+
+    # Применяем pagination
+    paginated = all_achievements[start : start + limit]
+    return paginated, total
 
 
 def get_achievement(request: Request, achievement_id: int) -> dict | None:
