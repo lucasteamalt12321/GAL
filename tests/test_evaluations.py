@@ -105,6 +105,7 @@ def test_evaluate_page_shows_scale(monkeypatch) -> None:
     assert resp.status_code == 200
     assert "Other" in resp.text
     assert "data-scale-picker" in resp.text
+    assert "data-scale='[" in resp.text
     assert 'name="harder_count"' in resp.text
 
 
