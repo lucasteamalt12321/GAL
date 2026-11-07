@@ -175,8 +175,7 @@ def list_approved_unevaluated(request: Request) -> list[dict]:
     rows = [
         row
         for row in (res.data or [])
-        if row.get("achievement")
-        and row["achievement"].get("status") == "published"
+        if row.get("achievement") and row["achievement"].get("status") == "published"
     ]
     if not rows:
         return []
