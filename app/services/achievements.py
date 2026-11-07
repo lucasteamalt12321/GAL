@@ -126,17 +126,27 @@ def list_achievements(
                 rank = a.get("rank")
                 created_at = a.get("created_at") or ""
                 if rank is None:
-                    return (float("inf"), created_at)
-                return (float(rank), created_at)
+                    return (float("inf"), "ranked", created_at)
+                return (float(rank), "ranked", created_at)
             else:
                 # unknown: используем average_position для вставки между ranked
                 avg_pos = a.get("average_position")
                 created_at = a.get("created_at") or ""
                 if avg_pos is None:
-                    return (float("inf"), created_at)
-                return (float(avg_pos), created_at)
+                    return (float("inf"), "unknown", created_at)
+                return (float(avg_pos), "unknown", created_at)
 
         all_achievements.sort(key=sort_key)
+
+        # Отладка: вывести порядок сортировки
+        import logging
+
+        logger = logging.getLogger(__name__)
+        for i, a in enumerate(all_achievements):
+            key = sort_key(a)
+            logger.debug(
+                f"Sort {i}: id={a.get('id')}, status={a.get('ranking_status')}, rank={a.get('rank')}, avg_pos={a.get('average_position')}, key={key}"
+            )
 
     # Применяем pagination
     paginated = all_achievements[start : start + limit]
