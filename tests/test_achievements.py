@@ -1,9 +1,28 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import achievements as achievements_service
+from app.services import auth as auth_service
 
 client = TestClient(app)
+
+USER = auth_service.CurrentUser(
+    id="22222222-2222-2222-2222-222222222222",
+    email="user@gal.test",
+    username="tester",
+    display_name="Tester",
+    avatar_url=None,
+    role="user",
+)
+
+
+def _login(monkeypatch) -> None:
+    monkeypatch.setattr(auth_service, "resolve_user", lambda _request: USER)
 
 
 def _sample_achievement() -> dict:
@@ -107,3 +126,129 @@ def test_profile_renders(monkeypatch) -> None:
     resp = client.get("/users/alice")
     assert resp.status_code == 200
     assert "@alice" in resp.text
+
+
+def test_create_page_blocked_without_evaluation(monkeypatch) -> None:
+    _login(monkeypatch)
+    monkeypatch.setattr(achievements_service, "has_user_evaluation", lambda _r: False)
+    monkeypatch.setattr(achievements_service, "list_categories", list)
+
+    resp = client.get("/achievements/create")
+
+    assert resp.status_code == 200
+    assert "Сначала пройдите и оцените" in resp.text
+    assert 'name="title"' not in resp.text
+    assert 'href="/achievements"' in resp.text
+
+
+def test_create_post_blocked_without_evaluation(monkeypatch) -> None:
+    _login(monkeypatch)
+    monkeypatch.setattr(achievements_service, "has_user_evaluation", lambda _r: False)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        achievements_service,
+        "create_achievement",
+        lambda *_a, **_k: calls.append("called") or {"id": 99},
+    )
+
+    resp = client.post(
+        "/achievements/create",
+        data={"title": "My achievement"},
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 200
+    assert "Сначала пройдите и оцените" in resp.text
+    assert calls == []
+
+
+class _Query:
+    """Минимальная цепочка PostgREST-запроса для тестов выборки."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows = rows
+        self.eq_filters: dict[str, object] = {}
+        self.in_filters: dict[str, set] = {}
+
+    def select(self, *_args, **_kwargs) -> _Query:
+        return self
+
+    def eq(self, key: str, value: object) -> _Query:
+        self.eq_filters[key] = value
+        return self
+
+    def in_(self, key: str, values: list) -> _Query:
+        self.in_filters[key] = set(values)
+        return self
+
+    def execute(self) -> SimpleNamespace:
+        rows = []
+        for row in self.rows:
+            if any(row.get(key) != value for key, value in self.eq_filters.items()):
+                continue
+            if any(
+                row.get(key) not in values for key, values in self.in_filters.items()
+            ):
+                continue
+            rows.append(row)
+        return SimpleNamespace(data=rows, count=len(rows))
+
+
+class _Client:
+    def __init__(self, tables: dict[str, list[dict]]) -> None:
+        self.tables = tables
+
+    def table(self, name: str) -> _Query:
+        return _Query(self.tables[name])
+
+
+def _gate_request(
+    monkeypatch,
+    *,
+    evaluations: list[dict],
+    achievements: list[dict],
+) -> SimpleNamespace:
+    fake = _Client({"evaluations": evaluations, "achievements": achievements})
+    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _r: fake)
+    return SimpleNamespace(state=SimpleNamespace(user=USER))
+
+
+def test_has_user_evaluation_ignores_deleted_achievement(monkeypatch) -> None:
+    request = _gate_request(
+        monkeypatch,
+        evaluations=[{"achievement_id": 5, "user_id": USER.id}],
+        achievements=[{"id": 5, "status": "deleted"}],
+    )
+
+    assert achievements_service.has_user_evaluation(request) is False
+
+
+def test_has_user_evaluation_true_for_published_achievement(monkeypatch) -> None:
+    request = _gate_request(
+        monkeypatch,
+        evaluations=[
+            {"achievement_id": 5, "user_id": USER.id},
+            {"achievement_id": 6, "user_id": USER.id},
+        ],
+        achievements=[
+            {"id": 5, "status": "deleted"},
+            {"id": 6, "status": "published"},
+        ],
+    )
+
+    assert achievements_service.has_user_evaluation(request) is True
+
+
+def test_create_achievement_service_blocks_without_evaluation(monkeypatch) -> None:
+    request = SimpleNamespace(state=SimpleNamespace(user=USER))
+    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _r: object())
+    monkeypatch.setattr(achievements_service, "has_user_evaluation", lambda _r: False)
+
+    with pytest.raises(PermissionError, match="оцените"):
+        achievements_service.create_achievement(
+            request,
+            title="New one",
+            description="",
+            requirements="",
+            category_id=None,
+        )

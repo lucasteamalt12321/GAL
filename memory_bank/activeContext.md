@@ -2,7 +2,9 @@
 
 ## Текущий фокус
 
-**2026-11-08 — VKUI-оформление и надёжная загрузка доказательств.** `app/static/css/style.css` переписан на токенах `@vkontakte/vkui` 8: светлая тема по умолчанию, тёмная через `prefers-color-scheme`, компоненты (шапка, hero, карточки, кнопки, поля, чипы, бейджи, таблицы, профиль, auth, flash, error-page, scale-picker). `base.html`: `color-scheme`, два `theme-color`, `style.css?v=2`. Вёрстка проверена через CDP (light/dark, desktop/mobile 390 px, без переполнений). Загрузка proof-файлов: `_storage_error_message` отдаёт понятные тексты вместо сырых ответов Storage (413/403/RLS/404), детали — в лог; `user_client_from_request` использует токены, обновлённые `resolve_user` в `request.state` (иначе 401 после refresh). Создание достижения требует хотя бы одной оценки. `pytest` — **160 passed**, ruff чист. Коммит и прод-проверка — в работе.
+**2026-11-08 — создание достижения только после оценки.** Новый пользователь не может предложить своё достижение, пока не прошёл и не оценил хотя бы одно опубликованное. `GET` и `POST /achievements/create` до валидации проверяют `has_user_evaluation`; при блокировке форма скрыта, показывается объяснение и ссылка на каталог. `has_user_evaluation` учитывает только оценки `published`-достижений (удалённые/скрытые не дают права). В `create_achievement` — defense-in-depth `PermissionError`. Миграция `020_creation_requires_evaluation.sql` закрепляет правило в RLS: `user_has_published_evaluation(uuid)` + insert в `achievements` только с оценкой опубликованного; EXECUTE только у `authenticated` (`revoke ... from public, anon`). Миграция проверена в rollback-транзакции и применена к проду (201); `anon_can_execute=false`, `authenticated_can_execute=true`. Тесты — **165 passed**, ruff чист. Тестовые аккаунты удалены, достижения #35/#36 сохранены за `lucasteam`. Осталось: закоммитить и проверить прод.
+
+**2026-11-08 — VKUI-оформление и надёжная загрузка доказательств.** `app/static/css/style.css` переписан на токенах `@vkontakte/vkui` 8: светлая тема по умолчанию, тёмная через `prefers-color-scheme`, компоненты (шапка, hero, карточки, кнопки, поля, чипы, бейджи, таблицы, профиль, auth, flash, error-page, scale-picker). `base.html`: `color-scheme`, два `theme-color`, `style.css?v=2`. Вёрстка проверена через CDP (light/dark, desktop/mobile 390 px, без переполнений). Загрузка proof-файлов: `_storage_error_message` отдаёт понятные тексты вместо сырых ответов Storage (413/403/RLS/404), детали — в лог; `user_client_from_request` использует токены, обновлённые `resolve_user` в `request.state` (иначе 401 после refresh). Создание достижения требует хотя бы одной оценки. `pytest` — **165 passed**, ruff чист.
 
 **2026-11-07 — v1.5: новые оценки меняют топ.** Снят lock: `submit_evaluation` и `apply_completion_evaluation` принимают оценки и после `ranked`, пересчитывают среднее/ранги/BT после каждой новой заявки. Каждый подтверждённый участник обязан указать сложность при отправке заявки; форма «Я выполнил это» снова доступна для ranked. Миграция 019 применена; live-проверка: `test_player` добавил 4-ю оценку к «Выпить стакан воды», достижение пересчиталось. Тесты — 153 passed.
 
@@ -20,12 +22,12 @@
 
 **Инцидент 2026-11-05:** прод-проект Supabase `wiwyitafoprxmlyndkwe` снова был `INACTIVE` — все страницы с данными отдавали 503 (лендинг/логин работали). Восстановлен через `POST /v1/projects/{ref}/restore` (200 → COMING_UP → ACTIVE_HEALTHY); после восстановления `/`, `/achievements`, `/leaderboard`, `/auth/*`, `/docs` снова 200. Прод-БД пустая (тестовые данные удалены ранее).
 
-## Тестовые данные на проде (2026-11-07)
+## Данные на проде (2026-11-08)
 
-- Аккаунт: `test.player.gal@example.com` / `TestPass123` (`test_player`, «Тестовый игрок»), роль `user`.
-- Оценщики: `test.eval1.gal@example.com`, `test.eval2.gal@example.com`, `test.eval3.gal@example.com` (пароль тот же, не для входа в UI).
-- Достижения: #35 «Выпить стакан воды» (rank #1, 4 оценки после live-теста, BT ~1174) и #36 «Заснуть раньше полночи» (rank #2, 3 оценки, BT 826), категория Other, proof-ссылки.
-- Данные созданы SQL через Management API; при необходимости удаляются каскадно по auth.users.
+- Единственный аккаунт: `lucasteam` (admin, вход через LTHub OAuth).
+- Тестовые аккаунты `test.player.gal@example.com` и `test.eval1..3.gal@example.com` удалены 2026-11-08 вместе с их оценками, заявками и proofs.
+- Достижения #35 «Выпить стакан воды» и #36 «Заснуть раньше полночи» сохранены и переназначены на `lucasteam` (решение пользователя); также остаются #31 (supersonic, published), #32 (rejected) и #33 (шортс, published).
+- После очистки у `lucasteam` 3 оценки (#31, #33, #36), 3 approved-заявки с proofs, 6 записей истории модерации, 1 external identity. Все достижения в `unknown` (меньше 3 оценок), лидерборд пуст; BT пересчитан по оставшимся 3 оценкам, сохранённые метрики (`evaluation_count`/`average_position`) синхронизированы с `evaluations`.
 
 ## Статус задач
 

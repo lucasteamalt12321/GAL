@@ -190,21 +190,45 @@ def get_profile(request: Request, username: str) -> dict | None:
     return res.data
 
 
+CREATE_REQUIRES_EVALUATION = (
+    "Сначала пройдите и оцените хотя бы одно существующее достижение — "
+    "после этого можно предложить своё."
+)
+
+
 def has_user_evaluation(request: Request) -> bool:
-    """Проверяет, есть ли у пользователя хотя бы одна оценка опубликованного достижения."""
+    """Есть ли у пользователя оценка хотя бы одного опубликованного достижения.
+
+    Оценки удалённых или скрытых достижений не считаются: строки в
+    ``evaluations`` остаются, но «пройти существующее достижение» уже нельзя.
+    """
     user = request.state.user
     client = auth_service.user_client_from_request(request)
     if user is None or client is None:
         return False
 
-    res = (
+    evaluated = (
         client.table("evaluations")
-        .select("id", count="exact")
+        .select("achievement_id")
         .eq("user_id", user.id)
         .execute()
     )
-    count = res.count if res.count is not None else 0
-    return count > 0
+    achievement_ids = {
+        row["achievement_id"]
+        for row in (evaluated.data or [])
+        if row.get("achievement_id") is not None
+    }
+    if not achievement_ids:
+        return False
+
+    published = (
+        client.table("achievements")
+        .select("id")
+        .in_("id", sorted(achievement_ids))
+        .eq("status", "published")
+        .execute()
+    )
+    return bool(published.data)
 
 
 def create_achievement(
@@ -219,6 +243,10 @@ def create_achievement(
     client = auth_service.user_client_from_request(request)
     if user is None or client is None:
         raise PermissionError("Authentication required")
+    # Defense in depth: правило проверяется и в роутере, но обойти его через
+    # другой вызов сервиса тоже нельзя.
+    if not has_user_evaluation(request):
+        raise PermissionError(CREATE_REQUIRES_EVALUATION)
     payload: dict = {
         "title": title,
         "description": description,

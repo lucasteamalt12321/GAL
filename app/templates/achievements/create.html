@@ -5,6 +5,13 @@
 {% block content %}
 <section class="auth-card auth-card-wide">
   <h1>Предложить достижение</h1>
+  {% if blocked %}
+    <p class="muted">
+      Чтобы предложить своё достижение, сначала пройдите и оцените хотя бы одно
+      существующее — так общая шкала сложности остаётся осмысленной.
+    </p>
+    <a class="btn btn-primary" href="/achievements">Перейти к достижениям</a>
+  {% else %}
   <form method="post" action="/achievements/create" class="stack" enctype="multipart/form-data">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label class="field">
@@ -44,5 +51,6 @@
     <button type="submit" class="btn btn-primary">Отправить на модерацию</button>
   </form>
   <p class="muted">Достижение публикуется только после проверки модератором доказательства вашего собственного выполнения.</p>
+  {% endif %}
 </section>
 {% endblock %}

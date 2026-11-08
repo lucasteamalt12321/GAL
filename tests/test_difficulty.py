@@ -42,6 +42,7 @@ def test_parse_harder_count() -> None:
 def test_create_page_asks_expected_difficulty(monkeypatch) -> None:
     _login(monkeypatch)
     monkeypatch.setattr(achievements_service, "list_categories", list)
+    monkeypatch.setattr(achievements_service, "has_user_evaluation", lambda _r: True)
     monkeypatch.setattr(
         evaluation_service, "list_user_scale", lambda _r: [_scale_item(2, "Old one")]
     )

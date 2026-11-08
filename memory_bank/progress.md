@@ -24,6 +24,18 @@
 
 ## Changelog
 
+### 2026-11-08 — Создание достижения только после оценки существующего
+
+**Запрос.** Новый пользователь не должен создавать своё достижение, пока не прошёл и не оценил хотя бы одно уже существующее.
+
+**Правило и UI.** `GET /achievements/create` и `POST /achievements/create` проверяют `has_user_evaluation` до валидации полей. При блокировке форма не рендерится: показывается объяснение и ссылка «Перейти к достижениям»; категории из БД не запрашиваются. `has_user_evaluation` теперь считает только оценки достижений со статусом `published` — оценки удалённых/скрытых достижений права на создание не дают. В `create_achievement` добавлен defense-in-depth guard (`PermissionError` с текстом `CREATE_REQUIRES_EVALUATION`), чтобы правило нельзя было обойти другим вызовом сервиса.
+
+**RLS.** `migrations/020_creation_requires_evaluation.sql`: security-definer функция `public.user_has_published_evaluation(uuid)` (EXECUTE только у `authenticated`) и обновлённая политика `achievements_insert_own`: insert разрешён только при `creator_id = auth.uid()`, `status = 'pending'` и наличии оценки опубликованного достижения. Supabase default privileges выдают EXECUTE новым функциям роли `anon` явно, поэтому в миграции выполнен `revoke ... from public, anon` (одного `revoke ... from public` недостаточно). Service role обходит RLS.
+
+**Проверка.** Миграция прогнана в rollback-транзакции через Management API: без оценки insert даёт `42501`, с оценкой опубликованного достижения — проходит, `anon` не может вызвать функцию. Применена к проду (201); подтверждено: `anon_can_execute=false`, `authenticated_can_execute=true`, политика содержит `user_has_published_evaluation(auth.uid())`. Тесты: блокировка GET/POST, сервисный guard, фильтр удалённых достижений; итого **165 passed**, `ruff check`/`format` — чисто.
+
+**Очистка прода.** Удалены 4 тестовых аккаунта (`test_player`, `test_eval_1..3`) и их оценки/заявки/proofs. Достижения #35 и #36 сохранены и переназначены на `lucasteam` (по решению пользователя). Сохранённые метрики пересчитаны из `evaluations`, BT пересчитан по оставшимся 3 оценкам через `apply_bt_ratings` (Management API, т.к. локальный PostgREST недоступен). Итог: 1 пользователь (`lucasteam`), 3 оценки, 3 approved-заявки с proofs, лидерборд пуст (все достижения `unknown`).
+
 ### 2026-11-08 — VKUI-оформление и понятные ошибки загрузки доказательств
 
 **Запрос.** Привести визуал GAL к стилю BankBot (VKUI) и исправить ошибку при загрузке файла-доказательства.

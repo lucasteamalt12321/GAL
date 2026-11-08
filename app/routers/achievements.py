@@ -49,9 +49,11 @@ def _form_context(
     scale: list[dict] | None = None,
     harder_count: str = "",
     difficulty_label: str = "Ожидаемая сложность",
+    blocked: bool = False,
 ) -> dict:
     return {
-        "categories": achievements_service.list_categories(),
+        # Заблокированная форма категорий не показывает — не ходим в БД зря.
+        "categories": [] if blocked else achievements_service.list_categories(),
         "error": error,
         "title": title,
         "description": description,
@@ -65,6 +67,7 @@ def _form_context(
         "difficulty_scale": scale or [],
         "harder_count": harder_count,
         "difficulty_label": difficulty_label,
+        "blocked": blocked,
     }
 
 
@@ -130,6 +133,15 @@ def list_page(
 def create_page(request: Request) -> HTMLResponse:
     if request.state.user is None:
         return RedirectResponse(LOGIN_URL, status_code=303)
+    if not achievements_service.has_user_evaluation(request):
+        return templates.TemplateResponse(
+            request=request,
+            name=CREATE_TEMPLATE,
+            context=_create_context(
+                error=achievements_service.CREATE_REQUIRES_EVALUATION,
+                blocked=True,
+            ),
+        )
     return templates.TemplateResponse(
         request=request,
         name=CREATE_TEMPLATE,
@@ -150,6 +162,16 @@ def create(
 ) -> HTMLResponse:
     if request.state.user is None:
         return RedirectResponse(LOGIN_URL, status_code=303)
+
+    if not achievements_service.has_user_evaluation(request):
+        return templates.TemplateResponse(
+            request=request,
+            name=CREATE_TEMPLATE,
+            context=_create_context(
+                error=achievements_service.CREATE_REQUIRES_EVALUATION,
+                blocked=True,
+            ),
+        )
 
     title = title.strip()
     description = description.strip()
@@ -199,23 +221,6 @@ def create(
             name=CREATE_TEMPLATE,
             context=_create_context(
                 error="Приложите доказательство своего выполнения: файл или ссылку.",
-                title=title,
-                description=description,
-                requirements=requirements,
-                category_id=category_id,
-                external_url=external_url,
-                scale=scale,
-                harder_count=harder_count,
-            ),
-        )
-
-    # Проверка: пользователь должен иметь хотя бы одну оценку опубликованного достижения
-    if not achievements_service.has_user_evaluation(request):
-        return templates.TemplateResponse(
-            request=request,
-            name=CREATE_TEMPLATE,
-            context=_create_context(
-                error="Сначала пройдите и оцените хотя бы одно существующее достижение.",
                 title=title,
                 description=description,
                 requirements=requirements,
