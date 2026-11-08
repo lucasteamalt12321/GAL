@@ -236,4 +236,4 @@
 
 ## last_checked_commit
 
-`c41b595 feat: VKUI styling and friendly proof upload errors` (2026-11-08)
+`497eb00 feat: require evaluation before creating achievement` (2026-11-08)
