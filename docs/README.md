@@ -83,14 +83,14 @@ PostgreSQL  Auth     Storage
 - `GET /auth/update-password` — страница завершения сброса: токены приходят во фрагменте URL, пароль отправляется из браузера напрямую в Supabase Auth (`PUT /auth/v1/user`), anon key публичен.
 - `GET /auth/me` — JSON текущего пользователя (401 без сессии).
 - `POST /auth/register|login|recover` принимают form-urlencoded и JSON (`app/forms.py`); для JSON CSRF-токен допускается полем `_csrf` или заголовком `X-CSRF-Token`.
-- `UserContextMiddleware` резолвит пользователя на каждый запрос; при истёкшем access-токене делает refresh и обновляет cookie; битая кука удаляется (max-age=0).
+- `UserContextMiddleware` резолвит пользователя на каждый запрос; при истёкшем access-токене делает refresh и обновляет cookie; битая кука удаляется (max-age=0). Обновлённые токены кладутся в `request.state`, и `user_client_from_request` предпочитает их cookies — иначе PostgREST/Storage получили бы устаревший access-токен и ответили 401 в том же запросе.
 - Профиль читается из `profiles`; роль, username, avatar доступны в `request.state.user`.
 
 ## Достижения, профили, настройки
 
 - `GET /achievements` — публичный каталог: фильтр `category`, сортировка `rank|new`, поиск `q`, пагинация по 24.
 - `GET /achievements/{id}` — карточка (автор видит свои pending); показывает причину недоступности оценки.
-- `GET/POST /achievements/create` — создание (`pending`); нужен proof создателя (файл или ссылка).
+- `GET/POST /achievements/create` — создание (`pending`); нужен proof создателя (файл или ссылка). Создавать достижения может только пользователь, у которого уже есть хотя бы одна оценка (`has_user_evaluation`): сначала нужно пройти и оценить существующее достижение.
 - `GET/POST /achievements/{id}/edit` — правка своего достижения, пока оно `pending`.
 - `POST /achievements/{id}/delete` — soft-delete своего pending (`status=deleted`), заявки в очередь не попадают.
 - `GET /users/{username}` — профиль: публично только `published`; владельцу видны свои pending/rejected; модератору — все статусы.
@@ -101,6 +101,7 @@ PostgreSQL  Auth     Storage
 
 - `POST /achievements/{id}/complete` — заявка `pending` + один proof (файл ≤ 4 МБ или ссылка). Лимит 4 МБ — потолок тела serverless-функции Vercel; bucket допускает 50 МБ, но приложение принимает 4 МБ.
 - Proof-файл: приватный bucket `proofs`, путь `{user_id}/{achievement_id}/{uuid}-{filename}`, строка в `proofs`. Ссылка: `proof_type=link`, URL в `storage_path`.
+- Ошибки Storage переводятся в понятные тексты (`_storage_error_message`): 413 → лимит 4 МБ; 401/403/JWT/RLS → «войдите заново или приложите ссылку»; 404/bucket not found → «хранилище временно недоступно»; остальное → общий текст. Сырые ответы (`statusCode`, имена политик, бакетов) в UI не попадают, детали пишутся в лог `gal` (`logger.warning`/`exception`).
 - `GET /moderation` — очередь pending достижений и заявок (модератор/админ; аноним → login, остальные → 403).
 - `POST /moderation/achievements/{id}` — approve/reject. Approve сначала одобряет completion создателя (проверяя наличие proof), затем публикует достижение; reject отклоняет и заявку создателя.
 - `POST /moderation/achievements/{id}/hide` — soft-delete опубликованного/ожидающего достижения, отклонение его pending-заявок, запись в историю и пересчёт рангов.
@@ -157,7 +158,9 @@ PostgreSQL  Auth     Storage
 ## UI
 
 - Русскоязычный интерфейс; подписи статусов, причин жалоб, типов proof и даты — через фильтры `presentation.py`.
-- Тёмная тема, адаптивная шапка с мобильным меню, горизонтальный скролл таблиц, видимый фокус, skip-link, `aria`-атрибуты таблиц.
+- Визуальный стиль — **VKUI** (как BankBot): единый `app/static/css/style.css` с токенами `--vkui-*` (палитра `@vkontakte/vkui` 8), радиусы 8/12/16 px, системный шрифт, высота шапки 56 px, компоненты кнопок, полей, карточек, чипов, бейджей, таблиц, flash и error-страниц.
+- Светлая тема по умолчанию, тёмная — через `prefers-color-scheme` (`color-scheme`, два `<meta name="theme-color">`). CSS подключается с версией (`style.css?v=2`), чтобы сбросить старый кэш.
+- Адаптивная шапка с мобильным меню, горизонтальный скролл таблиц, видимый фокус, skip-link, `aria`-атрибуты таблиц, `prefers-reduced-motion`.
 - `static/js/main.js` — мобильное меню, pre-check размера файла (4 МБ), подтверждение необратимых действий, кнопка обновления на 503.
 
 ## Миграции
@@ -233,10 +236,10 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 153 теста: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, сценарии v1.1–v1.4.
+- `pytest` — 160 тестов: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, сценарии v1.1–v1.5.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 
 ## Статус
 
-Документация соответствует состоянию после v1.4: каркас, миграции 001–017, аутентификация и сброс пароля, вход через LTHub (OAuth + PKCE), достижения + профили + настройки, сложность при создании/прохождении, доказательства и модерация, движок оценок, глобальный ранкинг Bradley–Terry, лидерборды с пагинацией, жалобы, «Мои заявки», CSRF/ошибки/адаптивный UI, CI. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию после v1.5: каркас, миграции 001–019, аутентификация и сброс пароля, вход через LTHub (OAuth + PKCE), достижения + профили + настройки, сложность при создании/прохождении, доказательства и модерация с понятными ошибками Storage, движок оценок, глобальный ранкинг Bradley–Terry, лидерборды с пагинацией, жалобы, «Мои заявки», CSRF/ошибки, адаптивный UI в стиле VKUI (light/dark), CI. Обновлять при изменениях архитектуры, маршрутов и модулей.

@@ -24,6 +24,18 @@
 
 ## Changelog
 
+### 2026-11-08 — VKUI-оформление и понятные ошибки загрузки доказательств
+
+**Запрос.** Привести визуал GAL к стилю BankBot (VKUI) и исправить ошибку при загрузке файла-доказательства.
+
+**UI.** `app/static/css/style.css` переписан на токенах `@vkontakte/vkui` 8 (`--vkui-*`): светлая тема по умолчанию, тёмная через `prefers-color-scheme`; палитра bg/content/secondary/field/separator/text/accent/positive/negative/warning, радиусы 8/12/16 px, системный шрифт, шапка 56 px. Покрыты все классы из 26 шаблонов: шапка с мобильным меню, hero, шаги, карточки, чипы, бейджи, таблицы, профиль, auth-карточки, flash, error-page, scale-picker, `prefers-reduced-motion`. `base.html` получил `color-scheme`, два `theme-color` и версионирование CSS (`style.css?v=2`). Проверено через CDP: light (`bg #ebedf0`, accent `#2688eb`) и dark (`bg #0a0a0a`, content `#19191a`, accent `#529ef4`), на 390 px нет горизонтального переполнения и наложений.
+
+**Загрузка доказательств.** `app/services/completions.py`: `_storage_error_message` переводит ошибки Storage в понятные тексты (413 → лимит 4 МБ; 401/403/JWT/RLS → войти заново/ссылка; 404/bucket → временно недоступно; иначе общий текст), детали — в лог. `OSError` при чтении файла → «Не удалось прочитать файл. Выберите его заново.». `app/services/auth.py`: `user_client_from_request` берёт токены из `request.state` (обновлённые `resolve_user`), иначе из cookies — иначе после refresh Storage/PostgREST отвечали 401 на том же запросе.
+
+**Правила.** Создание достижения доступно только пользователю с хотя бы одной оценкой (`has_user_evaluation`). Сортировка `unknown`-достижений использует `average_position` без сдвига `-0.5`, чтобы `?`-достижения не вставали перед rank #1.
+
+**Тесты.** Новый `tests/test_proofs.py` (6): успешная загрузка в `{user_id}/{achievement_id}/`, ссылка без Storage, лимит 4 МБ, 403/RLS и 413 → понятные сообщения, multipart через `/achievements/5/complete` доходит до Storage. `tests/test_auth.py`: приоритет обновлённых токенов. Итого **160 passed**, `ruff check`/`format` — чисто.
+
 ### 2026-11-07 — v1.5: новые оценки меняют топ
 
 **Правило.** Каждый выполнивший достижение обязан указать сложность при отправке заявки; после approve оценка добавляется. Оценки принимаются и после выхода в `ranked` — топ пересчитывается после каждой новой заявки/оценки.
@@ -212,4 +224,4 @@
 
 ## last_checked_commit
 
-`9028989 memory bank: live evaluations deployed, last_checked_commit 7ac22f0` (2026-11-07)
+`c41b595 feat: VKUI styling and friendly proof upload errors` (2026-11-08)
