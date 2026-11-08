@@ -14,7 +14,7 @@ from app.middleware import UserContextMiddleware
 from app.routers import (
     achievements,
     auth,
-    completions,
+    completions as completions_router,
     evaluations,
     health,
     lthub_auth,
@@ -126,7 +126,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(lthub_auth.router)
 app.include_router(achievements.router)
-app.include_router(completions.router)
+app.include_router(completions_router.router)
 app.include_router(evaluations.router)
 app.include_router(moderation.router)
 app.include_router(rankings.router)

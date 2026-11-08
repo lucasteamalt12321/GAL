@@ -139,6 +139,49 @@ def get_user_completion(request: Request, achievement_id: int) -> dict | None:
     return res.data
 
 
+def get_user_completion_by_id(request: Request, completion_id: int) -> dict | None:
+    """Получить прохождение по ID (для владельца или модератора)."""
+    user = request.state.user
+    client = auth_service.user_client_from_request(request)
+    if user is None or client is None:
+        return None
+    res = (
+        client.table("achievement_completions")
+        .select(
+            "id,achievement_id,user_id,status,created_at,approved_at,"
+            "requested_harder_count,"
+            "user:profiles!user_id(username,display_name,avatar_url)"
+        )
+        .eq("id", completion_id)
+        .maybe_single()
+        .execute()
+    )
+    if res is None:
+        return None
+    return res.data
+
+
+def get_achievement_for_completion(request: Request, completion_id: int) -> dict | None:
+    """Получить достижение по ID прохождения."""
+    user = request.state.user
+    client = auth_service.user_client_from_request(request)
+    if user is None or client is None:
+        return None
+    res = (
+        client.table("achievement_completions")
+        .select(
+            "achievement:achievements(id,title,status,ranking_status,bt_rating,"
+            "bt_strength,rank,average_position,evaluation_count,category:categories(id,name,slug))"
+        )
+        .eq("id", completion_id)
+        .maybe_single()
+        .execute()
+    )
+    if res is None or not res.data:
+        return None
+    return res.data.get("achievement")
+
+
 def list_proofs(request: Request, completion_id: int) -> list[dict]:
     client = auth_service.client_for_request(request)
     res = (

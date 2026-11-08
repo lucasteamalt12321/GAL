@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{{ achievement.title }} — {{ completion.status|completion_status_label }}{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <h1>{{ achievement.title }}</h1>
+  <div class="page-head-actions">
+    <a class="btn" href="/achievements/{{ achievement.id }}">К достижению</a>
+    {% if completion.user %}
+      <a class="btn" href="/users/{{ completion.user.username }}">К прошедшему</a>
+    {% endif %}
+  </div>
+</section>
+
+<div class="card completion-card">
+  <div class="card-body">
+    <div class="completion-meta">
+      <span class="badge badge-{{ completion.status }}">{{ completion.status|completion_status_label }}</span>
+      {% if completion.created_at %}· {{ completion.created_at|date_local }}{% endif %}
+      {% if completion.approved_at %}· Подтверждено: {{ completion.approved_at|date_local }}{% endif %}
+    </div>
+    
+    {% if completion.requested_harder_count is not none %}
+      <p class="muted">Запрошенная сложность: {{ completion.requested_harder_count }}</p>
+    {% endif %}
+    
+    {% if completion.user %}
+      <p class="muted">
+        Прошёл: 
+        <a href="/users/{{ completion.user.username }}">
+          {{ completion.user.display_name or completion.user.username }}
+        </a>
+      </p>
+    {% endif %}
+    
+    {% if proofs %}
+      <section class="prose proof-section">
+        <h2>Доказательство</h2>
+        <ul class="proof-list">
+          {% for p in proofs %}
+            <li>
+              <span class="tag">{{ p.proof_type|proof_type_label }}</span>
+              {% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">открыть доказательство</a>{% else %}<span class="muted">недоступно</span>{% endif %}
+              {% if p.description %}<span class="muted"> — {{ p.description }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+  </div>
+</div>
+
+{% if achievement.status == 'published' and request.state.user %}
+  <p class="muted">
+    <a href="/achievements/{{ achievement.id }}/report">Пожаловаться на достижение</a>
+  </p>
+{% endif %}
+{% endblock %}

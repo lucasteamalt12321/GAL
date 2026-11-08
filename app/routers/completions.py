@@ -1,67 +1,47 @@
-from typing import Annotated
-from urllib.parse import quote
-
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.services import achievements as achievements_service
 from app.services import completions as completions_service
-from app.services import evaluation as evaluation_service
+from app.templating import templates
 
-router = APIRouter(tags=["completions"])
+router = APIRouter(prefix="/completions", tags=["completions"])
 
 LOGIN_URL = "/auth/login"
 
 
-@router.post(
-    "/achievements/{achievement_id}/complete",
-    response_class=HTMLResponse,
-    include_in_schema=False,
-)
-def complete(
-    request: Request,
-    achievement_id: int,
-    description: str = Form(""),
-    external_url: str = Form(""),
-    harder_count: str = Form(""),
-    file: Annotated[UploadFile | None, File()] = None,
-) -> HTMLResponse:
+@router.get("/{completion_id}", response_class=HTMLResponse, include_in_schema=False)
+def completion_detail(request: Request, completion_id: int) -> HTMLResponse:
+    """Карточка прохождения достижения."""
     if request.state.user is None:
         return RedirectResponse(LOGIN_URL, status_code=303)
-
-    achievement = achievements_service.get_achievement(request, achievement_id)
-    if achievement is None:
-        raise HTTPException(status_code=404, detail="Achievement not found")
-    is_creator = str(request.state.user.id) == str(achievement["creator_id"])
-    allowed = achievement["status"] == "published" or (
-        achievement["status"] == "pending" and is_creator
-    )
-    if not allowed:
-        raise HTTPException(status_code=404, detail="Achievement not found")
-
-    scale = evaluation_service.list_user_scale(request)
-    others = [row for row in scale if row["achievement_id"] != achievement_id]
-    parsed = evaluation_service.parse_harder_count(harder_count, len(others))
-    if parsed is None:
-        return RedirectResponse(
-            f"/achievements/{achievement_id}"
-            f"?error={quote('Выберите, сложнее или легче ваших достижений новое.')}",
-            status_code=303,
-        )
-
-    try:
-        completions_service.submit_completion(
-            request,
-            achievement_id=achievement_id,
-            description=description,
-            external_url=external_url,
-            uploaded=file,
-            harder_count=parsed,
-        )
-    except completions_service.CompletionError as exc:
-        return RedirectResponse(
-            f"/achievements/{achievement_id}?error={quote(str(exc))}", status_code=303
-        )
-    return RedirectResponse(
-        f"/achievements/{achievement_id}?info=submitted", status_code=303
+    
+    completion = completions_service.get_user_completion_by_id(request, completion_id)
+    if completion is None:
+        raise HTTPException(status_code=404, detail="Completion not found")
+    
+    # Проверяем доступ: владелец или модератор
+    user = request.state.user
+    is_owner = str(user.id) == str(completion.get("user_id"))
+    is_moderator = user.role in ("moderator", "admin")
+    
+    if not is_owner and not is_moderator:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Получаем доказательства
+    proofs = completions_service.list_proofs(request, completion_id)
+    proof_views = completions_service.decorate_proofs(request, proofs)
+    
+    # Получаем достижение
+    achievement = completions_service.get_achievement_for_completion(request, completion_id)
+    
+    return templates.TemplateResponse(
+        request=request,
+        name="completions/detail.html",
+        context={
+            "completion": completion,
+            "achievement": achievement,
+            "proofs": proof_views,
+            "is_owner": is_owner,
+            "is_moderator": is_moderator,
+        },
     )
