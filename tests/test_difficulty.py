@@ -58,6 +58,7 @@ def test_create_passes_harder_count(monkeypatch) -> None:
     monkeypatch.setattr(
         evaluation_service, "list_user_scale", lambda _r: [_scale_item(2, "Old one")]
     )
+    monkeypatch.setattr(achievements_service, "has_user_evaluation", lambda _r: True)
     monkeypatch.setattr(
         achievements_service,
         "create_achievement",

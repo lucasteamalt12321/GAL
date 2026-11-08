@@ -125,8 +125,15 @@ def new_service_client() -> Client:
 
 
 def user_client_from_request(request: Request) -> Client | None:
-    access = request.cookies.get(SESSION_COOKIE)
-    refresh = request.cookies.get(REFRESH_COOKIE)
+    # resolve_user мог только что обновить сессию и положить новые токены в
+    # request.state. В request.cookies при этом остаётся старый access-токен;
+    # если взять его, Storage/PostgREST ответят 401 на этом же запросе.
+    access = getattr(request.state, "access_token", None) or request.cookies.get(
+        SESSION_COOKIE
+    )
+    refresh = getattr(request.state, "refresh_token", None) or request.cookies.get(
+        REFRESH_COOKIE
+    )
     if not access or not refresh:
         return None
     if not looks_like_jwt(access):
@@ -299,9 +306,12 @@ def resolve_user(request: Request) -> CurrentUser | None:
         except AUTH_ERRORS:
             refreshed = None
         if refreshed is not None and refreshed.session is not None:
+            session = refreshed.session
+            request.state.access_token = session.access_token
+            request.state.refresh_token = session.refresh_token
             request.state.pending_cookies = [
-                (SESSION_COOKIE, refreshed.session.access_token, {}),
-                (REFRESH_COOKIE, refreshed.session.refresh_token, {}),
+                (SESSION_COOKIE, session.access_token, {}),
+                (REFRESH_COOKIE, session.refresh_token, {}),
             ]
             resp = None
             try:

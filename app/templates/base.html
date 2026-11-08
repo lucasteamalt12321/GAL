@@ -4,9 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Global Achievement List — сравнение сложности достижений из разных сфер через оценки тех, кто их выполнил.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#19191a" media="(prefers-color-scheme: dark)">
   <title>{% block title %}GAL{% endblock %} — Global Achievement List</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=2">
   <script src="{{ url_for('static', path='/js/main.js') }}" defer></script>
 </head>
 <body>

@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 from app.config import Settings
@@ -266,3 +268,27 @@ def test_recover_accepts_json(monkeypatch) -> None:
     resp = client.post("/auth/recover", json={"email": "user@example.com"})
     assert resp.status_code == 200
     assert captured[0]["email"] == "user@example.com"
+
+
+def test_user_client_prefers_tokens_refreshed_by_resolve_user(monkeypatch) -> None:
+    """После refresh клиент БД/Storage не должен брать старый access-токен."""
+    captured: dict[str, str] = {}
+
+    def _new_client(access: str, refresh: str):
+        captured.update(access=access, refresh=refresh)
+        return object()
+
+    monkeypatch.setattr(auth_service, "new_user_client", _new_client)
+    request = SimpleNamespace(
+        cookies={
+            auth_service.SESSION_COOKIE: "old.access.token",
+            auth_service.REFRESH_COOKIE: "old-refresh",
+        },
+        state=SimpleNamespace(
+            access_token="new.access.token",
+            refresh_token="new-refresh",
+        ),
+    )
+
+    assert auth_service.user_client_from_request(request) is not None
+    assert captured == {"access": "new.access.token", "refresh": "new-refresh"}

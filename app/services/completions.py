@@ -36,6 +36,49 @@ def _too_large_message() -> str:
     )
 
 
+def _storage_error_message(exc: StorageException) -> str:
+    """Переводит ответ Storage в понятное пользователю сообщение.
+
+    Внутренние детали (RLS-политики, имена бакетов, статусы) не показываем:
+    они бесполезны пользователю и раскрывают устройство хранилища.
+    """
+    status = getattr(exc, "status", None)
+    try:
+        status = int(status)
+    except (TypeError, ValueError):
+        status = None
+    code = str(getattr(exc, "code", "") or "")
+    raw = f"{code} {getattr(exc, 'message', '') or exc}".lower()
+
+    if status == 413 or any(
+        marker in raw for marker in ("maximum allowed size", "too large", "file size")
+    ):
+        return _too_large_message()
+    if status in (401, 403) or any(
+        marker in raw
+        for marker in (
+            "jwt",
+            "unauthorized",
+            "access denied",
+            "row-level security",
+            "policy",
+        )
+    ):
+        return (
+            "Не удалось загрузить файл: нет доступа к хранилищу. "
+            "Войдите в аккаунт заново и повторите или приложите ссылку."
+        )
+    if status == 404 or "bucket not found" in raw:
+        return (
+            "Хранилище доказательств временно недоступно. "
+            "Попробуйте позже или приложите ссылку."
+        )
+    return (
+        "Не удалось загрузить файл. Попробуйте ещё раз "
+        "или приложите ссылку на доказательство."
+    )
+
+
 COMPLETION_ERRORS = (
     APIError,
     StorageException,
@@ -358,7 +401,10 @@ def attach_proof(
             raise ProofError(_too_large_message())
 
     # Теперь читаем файл
-    content = uploaded.file.read() if has_file else b""
+    try:
+        content = uploaded.file.read() if has_file else b""
+    except OSError as exc:
+        raise ProofError("Не удалось прочитать файл. Выберите его заново.") from exc
 
     if not content:
         raise ProofError("Приложите файл или укажите ссылку на доказательство.")
@@ -370,12 +416,19 @@ def attach_proof(
             path, content, {"content-type": content_type, "upsert": False}
         )
     except StorageException as exc:
-        raise ProofError(f"Ошибка хранилища: {str(exc)}") from exc
+        logger.warning("Proof upload rejected by storage: %s", exc, exc_info=True)
+        raise ProofError(_storage_error_message(exc)) from exc
     except httpx.HTTPError as exc:
-        raise ProofError(f"Ошибка сети при загрузке: {str(exc)}") from exc
-    except Exception as exc:
+        logger.warning("Proof upload network error: %s", exc, exc_info=True)
         raise ProofError(
-            f"Не удалось загрузить файл доказательства: {str(exc)}"
+            "Не удалось загрузить файл: сервис хранения не отвечает. "
+            "Попробуйте ещё раз или приложите ссылку."
+        ) from exc
+    except Exception as exc:  # пользователю нужен понятный текст, детали — в лог
+        logger.exception("Unexpected proof upload failure")
+        raise ProofError(
+            "Не удалось загрузить файл доказательства. Попробуйте ещё раз "
+            "или приложите ссылку."
         ) from exc
 
     try:

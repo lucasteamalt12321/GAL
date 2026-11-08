@@ -209,6 +209,23 @@ def create(
             ),
         )
 
+    # Проверка: пользователь должен иметь хотя бы одну оценку опубликованного достижения
+    if not achievements_service.has_user_evaluation(request):
+        return templates.TemplateResponse(
+            request=request,
+            name=CREATE_TEMPLATE,
+            context=_create_context(
+                error="Сначала пройдите и оцените хотя бы одно существующее достижение.",
+                title=title,
+                description=description,
+                requirements=requirements,
+                category_id=category_id,
+                external_url=external_url,
+                scale=scale,
+                harder_count=harder_count,
+            ),
+        )
+
     # create и submit_completion разведены по разным except: общий блок ловил
     # ошибку второго вызова и перерисовывал форму create, хотя строка в
     # achievements уже была вставлена -> повторный сабмит давал дубль

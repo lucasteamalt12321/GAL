@@ -120,7 +120,6 @@ def list_achievements(
         # Сортировка по рангу:
         # Сортируем все достижения по позиции (rank для ranked, average_position для unknown).
         # Unknown вставляются между ranked на основе average_position, но не занимают место в rank.
-        # Для unknown сдвигаем позицию на -0.5, чтобы они вставались между ranked.
         def sort_key(a):
             if a.get("ranking_status") == "ranked":
                 # ranked: используем rank как дробное число для сортировки
@@ -130,13 +129,12 @@ def list_achievements(
                     return (float("inf"), "ranked", created_at)
                 return (float(rank), "ranked", created_at)
             else:
-                # unknown: используем average_position - 0.5 для вставки между ranked
-                # например: avg_pos=1 -> 0.5 (перед rank=1), avg_pos=1.5 -> 1.0 (между rank=1 и rank=2)
+                # unknown: используем average_position для вставки между ranked
                 avg_pos = a.get("average_position")
                 created_at = a.get("created_at") or ""
                 if avg_pos is None:
                     return (float("inf"), "unknown", created_at)
-                return (float(avg_pos) - 0.5, "unknown", created_at)
+                return (float(avg_pos), "unknown", created_at)
 
         all_achievements.sort(key=sort_key)
 
@@ -190,6 +188,23 @@ def get_profile(request: Request, username: str) -> dict | None:
     if res is None:
         return None
     return res.data
+
+
+def has_user_evaluation(request: Request) -> bool:
+    """Проверяет, есть ли у пользователя хотя бы одна оценка опубликованного достижения."""
+    user = request.state.user
+    client = auth_service.user_client_from_request(request)
+    if user is None or client is None:
+        return False
+
+    res = (
+        client.table("evaluations")
+        .select("id", count="exact")
+        .eq("user_id", user.id)
+        .execute()
+    )
+    count = res.count if res.count is not None else 0
+    return count > 0
 
 
 def create_achievement(
