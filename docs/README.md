@@ -77,6 +77,7 @@ PostgreSQL  Auth     Storage
 ## Аутентификация
 
 - `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `Secure` в проде). В Supabase включён `mailer_autoconfirm`: регистрация сразу возвращает сессию и логинит пользователя, без письма подтверждения (встроенный SMTP Supabase лимитирован и ненадёжен для прода).
+- **Вход по никнейму или email:** поле входа принимает и ник, и email. `resolve_login_email` резолвит никнейм в email на сервере через service role (`profiles.ilike(username)` → `auth.admin.get_user_by_id`), email не утекает клиенту. Неизвестный ник даёт то же общее «Неверный email или пароль», что и неверный пароль (без раскрытия существования ника). При недоступном service role вход остаётся по email.
 - **Вход через LTHub:** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie и редиректит на LTHub `/oauth/authorize`; `GET /auth/lthub/callback` проверяет state, меняет код на токен (PKCE S256), читает `/oauth/userinfo` и логинит/создаёт Supabase-пользователя через `external_identities` (миграция 015). Username берётся из логина LTHub (при занятости — суффикс/subject), display_name — из профиля LTHub. LTHub — публичный PKCE-клиент, client secret не используется.
 - `POST /auth/logout` — `sign_out` + удаление cookie.
 - `POST /auth/recover` — письмо со ссылкой на `/auth/update-password` (`APP_URL` или текущий origin).
@@ -237,7 +238,7 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 172 теста: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, сценарии v1.1–v1.5.
+- `pytest` — 178 тестов: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, вход по никнейму, сценарии v1.1–v1.5.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 

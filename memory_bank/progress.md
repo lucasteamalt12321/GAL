@@ -24,6 +24,16 @@
 
 ## Changelog
 
+### 2026-11-09 — Вход по никнейму или email
+
+**Запрос.** После регистрации пользователь (`TonyBig`) отметил, что вход просит email, а не никнейм.
+
+**Реализовано.** `app/services/auth.py::resolve_login_email(identifier)`: значение с `@` — email (возвращается как есть); иначе ник резолвится в email на сервере через service role — `profiles.ilike(username)` (регистронезависимо, `ilike_literal`) → `auth.admin.get_user_by_id(id).user.email`. Email не утекает клиенту. Неизвестный ник, пустое значение или недоступный service role → `None`. `POST /auth/login` вызывает резолвер; при `None` показывает общее «Неверный email или пароль» (то же, что при неверном пароле — без раскрытия существования ника). Форма `auth/login.html`: поле `type=text` (ник проходит браузерную валидацию), label «Email или никнейм», `autocomplete=username`, `autocapitalize=none`, плейсхолдер «TonyBig или name@example.com», подсказка. Имя поля `email` сохранено для совместимости с JSON-потребителями.
+
+**Тесты.** `tests/test_auth.py`: passthrough email/пусто, ник без service role → None, ник найден (мок service-клиента, проверяется `get_user_by_id`), ник не найден → None, вход по нику резолвится и логинит (303 + cookie), неизвестный ник → общее сообщение. Итого **178 passed**, ruff check/format чисты по отслеживаемым файлам.
+
+**Деплой и прод-проверка.** Запушено `7dd4069` → автодеплой Vercel; CI success (Ruff lint/format/Tests). Прод-E2E в браузере (`gal-inky.vercel.app/auth/login`): поле «Email или никнейм» (`type=text`); `TonyBig` + неверный пароль → «Неверный email или пароль», `invalidEmail=false` (ник резолвится в email, иначе GoTrue вернул бы «Некорректный email»); неизвестный ник → то же общее сообщение. На проде аккаунт `TonyBig` / `tonybig11200@gmail.com` подтверждён (`email_confirmed_at` не null).
+
 ### 2026-11-09 — Исправление регистрации (3 ошибки) и разблокировка CI
 
 **Запрос.** Сайт не давал зарегистрироваться: «username tony занят», «retry in 20s», «invalid email». Исправить все три и задеплоить.
@@ -256,4 +266,4 @@
 
 ## last_checked_commit
 
-`2b89151 style: fix ruff lint and format to unblock CI` (2026-11-09)
+`7dd4069 feat: allow login by nickname or email` (2026-11-09)
