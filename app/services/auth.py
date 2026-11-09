@@ -22,7 +22,15 @@ REFRESH_COOKIE = "gal_refresh"
 AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _NETWORK_RETRIES = 3
+_RATE_LIMIT_CODES = frozenset(
+    {
+        "over_request_rate_limit",
+        "over_email_send_rate_limit",
+        "over_sms_send_rate_limit",
+    }
+)
 
 
 class SupabaseNotConfiguredError(RuntimeError):
@@ -167,6 +175,62 @@ def validate_username(username: str) -> str | None:
     if not USERNAME_RE.fullmatch(value):
         return "Имя пользователя может содержать только латиницу, цифры и ., _, -."
     return None
+
+
+def validate_email(email: str) -> str | None:
+    """Проверка формата email до обращения к GoTrue (понятная ошибка на русском)."""
+    value = (email or "").strip()
+    if not value:
+        return "Укажите email."
+    if len(value) > 254 or not EMAIL_RE.fullmatch(value):
+        return "Некорректный email. Проверьте адрес (например, name@example.com)."
+    return None
+
+
+def friendly_auth_error(exc: Exception) -> str:
+    """Переводит ошибки Supabase Auth в понятные сообщения на русском.
+
+    GoTrue отдаёт сырой английский текст («For security purposes, you can only
+    request this after 20 seconds», «Unable to validate email address…»), который
+    раньше показывался пользователю как есть. Здесь известные коды/сообщения
+    маппятся в дружелюбные формулировки, неизвестные — в общий текст.
+    """
+    code = getattr(exc, "code", None)
+    raw = getattr(exc, "message", None) or getattr(exc, "msg", None) or str(exc)
+    text = (raw or "").lower()
+
+    if (
+        code in _RATE_LIMIT_CODES
+        or "rate limit" in text
+        or "for security purposes" in text
+    ):
+        match = re.search(r"after\s+(\d+)\s*seconds?", text)
+        if match:
+            return f"Слишком много попыток. Повторите через {match.group(1)} сек."
+        return "Слишком много попыток. Подождите немного и попробуйте снова."
+    if (
+        code in {"email_address_invalid", "validation_failed"}
+        or "unable to validate email" in text
+        or ("email" in text and "invalid" in text)
+    ):
+        return "Некорректный email. Проверьте адрес и попробуйте снова."
+    if (
+        code in {"email_exists", "user_already_exists"}
+        or "already registered" in text
+        or "already been registered" in text
+    ):
+        return "Этот email уже зарегистрирован. Войдите или восстановите пароль."
+    if isinstance(exc, AuthWeakPasswordError) or code == "weak_password":
+        return "Пароль слишком простой. Используйте не менее 6 символов, буквы и цифры."
+    if "password" in text and ("at least" in text or "characters" in text):
+        return "Пароль должен быть не короче 6 символов."
+    if code == "invalid_credentials" or "invalid login" in text:
+        return "Неверный email или пароль."
+    if code == "email_not_confirmed" or "email not confirmed" in text:
+        return "Email не подтверждён. Перейдите по ссылке из письма."
+    if code == "signup_disabled":
+        return "Регистрация временно отключена. Попробуйте позже."
+    return "Не удалось выполнить запрос. Проверьте данные и попробуйте ещё раз."
 
 
 def ilike_literal(value: str) -> str:

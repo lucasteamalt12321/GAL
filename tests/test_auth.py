@@ -229,10 +229,14 @@ def test_register_accepts_json(monkeypatch) -> None:
 
 
 def test_login_accepts_json(monkeypatch) -> None:
+    from supabase_auth.errors import AuthApiError
+
     class _AuthStub:
         def sign_in_with_password(self, _payload):
-            raise auth_service.AUTH_ERRORS[0](
-                message="bad credentials", code="invalid_login"
+            raise AuthApiError(
+                message="Invalid login credentials",
+                status=400,
+                code="invalid_credentials",
             )
 
     class _ClientStub:
@@ -244,7 +248,7 @@ def test_login_accepts_json(monkeypatch) -> None:
         json={"email": "j@example.com", "password": "secret1"},
     )
     assert resp.status_code == 200
-    assert "bad credentials" in resp.text
+    assert "Неверный email или пароль" in resp.text
 
 
 def test_recover_accepts_json(monkeypatch) -> None:
@@ -292,3 +296,96 @@ def test_user_client_prefers_tokens_refreshed_by_resolve_user(monkeypatch) -> No
 
     assert auth_service.user_client_from_request(request) is not None
     assert captured == {"access": "new.access.token", "refresh": "new-refresh"}
+
+
+def test_validate_email_rules() -> None:
+    assert auth_service.validate_email("") is not None
+    assert auth_service.validate_email("tony") is not None
+    assert auth_service.validate_email("tony@gmail") is not None
+    assert auth_service.validate_email("tony @gmail.com") is not None
+    assert auth_service.validate_email("a@b.c") is None
+    assert auth_service.validate_email("tonybig1120@gmail.com") is None
+
+
+def test_friendly_auth_error_rate_limit_with_seconds() -> None:
+    from supabase_auth.errors import AuthApiError
+
+    exc = AuthApiError(
+        message="For security purposes, you can only request this after 20 seconds.",
+        status=429,
+        code="over_email_send_rate_limit",
+    )
+    assert (
+        auth_service.friendly_auth_error(exc)
+        == "Слишком много попыток. Повторите через 20 сек."
+    )
+
+
+def test_friendly_auth_error_invalid_email() -> None:
+    from supabase_auth.errors import AuthApiError
+
+    exc = AuthApiError(
+        message="Unable to validate email address: invalid format",
+        status=400,
+        code="validation_failed",
+    )
+    assert "Некорректный email" in auth_service.friendly_auth_error(exc)
+
+
+def test_friendly_auth_error_email_exists() -> None:
+    from supabase_auth.errors import AuthApiError
+
+    exc = AuthApiError(
+        message="User already registered", status=400, code="email_exists"
+    )
+    assert "уже зарегистрирован" in auth_service.friendly_auth_error(exc)
+
+
+def test_friendly_auth_error_unknown_is_generic() -> None:
+    from supabase_auth.errors import AuthApiError
+
+    exc = AuthApiError(message="something odd", status=500, code="unexpected_failure")
+    assert auth_service.friendly_auth_error(exc) == (
+        "Не удалось выполнить запрос. Проверьте данные и попробуйте ещё раз."
+    )
+
+
+def test_register_invalid_email_shows_error() -> None:
+    resp = client.post(
+        "/auth/register",
+        data={"username": "tony", "email": "not-an-email", "password": "secret1"},
+    )
+    assert resp.status_code == 200
+    assert "Некорректный email" in resp.text
+
+
+def test_register_autoconfirm_session_logs_in(monkeypatch) -> None:
+    class _Session:
+        access_token = "access.jwt.token"
+        refresh_token = "refresh-token"
+
+    class _Result:
+        session = _Session()
+
+    class _AuthStub:
+        def sign_up(self, _payload):
+            return _Result()
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(auth_service, "username_available", lambda _u: True)
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    resp = client.post(
+        "/auth/register",
+        data={
+            "username": "tony",
+            "email": "tony@example.com",
+            "password": "secret1",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+    assert "gal_session=" in resp.headers["set-cookie"]
+    assert "gal_refresh=" in resp.headers["set-cookie"]

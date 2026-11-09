@@ -18,12 +18,9 @@ AUTH_REDIRECT = "/"
 
 
 def _error_message(exc: Exception) -> str:
-    raw = getattr(exc, "message", None) or getattr(exc, "msg", None)
-    if not raw:
-        raw = str(exc)
-    if not raw or len(raw) > 300:
-        raw = "Не удалось выполнить запрос. Проверьте данные и попробуйте ещё раз."
-    return raw
+    raw = getattr(exc, "message", None) or getattr(exc, "msg", None) or str(exc)
+    logger.warning("Supabase auth error: %s (code=%s)", raw, getattr(exc, "code", None))
+    return auth_service.friendly_auth_error(exc)
 
 
 def _page(request: Request, name: str, **ctx) -> HTMLResponse:
@@ -78,34 +75,24 @@ async def register(request: Request) -> HTMLResponse:
     email = (await body_field(request, "email")).strip()
     password = await body_field(request, "password")
     password_confirm = await body_field(request, "password_confirm")
+    form = {"username": username, "display_name": display_name, "email": email}
     if password_confirm and password != password_confirm:
         return _page(
-            request,
-            "auth/register.html",
-            error="Пароли не совпадают.",
-            username=username,
-            display_name=display_name,
-            email=email,
+            request, "auth/register.html", error="Пароли не совпадают.", **form
         )
     username_error = auth_service.validate_username(username)
     if username_error:
-        return _page(
-            request,
-            "auth/register.html",
-            error=username_error,
-            username=username,
-            display_name=display_name,
-            email=email,
-        )
+        return _page(request, "auth/register.html", error=username_error, **form)
+    email_error = auth_service.validate_email(email)
+    if email_error:
+        return _page(request, "auth/register.html", error=email_error, **form)
     try:
         if not auth_service.username_available(username):
             return _page(
                 request,
                 "auth/register.html",
                 error="Это имя пользователя уже занято. Выберите другое.",
-                username="",
-                display_name=display_name,
-                email=email,
+                **form,
             )
         client = auth_service.new_anon_client()
         res = client.auth.sign_up(
@@ -118,14 +105,7 @@ async def register(request: Request) -> HTMLResponse:
             }
         )
     except auth_service.AUTH_ERRORS as exc:
-        return _page(
-            request,
-            "auth/register.html",
-            error=_error_message(exc),
-            username=username,
-            display_name=display_name,
-            email=email,
-        )
+        return _page(request, "auth/register.html", error=_error_message(exc), **form)
     session = res.session
     if session is not None:
         response = RedirectResponse(AUTH_REDIRECT, status_code=303)
@@ -135,9 +115,7 @@ async def register(request: Request) -> HTMLResponse:
         request,
         "auth/register.html",
         info="Регистрация завершена. Подтвердите email, перейдя по ссылке из письма.",
-        username=username,
-        display_name=display_name,
-        email=email,
+        **form,
     )
 
 
