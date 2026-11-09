@@ -44,17 +44,30 @@ def login_page(request: Request, error: str | None = None) -> HTMLResponse:
 
 @router.post("/login", response_class=HTMLResponse, include_in_schema=False)
 async def login(request: Request) -> HTMLResponse:
-    email = (await body_field(request, "email")).strip()
+    identifier = (await body_field(request, "email")).strip()
     password = await body_field(request, "password")
+    email = auth_service.resolve_login_email(identifier)
+    if email is None:
+        return _page(
+            request,
+            "auth/login.html",
+            error="Неверный email или пароль.",
+            email=identifier,
+        )
     try:
         client = auth_service.new_anon_client()
         res = client.auth.sign_in_with_password({"email": email, "password": password})
     except auth_service.AUTH_ERRORS as exc:
-        return _page(request, "auth/login.html", error=_error_message(exc), email=email)
+        return _page(
+            request, "auth/login.html", error=_error_message(exc), email=identifier
+        )
     session = res.session
     if session is None:
         return _page(
-            request, "auth/login.html", error="Не удалось получить сессию.", email=email
+            request,
+            "auth/login.html",
+            error="Не удалось получить сессию.",
+            email=identifier,
         )
     response = RedirectResponse(AUTH_REDIRECT, status_code=303)
     auth_service.set_auth_cookies(response, session)

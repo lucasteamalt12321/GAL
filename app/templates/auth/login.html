@@ -8,8 +8,10 @@
   <form method="post" action="/auth/login" class="stack">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label class="field">
-      <span class="field-label">Email</span>
-      <input type="email" name="email" value="{{ email }}" required autocomplete="email">
+      <span class="field-label">Email или никнейм</span>
+      <input type="text" name="email" value="{{ email }}" required autocomplete="username"
+             placeholder="TonyBig или name@example.com" autocapitalize="none" spellcheck="false">
+      <span class="hint muted">Можно войти по никнейму или по email.</span>
     </label>
     <label class="field">
       <span class="field-label">Пароль</span>

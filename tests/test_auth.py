@@ -389,3 +389,141 @@ def test_register_autoconfirm_session_logs_in(monkeypatch) -> None:
     assert resp.headers["location"] == "/"
     assert "gal_session=" in resp.headers["set-cookie"]
     assert "gal_refresh=" in resp.headers["set-cookie"]
+
+
+def test_resolve_login_email_passthrough_and_empty() -> None:
+    assert auth_service.resolve_login_email("Tony@Example.com") == "Tony@Example.com"
+    assert auth_service.resolve_login_email("  a@b.c  ") == "a@b.c"
+    assert auth_service.resolve_login_email("") is None
+    assert auth_service.resolve_login_email("   ") is None
+
+
+def test_resolve_login_email_username_without_service_role(monkeypatch) -> None:
+    monkeypatch.setattr(auth_service, "get_settings", lambda: Settings(_env_file=None))
+    assert auth_service.resolve_login_email("TonyBig") is None
+
+
+def _service_settings() -> Settings:
+    return Settings(
+        supabase_url="https://x.supabase.co", supabase_service_role_key="key"
+    )
+
+
+def test_resolve_login_email_username_found(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    class _Row:
+        def __init__(self):
+            self.data = [{"id": "uid-1"}]
+
+    class _Query:
+        def ilike(self, *_a, **_k):
+            return self
+
+        def limit(self, *_a, **_k):
+            return self
+
+        def execute(self):
+            return _Row()
+
+    class _Table:
+        def select(self, *_a, **_k):
+            return _Query()
+
+    class _User:
+        email = "tonybig11200@gmail.com"
+
+    class _Resp:
+        user = _User()
+
+    class _Admin:
+        def get_user_by_id(self, uid):
+            captured["uid"] = uid
+            return _Resp()
+
+    class _Auth:
+        admin = _Admin()
+
+    class _Service:
+        auth = _Auth()
+
+        def table(self, name):
+            captured["table"] = name
+            return _Table()
+
+    monkeypatch.setattr(auth_service, "get_settings", _service_settings)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: _Service())
+    assert auth_service.resolve_login_email("TonyBig") == "tonybig11200@gmail.com"
+    assert captured == {"uid": "uid-1", "table": "profiles"}
+
+
+def test_resolve_login_email_username_not_found(monkeypatch) -> None:
+    class _Row:
+        def __init__(self):
+            self.data = []
+
+    class _Query:
+        def ilike(self, *_a, **_k):
+            return self
+
+        def limit(self, *_a, **_k):
+            return self
+
+        def execute(self):
+            return _Row()
+
+    class _Table:
+        def select(self, *_a, **_k):
+            return _Query()
+
+    class _Service:
+        def table(self, _name):
+            return _Table()
+
+    monkeypatch.setattr(auth_service, "get_settings", _service_settings)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: _Service())
+    assert auth_service.resolve_login_email("ghost") is None
+
+
+def test_login_by_username_resolves_and_logs_in(monkeypatch) -> None:
+    client.cookies.clear()
+    captured: dict[str, str] = {}
+
+    class _Session:
+        access_token = "access.jwt.token"
+        refresh_token = "refresh-token"
+
+    class _Result:
+        session = _Session()
+
+    class _AuthStub:
+        def sign_in_with_password(self, payload):
+            captured.update(payload)
+            return _Result()
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(
+        auth_service,
+        "resolve_login_email",
+        lambda ident: "tonybig11200@gmail.com" if ident == "TonyBig" else None,
+    )
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    resp = client.post(
+        "/auth/login",
+        data={"email": "TonyBig", "password": "secret1"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+    assert captured["email"] == "tonybig11200@gmail.com"
+    assert "gal_session=" in resp.headers["set-cookie"]
+
+
+def test_login_unknown_username_generic_error(monkeypatch) -> None:
+    client.cookies.clear()
+    monkeypatch.setattr(auth_service, "resolve_login_email", lambda _ident: None)
+    resp = client.post("/auth/login", data={"email": "ghost", "password": "secret1"})
+    assert resp.status_code == 200
+    assert "Неверный email или пароль" in resp.text

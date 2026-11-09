@@ -258,6 +258,38 @@ def username_available(username: str) -> bool:
     return row is None or not row.data
 
 
+def resolve_login_email(identifier: str) -> str | None:
+    """Email для входа по email или никнейму.
+
+    Supabase Auth входит по email; никнейм резолвится в email на сервере через
+    service role, чтобы email не утекал клиенту. Возвращает None, если никнейм
+    не найден или service role недоступен — роут покажет общее «Неверный email
+    или пароль», не раскрывая существование ника.
+    """
+    value = (identifier or "").strip()
+    if not value:
+        return None
+    if "@" in value:
+        return value
+    if not get_settings().service_role_configured:
+        return None
+    try:
+        service = new_service_client()
+        row = (
+            service.table("profiles")
+            .select("id")
+            .ilike("username", ilike_literal(value))
+            .limit(1)
+            .execute()
+        )
+        if not row.data:
+            return None
+        resp = service.auth.admin.get_user_by_id(str(row.data[0]["id"]))
+        return resp.user.email or None
+    except AUTH_ERRORS + PROFILE_ERRORS:
+        return None
+
+
 def set_auth_cookies(response: Response, session) -> None:
     kwargs = _cookie_kwargs()
     response.set_cookie(SESSION_COOKIE, session.access_token, **kwargs)
