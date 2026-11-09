@@ -100,7 +100,7 @@ begin
         evaluation_count = v_count
     where id = v_aid;
 
-    if v_count >= 3 then
+    if v_count >= 2 then
         update public.achievements
         set ranking_status = 'ranked',
             rank_order = random(),

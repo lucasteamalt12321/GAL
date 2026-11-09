@@ -111,7 +111,7 @@ begin
         evaluation_count = v_count
     where id = p_achievement_id;
 
-    if v_count >= 3 and v_rstatus <> 'ranked' then
+    if v_count >= 2 and v_rstatus <> 'ranked' then
         update public.achievements
         set ranking_status = 'ranked',
             rank_order = coalesce(rank_order, random()),
@@ -232,7 +232,7 @@ begin
         evaluation_count = v_count
     where id = v_aid;
 
-    if v_count >= 3 and v_rstatus <> 'ranked' then
+    if v_count >= 2 and v_rstatus <> 'ranked' then
         update public.achievements
         set ranking_status = 'ranked',
             rank_order = coalesce(rank_order, random()),

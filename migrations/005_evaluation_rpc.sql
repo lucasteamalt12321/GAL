@@ -135,7 +135,7 @@ begin
     -- Переход в ранжированные: присваиваем временный уникальный rank
     -- (сразу выполняется constraint achievements_rank_requires_ranked),
     -- фиксируем ти-брейкер момента и блокируем оценки.
-    if v_count >= 3
+    if v_count >= 2
        and (select ranking_status from public.achievements where id = p_achievement_id) = 'unknown'
     then
         update public.achievements

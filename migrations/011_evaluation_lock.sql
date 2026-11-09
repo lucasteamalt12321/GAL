@@ -155,7 +155,7 @@ begin
     -- Переход в ранжированные: присваиваем временный уникальный rank
     -- (сразу выполняется constraint achievements_rank_requires_ranked),
     -- фиксируем ти-брейкер момента и блокируем оценки.
-    if v_count >= 3 then
+    if v_count >= 2 then
         update public.achievements
         set ranking_status = 'ranked',
             rank_order = random(),
