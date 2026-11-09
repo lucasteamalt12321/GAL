@@ -14,26 +14,28 @@ def completion_detail(request: Request, completion_id: int) -> HTMLResponse:
     """Карточка прохождения достижения."""
     if request.state.user is None:
         return RedirectResponse(LOGIN_URL, status_code=303)
-    
+
     completion = completions_service.get_user_completion_by_id(request, completion_id)
     if completion is None:
         raise HTTPException(status_code=404, detail="Completion not found")
-    
+
     # Проверяем доступ: владелец или модератор
     user = request.state.user
     is_owner = str(user.id) == str(completion.get("user_id"))
     is_moderator = user.role in ("moderator", "admin")
-    
+
     if not is_owner and not is_moderator:
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     # Получаем доказательства
     proofs = completions_service.list_proofs(request, completion_id)
     proof_views = completions_service.decorate_proofs(request, proofs)
-    
+
     # Получаем достижение
-    achievement = completions_service.get_achievement_for_completion(request, completion_id)
-    
+    achievement = completions_service.get_achievement_for_completion(
+        request, completion_id
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="completions/detail.html",
