@@ -76,7 +76,7 @@ PostgreSQL  Auth     Storage
 
 ## Аутентификация
 
-- `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `Secure` в проде).
+- `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `Secure` в проде). В Supabase включён `mailer_autoconfirm`: регистрация сразу возвращает сессию и логинит пользователя, без письма подтверждения (встроенный SMTP Supabase лимитирован и ненадёжен для прода).
 - **Вход через LTHub:** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie и редиректит на LTHub `/oauth/authorize`; `GET /auth/lthub/callback` проверяет state, меняет код на токен (PKCE S256), читает `/oauth/userinfo` и логинит/создаёт Supabase-пользователя через `external_identities` (миграция 015). Username берётся из логина LTHub (при занятости — суффикс/subject), display_name — из профиля LTHub. LTHub — публичный PKCE-клиент, client secret не используется.
 - `POST /auth/logout` — `sign_out` + удаление cookie.
 - `POST /auth/recover` — письмо со ссылкой на `/auth/update-password` (`APP_URL` или текущий origin).
@@ -143,7 +143,7 @@ PostgreSQL  Auth     Storage
 ## Безопасность
 
 - **CSRF:** double-submit cookie `gal_csrf`; проверка в app-level зависимости `csrf_protect` (`app/main.py`), а не в middleware — чтение тела не ломает multipart-загрузку. Enforcement только при `APP_ENV=production`. Токен доступен шаблонам через `request.state.csrf_token`.
-- **Регистрация:** `validate_username` (3–32 симв., `[A-Za-z0-9_.-]`) + регистронезависимая проверка занятости; подтверждение пароля в форме.
+- **Регистрация:** `validate_username` (3–32 симв., `[A-Za-z0-9_.-]`) + регистронезависимая проверка занятости; `validate_email` (формат `local@domain.tld`) до обращения к GoTrue; подтверждение пароля в форме. Ошибки Supabase Auth маппятся в понятные русские сообщения (`friendly_auth_error`): rate limit («Повторите через N сек»), некорректный email, «email уже зарегистрирован», неверные учётные данные, слабый пароль — вместо сырого английского текста GoTrue.
 - **RLS:** служебные колонки достижений защищены guard-триггером (010); заявки/оценки/proofs видны владельцу и модератору; история модерации пишется только от имени модератора (013); вставка достижения разрешена только при наличии оценки опубликованного достижения (020).
 - **Cookies:** удаление битой сессии выполняется с `max-age=0`; `Secure` в проде.
 - **Ошибки:** HTML-страницы 403/404 (`errors/403.html`, `errors/404.html`) и 503 при сбое Supabase (`errors/upstream.html`); API-пути (`/auth/me`, `/health`, `/docs`) отвечают JSON.
@@ -237,7 +237,7 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 165 тестов: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, сценарии v1.1–v1.5.
+- `pytest` — 172 теста: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, сценарии v1.1–v1.5.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 

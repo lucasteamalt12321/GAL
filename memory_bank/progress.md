@@ -24,6 +24,24 @@
 
 ## Changelog
 
+### 2026-11-09 — Исправление регистрации (3 ошибки) и разблокировка CI
+
+**Запрос.** Сайт не давал зарегистрироваться: «username tony занят», «retry in 20s», «invalid email». Исправить все три и задеплоить.
+
+**Диагноз (Management API).** Аккаунт `tony` / `tonybig1120@gmail.com` создан 2026-11-09 13:30, `email_confirmed_at=null`, `last_sign_in_at=null` — триггер `handle_new_user` создал профиль сразу при sign_up, поэтому username держал собственный неподтверждённый аккаунт пользователя (данных 0). Конфиг Auth: `mailer_autoconfirm=false`, `rate_limit_email_sent=2` (встроенный SMTP, 2 письма/час). Повторные sign_up слали письмо подтверждения → GoTrue 429 «For security purposes, you can only request this after 20 seconds»; «invalid email» — сырая ошибка валидации GoTrue. Обе показывались пользователю сырым английским текстом (`_error_message` возвращал `exc.message` как есть).
+
+**Реализовано.**
+- Supabase Auth: `PATCH /config/auth` → `mailer_autoconfirm=true`. Регистрация сразу возвращает сессию и логинит (ветка `session is not None` → redirect `/` + cookie), без писем подтверждения и email-rate-limit. Встроенный SMTP Supabase не предназначен для прода — подтверждение письма было источником всех трёх симптомов.
+- Зависший аккаунт `tony` (`084d5355…`, 0 достижений/заявок/оценок/жалоб) удалён `delete from auth.users where id=… and email_confirmed_at is null` (каскадно чистит профиль). Username `tony` и email свободны для пользователя.
+- `app/services/auth.py`: `validate_email` (`EMAIL_RE = ^[^@\s]+@[^@\s]+\.[^@\s]+$`, длина ≤254) до обращения к GoTrue; `friendly_auth_error(exc)` маппит коды/сообщения GoTrue в русские тексты: rate limit (`over_*_rate_limit`, «after N seconds» → «Повторите через N сек»), `email_address_invalid`/`validation_failed` → «Некорректный email», `email_exists`/`user_already_exists` → «email уже зарегистрирован», `weak_password`, `invalid_credentials`, `email_not_confirmed`, `signup_disabled`; неизвестное → общий текст.
+- `app/routers/auth.py`: `_error_message` логирует сырую ошибку и возвращает `friendly_auth_error`; register добавляет серверную валидацию email и сохраняет значения полей при ошибке (ранее username очищался при «занято»).
+
+**Тесты.** `tests/test_auth.py`: правила `validate_email`, маппинг rate-limit/invalid-email/email-exists/unknown, регистрация с невалидным email, мгновенный вход при autoconfirm-сессии (303 + cookie); login-JSON тест переведён на реалистичный `AuthApiError(invalid_credentials)`. Итого **172 passed**, ruff check/format чисты по отслеживаемым файлам.
+
+**CI.** Был красный с `62aec27` (не связан с регистрацией): I001 в `app/main.py` (алиасный импорт `completions as completions_router` требовал отдельного блока) + формат `app/routers/completions.py` (пробелы/перенос). Исправлено `ruff --fix`/`ruff format` (коммит `2b89151`). Локальный ruff читает пользовательский конфиг с extra-правилами (I/YTT/BLE), которого нет в репозитории; отслеживаемые файлы чисты и по дефолту, и по строгим правилам.
+
+**Деплой и прод-проверка.** Запушено `5691eef` (registration fix) + `2b89151` (CI lint/format) → автодеплой Vercel. Прод-E2E в браузере (`gal-inky.vercel.app`): POST регистрации с невалидным email отдаёт новое русское сообщение (новый код жив); регистрация `e2e_regcheck` / `e2e.regcheck.gal@example.com` → редирект `/`, мгновенный вход, `/auth/me` вернул корректный профиль (username/display_name/email/role). Тестовый аккаунт удалён; на проде только `lucasteam`, `tony` свободен (`tony_taken=0`, `tony_email_exists=0`), `mailer_autoconfirm=true`.
+
 ### 2026-11-08 — Создание достижения только после оценки существующего
 
 **Запрос.** Новый пользователь не должен создавать своё достижение, пока не прошёл и не оценил хотя бы одно уже существующее.
@@ -238,4 +256,4 @@
 
 ## last_checked_commit
 
-`d260ad1 memory bank: record prod verification after cleanup` (2026-11-08)
+`2b89151 style: fix ruff lint and format to unblock CI` (2026-11-09)
