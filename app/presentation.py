@@ -55,6 +55,12 @@ RANKING_STATUS_LABELS = {
     "ranked": "В рейтинге",
 }
 
+ROLE_LABELS = {
+    "user": "Пользователь",
+    "moderator": "Модератор",
+    "admin": "Администратор",
+}
+
 
 def _label(mapping: dict[str, str], value: object) -> str:
     if value is None:
@@ -88,6 +94,10 @@ def review_decision(value: object) -> str:
 
 def ranking_status(value: object) -> str:
     return _label(RANKING_STATUS_LABELS, value)
+
+
+def role(value: object) -> str:
+    return _label(ROLE_LABELS, value)
 
 
 def _parse_datetime(value: object) -> datetime | None:

@@ -11,7 +11,7 @@
   <p class="muted">Последние {{ reviews|length }} решений. Новые сверху.</p>
 
   {% if reviews %}
-    <div class="table-scroll">
+    <div class="table-scroll" tabindex="0" role="region" aria-label="История решений модераторов">
       <table class="leaderboard-table history-table">
         <caption class="visually-hidden">История решений модераторов</caption>
         <thead>

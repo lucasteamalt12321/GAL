@@ -56,6 +56,35 @@ def apply_migration(token: str, ref: str, path: Path, dry_run: bool = False) -> 
         raise SystemExit(f"FAIL {path.name}: {resp.status_code}\n{body}")
 
 
+def migration_files() -> list[Path]:
+    """Все миграции в порядке применения.
+
+    Сортировка по числовому префиксу, а не по строке: `100_...` должен идти
+    после `099_...`. Дубли номеров запрещены: два файла с одним префиксом
+    применяются в неочевидном порядке и могут переопределить друг друга.
+    """
+    files = sorted(Path("migrations").glob("*.sql"), key=_sort_key)
+    by_prefix: dict[str, list[str]] = {}
+    for path in files:
+        match = re.match(r"(\d+)", path.name)
+        if match:
+            by_prefix.setdefault(match.group(1), []).append(path.name)
+    duplicates = {
+        prefix: names for prefix, names in by_prefix.items() if len(names) > 1
+    }
+    if duplicates:
+        details = ", ".join(
+            f"{prefix}: {', '.join(names)}" for prefix, names in duplicates.items()
+        )
+        raise SystemExit(f"Duplicate migration numbers: {details}")
+    return files
+
+
+def _sort_key(path: Path) -> tuple[int, str]:
+    match = re.match(r"(\d+)", path.name)
+    return (int(match.group(1)) if match else sys.maxsize, path.name)
+
+
 def main() -> int:
     env = _Env()
     if not env.supabase_url or not env.supabase_access_token:
@@ -70,7 +99,7 @@ def main() -> int:
     if args:
         files = [_resolve(Path(a)) for a in args]
     else:
-        files = sorted(Path("migrations").glob("*.sql"))
+        files = migration_files()
 
     for path in files:
         apply_migration(env.supabase_access_token, ref, path, dry_run=dry_run)
@@ -81,7 +110,7 @@ def _resolve(path: Path) -> Path:
     """Разрешает аргумент вида `013` в путь миграции."""
     if path.exists():
         return path
-    matches = sorted(Path("migrations").glob(f"{path.name}*.sql"))
+    matches = sorted(Path("migrations").glob(f"{path.name}*.sql"), key=_sort_key)
     if len(matches) == 1:
         return matches[0]
     raise SystemExit(f"Migration not found or ambiguous: {path}")

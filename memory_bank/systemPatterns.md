@@ -43,11 +43,14 @@ gal/
 │   │   ├── evaluations.py
 │   │   ├── rankings.py
 │   │   ├── reports.py
+│   │   ├── oauth.py        ← GAL как OAuth 2.0 provider (PKCE)
 │   │   └── moderation.py
 │   ├── services/
 │   │   ├── bradley_terry.py ← попарные сравнения + MM-оценка
 │   │   ├── bt_recompute.py  ← пересчёт по БД через service role
 │   │   ├── ranking.py      ← порядок рангов по BT, player_score
+│   │   ├── oauth_provider.py ← коды/токены провайдера GAL
+│   │   ├── lthub_accounts.py ← LTHub identity → Supabase-сессия
 │   │   ├── achievements.py
 │   │   ├── evaluation.py
 │   │   ├── moderation.py
@@ -114,6 +117,9 @@ gal/
 - Публикация достижения без `approved`-выполнения создателя с proof запрещена deferred constraint trigger-ом (013).
 - `bt_*` меняются только RPC `apply_bt_ratings` (security definer, execute у `service_role`); guard-триггер откатывает прямые изменения.
 - LTHub OAuth: публичный клиент + PKCE S256, одноразовые коды (TTL 5 мин), opaque tokens (30 дней); GAL проверяет state и создаёт Supabase-сессию через service role; привязка в `external_identities` недоступна anon/authenticated.
+- GAL как OAuth-провайдер: `oauth_*` таблицы хранят только SHA-256-хеши кодов/токенов и доступны исключительно `service_role`; authorize требует активную сессию GAL. Клиенты — статический реестр в `app/services/oauth_provider.py` (без таблицы `oauth_clients`); redirect URI расширяются через `OAUTH_LTHUB_REDIRECT_URIS`.
+- Все ответы получают security-заголовки (`nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, CSP `frame-ancestors 'none'`, HSTS в проде); CSRF-токен обязателен для POST.
+- Внешние ссылки-доказательства допускаются только со схемой `http(s)://` (сервис + CHECK в БД).
 - `SERVICE_ROLE_KEY` никогда не попадает во frontend.
 
 ### 6. Оценка достижения (Personal Scale)
@@ -132,6 +138,7 @@ gal/
 ```text
 Achievement → Creator Proof → Moderation → Published
    → User Completion → Completion Proof → Moderation
-   → Personal Evaluation → Average Position → Global Rank
+   → Personal Evaluation → Pairwise Comparisons
+   → Bradley–Terry Strength → Global Rank
    → 1000 / Rank → Player Leaderboard
 ```

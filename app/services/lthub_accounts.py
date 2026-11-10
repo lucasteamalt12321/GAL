@@ -90,16 +90,27 @@ def _find_identity(service, subject: str) -> str | None:
     return None
 
 
-def _find_profile_by_username(service, username: str) -> str | None:
-    res = (
-        service.table("profiles")
-        .select("id")
-        .ilike("username", auth_service.ilike_literal(username))
-        .limit(1)
-        .execute()
-    )
-    if res.data:
-        return str(res.data[0]["id"])
+def _find_user_id_by_email(service, email: str) -> str | None:
+    """Ищет auth-пользователя по детерминированному email LTHub.
+
+    Нельзя искать профиль по username: имя изменяемо и может совпасть с
+    чужим аккаунтом (включая гонку между проверкой занятости и созданием).
+    Email `lthub-oauth-<subject>@example.com` однозначно принадлежит subject.
+    """
+    target = email.strip().lower()
+    if not target:
+        return None
+    page = 1
+    while page <= 10:
+        users = service.auth.admin.list_users(page=page, per_page=1000)
+        if not users:
+            return None
+        for user in users:
+            if str(getattr(user, "email", "") or "").strip().lower() == target:
+                return str(user.id)
+        if len(users) < 1000:
+            return None
+        page += 1
     return None
 
 
@@ -179,11 +190,10 @@ def _create_or_reuse_user(
         )
         user_id = str(created.user.id)
     except auth_service.AUTH_ERRORS as exc:
-        # Пользователь мог остаться от прерванного первого входа — ищем по
-        # выбранному username или по старому lthub_<subject>.
-        user_id = _find_profile_by_username(
-            service, username
-        ) or _find_profile_by_username(service, _username_for(subject, ""))
+        # Пользователь мог остаться от прерванного первого входа. Ищем только
+        # по email, который детерминированно связан с subject: переиспользование
+        # профиля по username позволило бы войти в чужой аккаунт.
+        user_id = _find_user_id_by_email(service, email)
         if user_id is None:
             raise LthubAccountError(
                 "Не удалось создать аккаунт GAL для LTHub."

@@ -11,7 +11,7 @@
   <section class="leaderboard-section">
     <h2>Топ достижений</h2>
     {% if achievements %}
-      <div class="table-scroll">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Топ достижений">
         <table class="leaderboard-table">
           <caption class="visually-hidden">Достижения, отсортированные по силе Bradley–Terry</caption>
           <thead>
@@ -51,14 +51,14 @@
         </nav>
       {% endif %}
     {% else %}
-      <p class="muted">Пока нет ранжированных достижений — появится после того, как достижения получат 3+ оценки.</p>
+      <p class="muted">Пока нет ранжированных достижений — появится после того, как достижения получат 2+ оценки.</p>
     {% endif %}
   </section>
 
   <section class="leaderboard-section">
     <h2>Топ игроков</h2>
     {% if players %}
-      <div class="table-scroll">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Топ игроков">
         <table class="leaderboard-table">
           <caption class="visually-hidden">Игроки, отсортированные по сумме очков</caption>
           <thead>

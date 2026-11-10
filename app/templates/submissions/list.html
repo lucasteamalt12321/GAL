@@ -10,7 +10,7 @@
 
 <p class="muted">
   Здесь все ваши заявки о выполнении: статус, доказательства и причина отклонения.
-  Отклонённую заявку можно исправить и отправить снова — старая замена не нужна.
+  Отклонённую заявку можно исправить и отправить снова — старая заявка будет заменена.
 </p>
 
 <div class="chips submissions-filters">
@@ -21,7 +21,7 @@
 </div>
 
 {% if submissions %}
-  <div class="table-scroll">
+  <div class="table-scroll" tabindex="0" role="region" aria-label="Мои заявки">
     <table class="leaderboard-table submissions-table">
       <caption class="visually-hidden">Мои заявки о выполнении достижений</caption>
       <thead>
@@ -50,7 +50,7 @@
             <td>{{ item.created_at|datetime_local }}</td>
             <td>
               {% if item.proof_count %}
-                {{ item.proof_count }} {{ item.proof_count|plural_ru(('файл', 'файла', 'файлов')) }}
+                {{ item.proof_count }} {{ item.proof_count|plural_ru(('доказательство', 'доказательства', 'доказательств')) }}
               {% else %}
                 <span class="muted">—</span>
               {% endif %}

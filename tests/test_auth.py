@@ -23,6 +23,67 @@ def test_register_page_ok() -> None:
     assert 'name="password"' in resp.text
 
 
+def test_register_page_preserves_next() -> None:
+    resp = client.get("/auth/register", params={"next": "/achievements?tab=all"})
+    assert resp.status_code == 200
+    assert 'name="next" value="/achievements?tab=all"' in resp.text
+    assert "intent=register" in resp.text
+
+
+def test_register_redirects_to_next_after_signup(monkeypatch) -> None:
+    class _Session:
+        session = SimpleNamespace(access_token="access", refresh_token="refresh")
+
+    class _AuthStub:
+        def sign_up(self, _payload):
+            return _Session()
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(auth_service, "username_available", lambda _u: True)
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    resp = client.post(
+        "/auth/register",
+        data={
+            "username": "new_gal_user",
+            "email": "u@example.com",
+            "password": "secret1",
+            "next": "/achievements?tab=all",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/achievements?tab=all"
+
+
+def test_register_ignores_unsafe_next(monkeypatch) -> None:
+    class _Session:
+        session = SimpleNamespace(access_token="access", refresh_token="refresh")
+
+    class _AuthStub:
+        def sign_up(self, _payload):
+            return _Session()
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    monkeypatch.setattr(auth_service, "username_available", lambda _u: True)
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    resp = client.post(
+        "/auth/register",
+        data={
+            "username": "new_gal_user",
+            "email": "u@example.com",
+            "password": "secret1",
+            "next": "//evil.test/path",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+
+
 def test_recover_page_ok() -> None:
     resp = client.get("/auth/recover")
     assert resp.status_code == 200

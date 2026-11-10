@@ -24,6 +24,47 @@
 
 ## Changelog
 
+### 2026-11-10 — GAL как OAuth-провайдер для регистрации/входа в LTHub
+
+**Запрос.** «При регистрации добавь возможность импорта данных из GAL» — импортировать только поля, которые требует регистрация LTHub, через OAuth «Вход через GAL».
+
+**GAL.** Добавлены `app/services/oauth_provider.py` (клиенты, одноразовые коды TTL 5 минут, opaque-токены 30 дней, SHA-256-хеши, PKCE S256, профиль) и `app/routers/oauth.py`: `GET/POST /oauth/authorize` (consent; анонимного ведёт на `/auth/login?next=`), `POST /oauth/token`, `GET /oauth/userinfo`, `GET /.well-known/oauth-authorization-server`. Consent-шаблон — `app/templates/oauth/authorize.html`; `auth.login` принимает и сохраняет безопасный `next`. Клиенты — статический реестр в коде: `lthub` (публичный, без `client_secret`) + redirect URI прод/localhost, расширяются `OAUTH_LTHUB_REDIRECT_URIS`; таблицы `oauth_clients` нет. Конфиг: `OAUTH_PROVIDER_ENABLED`, `OAUTH_LTHUB_CLIENT_ID`, `OAUTH_LTHUB_REDIRECT_URIS`. Миграция `021_oauth_provider.sql` создаёт `oauth_codes`/`oauth_tokens` (RLS, доступ только `service_role`).
+
+**LTHub (BankBot).** `core/gal_oauth.py` — OAuth-клиент: `GET /auth/gal` (state/PKCE-verifier/`next` в HttpOnly-cookie), `GET /api/auth/gal/callback` (проверка state, обмен кода, `/oauth/userinfo`, поиск/создание `web_users` по `gal_subject`), `GET /auth/gal/done` + `GET /api/auth/gal/session` (одноразовая передача токена в `localStorage.web_token`). Импортируются `preferred_username` → `login` и `display_name`; занятый логин получает суффикс, OAuth-only аккаунт — случайный неиспользуемый хеш пароля; email не импортируется. Кнопки на `/register` и `/login`; `redirect` сохраняется.
+
+**Parity обратного входа (GAL через LTHub).** Обратный поток уже существовал; доработан без переписывания. `lthub_auth.start` пишет `next` в HttpOnly-cookie `gal_lthub_next` через `_safe_next` (только same-origin путь, `/auth/login|logout|register|lthub` отсекаются) и добавляет `intent=register`; callback возвращает на сохранённый `next`. `auth.register_page`/`auth.register` принимают и сохраняют `next`, редирект после успешной регистрации. Шаблоны `login.html`/`register.html` передают `next`, кнопка регистрации — `intent=register`. LTHub `core/oauth.py`: `intent=register` переключает authorize-страницу на `/register?redirect=<authorize URL>` для незалогиненных; `doRegister` валидирует redirect (закрыт open redirect). Тесты: GAL `test_lthub_oauth.py` +3 (safe/unsafe next, intent, redirect после callback), `test_auth.py` +3; LTHub `test_oauth_provider.py` +2 (intent=register, неизвестный intent → login).
+
+**Проверки.** GAL — `tests/test_oauth_provider.py` (8 тестов), всего **202 passed**, ruff check/format чисты; целевые после parity — **52 passed** (`test_lthub_oauth.py`, `test_auth.py`, `test_oauth_provider.py`). LTHub — `tests/unit/test_gal_oauth_client.py` (7) + `test_oauth_provider.py` (6) **13 passed**, целевой регресс (`test_web_portal_e2e`, `test_gal_oauth_client`) **39 passed**, ruff чист; smoke `/register` и `/login` — 200 с кнопками GAL.
+
+**Не применено.** Миграция `021_oauth_provider.sql` к проду **не применена** (общая инфраструктура, требуется подтверждение владельца) — без неё OAuth-вход в LTHub вернёт ошибку.
+
+### 2026-11-10 — v1.6: hardening, устранение регрессий и защита ранжирования
+
+**Запрос.** «Улучшай проект насколько возможно».
+
+**Аудит.** Три субагента просмотрели безопасность, миграции/БД и UX/a11y; находки проверены вручную.
+
+**Безопасность.**
+- Stored XSS в ссылках-доказательствах: `app/services/completions.py::safe_external_url` допускает только `http(s)://`, применяется при attach и в `proof_view`; миграция 022 добавляет `CHECK proofs_link_scheme` (defense-in-depth).
+- `app/middleware.py`: `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; form-action 'self'`, HSTS в проде.
+- `app/services/lthub_accounts.py`: при ошибке `create_user` пользователь ищется только по точному email (раньше — по username, что могло привязать LTHub-identity к чужому профилю).
+- `app/services/auth.py`: транзиентный сбой Supabase больше не удаляет cookies — разлогин только при явно невалидной сессии.
+
+**Целостность миграций.** Удалена `020_reduce_evaluation_threshold.sql` (переопределяла `recompute_ranks_internal()` без сортировки по BT, без двухфазного bump и без `security definer`; `submit_evaluation` без `NOT_FOUND`/advisory lock; `LOCKED`/безусловный `random()`), дублировала номер 020 и ломала чистую БД. Добавлена `022_restore_ranking_and_proof_scheme.sql`: канонический пересчёт (BT + двухфазный bump + `security definer`), `submit_evaluation`/`apply_completion_evaluation` с порогом 2, `NOT_FOUND`, advisory lock, `rank_order = coalesce(rank_order, random())`, CHECK на схему ссылок. `scripts/apply_migrations.py` теперь падает с понятной ошибкой при дубле номера.
+
+**Корректность и UX.**
+- HTML-страницы при `RequestValidationError` получают HTML-422 с русским текстом (раньше — сырой JSON); 5xx не раскрывают `exc.detail`.
+- Pending-заявка без доказательства больше не тупик: форма повторного прикрепления на карточке.
+- При переотправке отклонённой заявки старые proof-файлы удаляются только после успешного attach (раньше — до, и терялись при сбое).
+- Сортировка «Новые» исправлена (reverse применялся ко всему списку): новые сверху, ranked выше unknown.
+- `ROLE_LABELS` + фильтр `role_label`; порог в UI «после 2 оценок».
+- A11y: flash `role=alert/status`, таблицы с `tabindex=0 role=region`, `<textarea>` + `<label>` для причин, `data-confirm` на approve, чтобы Enter не одобрял заявку.
+- `.gitignore`/`ruff.toml`: одноразовые скрипты исключены из линта; `.env.example` дополнен `SUPABASE_TIMEOUT_SECONDS`, `DISPLAY_UTC_OFFSET_HOURS`.
+
+**Тесты.** Новый `tests/test_hardening.py` (10): XSS-схемы URL, security-заголовки, HTML-422, сетевой сбой не разлогинивает, невалидная сессия разлогинивает, поиск LTHub-пользователя по email. Итого **196 passed**, ruff check/format чисты.
+
+**Не применено к проду.** `022_restore_ranking_and_proof_scheme.sql` требует подтверждения владельца: меняет порог ranked 3→2 и добавляет CHECK на proofs. До применения прод-функция `submit_evaluation` остаётся с порогом 3.
+
 ### 2026-11-09 — Вход по никнейму или email
 
 **Запрос.** После регистрации пользователь (`TonyBig`) отметил, что вход просит email, а не никнейм.
@@ -266,4 +307,4 @@
 
 ## last_checked_commit
 
-`7dd4069 feat: allow login by nickname or email` (2026-11-09)
+`18b995c memory bank: sync login by nickname feature and prod verification` (2026-11-09) + незакоммиченное рабочее дерево v1.6, OAuth-провайдера и parity `next`/`intent=register` (2026-11-10). Миграция `021_oauth_provider.sql` не применена.

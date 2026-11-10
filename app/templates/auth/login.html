@@ -7,6 +7,7 @@
   <h1>Вход</h1>
   <form method="post" action="/auth/login" class="stack">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="next" value="{{ next or '/' }}">
     <label class="field">
       <span class="field-label">Email или никнейм</span>
       <input type="text" name="email" value="{{ email }}" required autocomplete="username"
@@ -21,9 +22,9 @@
   </form>
   {% if lthub_oauth_enabled %}
     <div class="auth-divider"><span>или</span></div>
-    <a class="btn btn-lthub" href="/auth/lthub">Войти через LThub</a>
+    <a class="btn btn-lthub" href="/auth/lthub?next={{ next|urlencode }}">Войти через LThub</a>
   {% endif %}
   <p class="muted"><a href="/auth/recover">Забыли пароль?</a></p>
-  <p class="muted">Нет аккаунта? <a href="/auth/register">Зарегистрироваться</a></p>
+  <p class="muted">Нет аккаунта? <a href="/auth/register?next={{ next|urlencode }}">Зарегистрироваться</a></p>
 </section>
 {% endblock %}

@@ -1,0 +1,9 @@
+target-version = "py312"
+
+# Одноразовые локальные скрипты не входят в репозиторий и не должны
+# ломать `ruff check .` у разработчика.
+extend-exclude = [
+    "scripts/debug_*.py",
+    "scripts/nudge_*.py",
+    "scripts/fix_test_user.py",
+]

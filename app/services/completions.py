@@ -325,9 +325,26 @@ def get_rejection_reason(request: Request, completion_id: int) -> str | None:
     return res.data[0].get("reason") or None
 
 
+def safe_external_url(value: str | None) -> str | None:
+    """Оставляет только абсолютные http(s)-ссылки.
+
+    Проверка на записи недостаточна: строку proofs можно вставить напрямую
+    через PostgREST, а `javascript:`/`data:` в href выполнился бы в origin GAL
+    при клике модератора. Поэтому схема проверяется и при рендере.
+    """
+    candidate = (value or "").strip()
+    if not candidate:
+        return None
+    if not candidate.lower().startswith(("http://", "https://")):
+        return None
+    return candidate
+
+
 def proof_view(client: Client, proof: dict) -> dict:
     url = proof.get("storage_path")
-    if proof.get("proof_type") != LINK_PROOF and url:
+    if proof.get("proof_type") == LINK_PROOF:
+        url = safe_external_url(url)
+    elif url:
         try:
             signed = client.storage.from_(PROOFS_BUCKET).create_signed_url(
                 url, PROOF_URL_TTL
@@ -415,7 +432,8 @@ def attach_proof(
             pass
 
     if external_url:
-        if not external_url.startswith(("http://", "https://")):
+        external_url = safe_external_url(external_url)
+        if external_url is None:
             raise ProofError("Ссылка должна начинаться с http:// или https://")
         res = (
             client.table("proofs")
@@ -515,8 +533,9 @@ def submit_completion(
     existing = get_user_completion(request, achievement_id)
 
     completion: dict
+    stale_proof_paths: list[str] = []
     if existing is not None and existing["status"] == "rejected":
-        old_proof_paths = [
+        stale_proof_paths = [
             proof["storage_path"]
             for proof in list_proofs(request, existing["id"])
             if not str(proof.get("storage_path", "")).startswith(
@@ -531,16 +550,20 @@ def submit_completion(
             raise CompletionError(
                 "Не удалось обновить заявку. Попробуйте ещё раз."
             ) from exc
-        if old_proof_paths:
-            try:
-                client.storage.from_(PROOFS_BUCKET).remove(old_proof_paths)
-            except COMPLETION_ERRORS:
-                logger.debug(
-                    "Failed to remove stale proof objects %r",
-                    old_proof_paths,
-                    exc_info=True,
-                )
         completion = {"id": res.data[0]["completion_id"]}
+        if harder_count is not None:
+            client.table("achievement_completions").update(
+                {"requested_harder_count": harder_count}
+            ).eq("id", completion["id"]).execute()
+    elif (
+        existing is not None
+        and existing["status"] == "pending"
+        and not list_proofs(request, existing["id"])
+    ):
+        # Незавершённая заявка без доказательств: даём прикрепить файл к ней,
+        # иначе пользователь попадал в тупик (форма не показывалась, а повторная
+        # отправка упиралась в AlreadyCompletedError).
+        completion = existing
         if harder_count is not None:
             client.table("achievement_completions").update(
                 {"requested_harder_count": harder_count}
@@ -600,4 +623,16 @@ def submit_completion(
                 "Failed to clean empty completion %s", completion["id"], exc_info=True
             )
         raise
+
+    if stale_proof_paths:
+        # Старые файлы удаляем только после успешной загрузки нового
+        # доказательства: иначе сбой загрузки оставлял заявку вообще без файлов.
+        try:
+            client.storage.from_(PROOFS_BUCKET).remove(stale_proof_paths)
+        except COMPLETION_ERRORS:
+            logger.debug(
+                "Failed to remove stale proof objects %r",
+                stale_proof_paths,
+                exc_info=True,
+            )
     return completion

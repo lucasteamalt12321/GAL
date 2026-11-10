@@ -22,6 +22,11 @@ class _Response:
         return self._payload
 
 
+def _cookie(local: TestClient, name: str) -> str:
+    value = local.cookies[name]
+    return value[1:-1] if value.startswith('"') and value.endswith('"') else value
+
+
 def _enable(monkeypatch) -> None:
     monkeypatch.setattr(
         lthub_router,
@@ -97,6 +102,61 @@ def test_lthub_callback_creates_session(monkeypatch) -> None:
     assert resp.headers["location"] == "/"
     assert captured == [{"subject": "42", "login": "alice", "display_name": "Alice"}]
     assert "gal_session" in resp.cookies
+
+
+def test_lthub_start_preserves_safe_next_and_intent(monkeypatch) -> None:
+    _enable(monkeypatch)
+    local = TestClient(app)
+    resp = local.get(
+        "/auth/lthub?intent=register&next=%2Fachievements%3Ftab%3Dall",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    query = parse_qs(urlparse(resp.headers["location"]).query)
+    assert query["intent"] == ["register"]
+    assert _cookie(local, "gal_lthub_next") == "/achievements?tab=all"
+
+
+def test_lthub_start_sanitizes_next(monkeypatch) -> None:
+    _enable(monkeypatch)
+    for bad in ("https://evil.test", "//evil.test", "/auth/login", "/auth/lthub"):
+        local = TestClient(app)
+        resp = local.get("/auth/lthub", params={"next": bad}, follow_redirects=False)
+        assert resp.status_code == 303
+        assert _cookie(local, "gal_lthub_next") == "/"
+
+
+def test_lthub_callback_redirects_to_saved_next(monkeypatch) -> None:
+    _enable(monkeypatch)
+    monkeypatch.setattr(
+        lthub_router.httpx,
+        "post",
+        lambda *_a, **_k: _Response({"access_token": "lthub-token"}),
+    )
+    monkeypatch.setattr(
+        lthub_router.httpx,
+        "get",
+        lambda *_a, **_k: _Response(
+            {"sub": "42", "login": "alice", "display_name": "Alice"}
+        ),
+    )
+    monkeypatch.setattr(
+        lthub_accounts,
+        "login_with_lthub",
+        lambda _request, **_kwargs: SimpleNamespace(
+            access_token="access", refresh_token="refresh"
+        ),
+    )
+    local = TestClient(app)
+    local.cookies.set("gal_lthub_state", "expected", path="/auth/lthub")
+    local.cookies.set("gal_lthub_verifier", "v" * 64, path="/auth/lthub")
+    local.cookies.set("gal_lthub_next", "/achievements?tab=all", path="/auth/lthub")
+    resp = local.get(
+        "/auth/lthub/callback?code=abc&state=expected",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/achievements?tab=all"
 
 
 def test_lthub_callback_surfaces_oauth_error(monkeypatch) -> None:

@@ -1,6 +1,6 @@
 # GAL — Architecture Overview
 
-## Global Achievement List v1.1
+## Global Achievement List v1.6
 
 Платформа для глобального рейтинга человеческих достижений из разных сфер через единую относительную шкалу сложности, построенную на личных сравнениях пользователей.
 
@@ -42,6 +42,8 @@ PostgreSQL  Auth     Storage
 | `rankings.py`    | Achievement / Player leaderboards (пагинация)           |
 | `moderation.py`  | Очередь, решения, скрытие, история                      |
 | `reports.py`     | Жалобы и их рассмотрение                                |
+| `lthub_auth.py`  | Вход в GAL через LTHub (OAuth client, PKCE)             |
+| `oauth.py`       | GAL как OAuth 2.0 provider для LTHub (authorize/token/userinfo) |
 | `health.py`      | `/health`                                               |
 
 ### `app/` (инфраструктура)
@@ -73,12 +75,14 @@ PostgreSQL  Auth     Storage
 | `bt_recompute.py`| Пересчёт BT из БД через service role + RPC             |
 | `ranking.py`     | Порядок рангов по BT, fallback, `player_score`         |
 | `rankings.py`    | Чтение лидербордов (достижения + игроки)               |
+| `oauth_provider.py` | OAuth-провайдер: клиенты, коды, токены, PKCE, userinfo |
 
 ## Аутентификация
 
 - `POST /auth/register`, `POST /auth/login` — Supabase Auth; токены в httpOnly-cookie `gal_session` + `gal_refresh` (SameSite=Lax, `Secure` в проде). В Supabase включён `mailer_autoconfirm`: регистрация сразу возвращает сессию и логинит пользователя, без письма подтверждения (встроенный SMTP Supabase лимитирован и ненадёжен для прода).
 - **Вход по никнейму или email:** поле входа принимает и ник, и email. `resolve_login_email` резолвит никнейм в email на сервере через service role (`profiles.ilike(username)` → `auth.admin.get_user_by_id`), email не утекает клиенту. Неизвестный ник даёт то же общее «Неверный email или пароль», что и неверный пароль (без раскрытия существования ника). При недоступном service role вход остаётся по email.
-- **Вход через LTHub:** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie и редиректит на LTHub `/oauth/authorize`; `GET /auth/lthub/callback` проверяет state, меняет код на токен (PKCE S256), читает `/oauth/userinfo` и логинит/создаёт Supabase-пользователя через `external_identities` (миграция 015). Username берётся из логина LTHub (при занятости — суффикс/subject), display_name — из профиля LTHub. LTHub — публичный PKCE-клиент, client secret не используется.
+- **Вход через LTHub:** `GET /auth/lthub` создаёт `state` + PKCE-verifier в HttpOnly-cookie и редиректит на LTHub `/oauth/authorize`; `GET /auth/lthub/callback` проверяет state, меняет код на токен (PKCE S256), читает `/oauth/userinfo` и логинит/создаёт Supabase-пользователя через `external_identities` (миграция 015). Username берётся из логина LTHub (при занятости — суффикс/subject), display_name — из профиля LTHub. LTHub — публичный PKCE-клиент, client secret не используется. `next` (только same-origin путь) сохраняется в HttpOnly-cookie и восстанавливается после callback; `intent=register` с кнопки регистрации уходит провайдеру, чтобы LTHub после согласия создавал аккаунт, а не логинил. `POST /auth/register` также сохраняет `next` и редиректит на него после успешной регистрации.
+- **GAL как OAuth-провайдер для LTHub:** `GET/POST /oauth/authorize` — consent-страница (анонимного ведёт на `/auth/login?next=...`), `POST /oauth/token` — обмен одноразового кода на opaque access token (PKCE S256, TTL кода 5 минут, токен 30 дней), `GET /oauth/userinfo` — профиль для импорта, `GET /.well-known/oauth-authorization-server` — metadata. Клиенты — статический реестр `app/services/oauth_provider.py` (без таблицы `oauth_clients`); LTHub — публичный клиент. В БД хранятся только SHA-256-хеши кодов/токенов, доступ — `service_role` (миграция 021).
 - `POST /auth/logout` — `sign_out` + удаление cookie.
 - `POST /auth/recover` — письмо со ссылкой на `/auth/update-password` (`APP_URL` или текущий origin).
 - `GET /auth/update-password` — страница завершения сброса: токены приходят во фрагменте URL, пароль отправляется из браузера напрямую в Supabase Auth (`PUT /auth/v1/user`), anon key публичен.
@@ -186,8 +190,10 @@ PostgreSQL  Auth     Storage
 - `018_auto_first_evaluation.sql` — первая approved-заявка без сохранённой сложности автоматически становится якорем (позиция 1); backfill для существующих пользователей.
 - `019_live_evaluations.sql` — снятие lock, приём новых оценок после `ranked`, пересчёт рангов при каждой новой оценке.
 - `020_creation_requires_evaluation.sql` — `user_has_published_evaluation(uuid)` (security definer, EXECUTE только у `authenticated`) и RLS-insert в `achievements` только при наличии оценки опубликованного достижения.
+- `021_oauth_provider.sql` — GAL как OAuth 2.0 provider: `oauth_codes`, `oauth_tokens`, хранение только SHA-256-хешей, доступ исключительно `service_role`.
+- `022_restore_ranking_and_proof_scheme.sql` — восстановление канонического `recompute_ranks_internal()` (BT + двухфазный bump + `security definer`), `submit_evaluation`/`apply_completion_evaluation` с порогом 2 и защитой ссылок-доказательств (`proofs_link_scheme`).
 
-**Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014** (008 содержит `create or replace` устаревших функций, после неё обязательно переприменение 010/011).
+**Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014 → 022** (008 и 022 содержат `create or replace` функций ранжирования; после 008 обязательно переприменение 010/011/014, после 022 — итоговая версия).
 
 ## Данные
 
@@ -218,7 +224,7 @@ Achievement → Creator Proof → Moderation → Published
 
 - Достижение публикуется только после подтверждения собственного выполнения создателем (закреплено триггером 013).
 - Оценка доступна только обладателю `approved` completion; одно достижение = одна оценка.
-- Минимум 3 оценки для попадания в глобальный рейтинг (иначе `?`); после этого новые оценки продолжают менять топ.
+- Минимум 2 оценки для попадания в глобальный рейтинг (иначе `?`); после этого новые оценки продолжают менять топ.
 - Место определяется силой Bradley–Terry; при равной силе — средней позицией, затем зафиксированным `rank_order` и id.
 - Очки игрока = `1000 / rank` каждого уникального подтверждённого достижения.
 - Достижения со статусом `unknown` (`?`) дают 0 очков.
@@ -238,10 +244,10 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 178 тестов: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth, «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, вход по никнейму, сценарии v1.1–v1.5.
+- `pytest` — 202 теста: юнит-тесты ранкинга и Bradley–Terry, роуты, CSRF, resilience, OAuth (клиент и провайдер), «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, вход по никнейму, hardening (XSS в ссылках, security-заголовки, HTML-ошибки валидации, транзиентные сбои auth, LTHub-аккаунты), сценарии v1.1–v1.6.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 
 ## Статус
 
-Документация соответствует состоянию после v1.5: каркас, миграции 001–020, аутентификация и сброс пароля, вход через LTHub (OAuth + PKCE), достижения + профили + настройки, сложность при создании/прохождении, доказательства и модерация с понятными ошибками Storage, движок оценок, запрет создания достижения без оценки опубликованного достижения, глобальный ранкинг Bradley–Terry, лидерборды с пагинацией, жалобы, «Мои заявки», CSRF/ошибки, адаптивный UI в стиле VKUI (light/dark), CI. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию после v1.6: каркас, миграции 001–022, аутентификация и сброс пароля, вход через LTHub (OAuth + PKCE), GAL как OAuth-провайдер, достижения + профили + настройки, сложность при создании/прохождении, доказательства и модерация с понятными ошибками Storage и проверкой схемы ссылок, движок оценок с порогом 2, запрет создания достижения без оценки опубликованного достижения, глобальный ранкинг Bradley–Terry, лидерборды с пагинацией, жалобы, «Мои заявки», CSRF/security-заголовки/HTML-ошибки, адаптивный UI в стиле VKUI (light/dark), CI. Обновлять при изменениях архитектуры, маршрутов и модулей.

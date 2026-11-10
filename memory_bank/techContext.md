@@ -52,6 +52,9 @@ LTHUB_AUTHORIZE_URL=https://lthub.vercel.app/oauth/authorize
 LTHUB_TOKEN_URL=https://lthub.vercel.app/oauth/token
 LTHUB_USERINFO_URL=https://lthub.vercel.app/oauth/userinfo
 LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
+OAUTH_PROVIDER_ENABLED=true   # GAL как OAuth-провайдер для LTHub
+OAUTH_LTHUB_CLIENT_ID=lthub   # публичный PKCE-клиент LTHub
+OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (прод/localhost уже по умолчанию)
 ```
 
 `.env.example` содержит шаблон; `.env` не коммитится.
@@ -76,7 +79,10 @@ LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
   - `016_completion_review_visibility.sql` — автор видит причину отклонения заявки;
   - `017_completion_difficulty.sql` — `requested_harder_count` + RPC `apply_completion_evaluation`;
   - `018_auto_first_evaluation.sql` — авто-якорь первой approved-заявки + backfill;
-  - `019_live_evaluations.sql` — снятие lock, новые оценки после ranked, пересчёт топ.
+  - `019_live_evaluations.sql` — снятие lock, новые оценки после ranked, пересчёт топ;
+  - `020_creation_requires_evaluation.sql` — RLS-запрет создания достижения без оценки опубликованного;
+  - `021_oauth_provider.sql` — GAL как OAuth 2.0 provider (коды, токены, PKCE; клиенты — статический реестр в коде, таблицы `oauth_clients` нет; только `service_role`);
+  - `022_restore_ranking_and_proof_scheme.sql` — канонический пересчёт рангов (BT + двухфазный bump), порог 2, защита ссылок-доказательств (`proofs_link_scheme`). **К проду не применена.**
 - Storage bucket `proofs` — приватный; файлы по пути `{user_id}/{achievement_id}/{uuid}-{file}`; доступ по signed URL (TTL 3600), RLS на `storage.objects`.
 - Миграции применяются через Management API: `POST https://api.supabase.com/v1/projects/{ref}/database/query` с `Authorization: Bearer <PAT>` (успех = 201), т.к. `psql`/supabase CLI недоступны.
 - API supabase-py 2.31: auth = `supabase_auth.SyncGoTrueClient` (`SyncClient`/`SyncSupabaseAuthClient` — импорт падает); Storage = `client.storage.from_("proofs")` (`storage3._sync.file_api.SyncBucketProxy`, `upload(path, bytes, FileOptions)`, `create_signed_url(path, expires_in)` → dict с `signedURL`/`signedUrl`, `remove`, `list`); исключения `storage3.exceptions.StorageException`/`StorageApiError`.
@@ -93,10 +99,11 @@ LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
 
 - GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
 - Push → Vercel (production).
-- Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .`.
-- Тесты: 153 (ранкинг/BT, OAuth, «Мои заявки», сложность/сравнения, живые оценки, роуты, CSRF, resilience, v1.1–v1.5 сценарии).
+- Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .` (конфигурация — `ruff.toml`, `target-version = "py312"`, одноразовые скрипты исключены).
+- Тесты: 196 (ранкинг/BT, OAuth клиент и провайдер, «Мои заявки», сложность/сравнения, живые оценки, роуты, CSRF, resilience, hardening, v1.1–v1.6 сценарии).
 - Bradley–Terry: `scripts/recompute_bt.py` (service role), эксперимент `scripts/bt_experiment.py`; формула/ограничения — `docs/bradley_terry.md`.
 - LTHub OAuth: публичный PKCE-клиент `gal`, provider в BankBot `core/oauth.py`; GAL-клиент — `app/routers/lthub_auth.py` + `app/services/lthub_accounts.py`.
+- GAL как OAuth-провайдер: `app/services/oauth_provider.py` + `app/routers/oauth.py`; клиент LTHub (`lthub`, публичный, PKCE S256) — статический реестр; LTHub-клиент — `core/gal_oauth.py` (BankBot).
 - `ruff` закреплён версией `0.17.4` в `requirements-dev.txt` (CI и локальная проверка совпадают).
 
 ## Правила проверки кода

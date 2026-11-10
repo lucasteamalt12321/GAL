@@ -25,9 +25,14 @@
           {% if a.description %}<p class="prose">{{ a.description }}</p>{% endif %}
           <form method="post" action="/moderation/achievements/{{ a.id }}" class="stack">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <input type="text" name="reason" placeholder="Причина (для отклонения)" maxlength="500">
+            <label class="field">
+              <span class="field-label">Причина отклонения (необязательно)</span>
+              <textarea name="reason" rows="2" maxlength="500"
+                        placeholder="Только для отклонения"></textarea>
+            </label>
             <div class="row">
-              <button type="submit" class="btn btn-primary" name="decision" value="approved">Одобрить</button>
+              <button type="submit" class="btn btn-primary" name="decision" value="approved"
+                      data-confirm="Опубликовать достижение? Действие изменит публичный каталог.">Одобрить</button>
               <button type="submit" class="btn btn-danger" name="decision" value="rejected"
                       data-confirm="Отклонить достижение? Это действие нельзя отменить."
                       formnovalidate>Отклонить</button>
@@ -70,9 +75,14 @@
           {% endif %}
           <form method="post" action="/moderation/completions/{{ c.id }}" class="stack">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <input type="text" name="reason" placeholder="Причина (для отклонения)" maxlength="500">
+            <label class="field">
+              <span class="field-label">Причина отклонения (необязательно)</span>
+              <textarea name="reason" rows="2" maxlength="500"
+                        placeholder="Только для отклонения"></textarea>
+            </label>
             <div class="row">
-              <button type="submit" class="btn btn-primary" name="decision" value="approved">Одобрить</button>
+              <button type="submit" class="btn btn-primary" name="decision" value="approved"
+                      data-confirm="Подтвердить выполнение? Заявка будет одобрена.">Одобрить</button>
               <button type="submit" class="btn btn-danger" name="decision" value="rejected"
                       data-confirm="Отклонить заявку? Это действие нельзя отменить."
                       formnovalidate>Отклонить</button>

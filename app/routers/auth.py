@@ -17,6 +17,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 AUTH_REDIRECT = "/"
 
 
+def _safe_next(value: str | None) -> str:
+    """Only allow same-site absolute paths as a post-login destination."""
+    target = (value or "").strip()
+    if not target.startswith("/") or target.startswith("//"):
+        return AUTH_REDIRECT
+    if target.startswith(("/auth/login", "/auth/logout")):
+        return AUTH_REDIRECT
+    return target
+
+
 def _error_message(exc: Exception) -> str:
     raw = getattr(exc, "message", None) or getattr(exc, "msg", None) or str(exc)
     logger.warning("Supabase auth error: %s (code=%s)", raw, getattr(exc, "code", None))
@@ -36,16 +46,20 @@ def _page(request: Request, name: str, **ctx) -> HTMLResponse:
 
 
 @router.get("/login", response_class=HTMLResponse, include_in_schema=False)
-def login_page(request: Request, error: str | None = None) -> HTMLResponse:
+def login_page(
+    request: Request, error: str | None = None, next: str | None = None
+) -> HTMLResponse:
+    target = _safe_next(next)
     if request.state.user:
-        return RedirectResponse(AUTH_REDIRECT, status_code=303)
-    return _page(request, "auth/login.html", email="", error=error)
+        return RedirectResponse(target, status_code=303)
+    return _page(request, "auth/login.html", email="", error=error, next=target)
 
 
 @router.post("/login", response_class=HTMLResponse, include_in_schema=False)
 async def login(request: Request) -> HTMLResponse:
     identifier = (await body_field(request, "email")).strip()
     password = await body_field(request, "password")
+    target = _safe_next(await body_field(request, "next"))
     email = auth_service.resolve_login_email(identifier)
     if email is None:
         return _page(
@@ -53,13 +67,18 @@ async def login(request: Request) -> HTMLResponse:
             "auth/login.html",
             error="Неверный email или пароль.",
             email=identifier,
+            next=target,
         )
     try:
         client = auth_service.new_anon_client()
         res = client.auth.sign_in_with_password({"email": email, "password": password})
     except auth_service.AUTH_ERRORS as exc:
         return _page(
-            request, "auth/login.html", error=_error_message(exc), email=identifier
+            request,
+            "auth/login.html",
+            error=_error_message(exc),
+            email=identifier,
+            next=target,
         )
     session = res.session
     if session is None:
@@ -68,17 +87,26 @@ async def login(request: Request) -> HTMLResponse:
             "auth/login.html",
             error="Не удалось получить сессию.",
             email=identifier,
+            next=target,
         )
-    response = RedirectResponse(AUTH_REDIRECT, status_code=303)
+    response = RedirectResponse(target, status_code=303)
     auth_service.set_auth_cookies(response, session)
     return response
 
 
 @router.get("/register", response_class=HTMLResponse, include_in_schema=False)
-def register_page(request: Request) -> HTMLResponse:
+def register_page(request: Request, next: str | None = None) -> HTMLResponse:
+    target = _safe_next(next)
     if request.state.user:
-        return RedirectResponse(AUTH_REDIRECT, status_code=303)
-    return _page(request, "auth/register.html", username="", display_name="", email="")
+        return RedirectResponse(target, status_code=303)
+    return _page(
+        request,
+        "auth/register.html",
+        username="",
+        display_name="",
+        email="",
+        next=target,
+    )
 
 
 @router.post("/register", response_class=HTMLResponse, include_in_schema=False)
@@ -88,7 +116,13 @@ async def register(request: Request) -> HTMLResponse:
     email = (await body_field(request, "email")).strip()
     password = await body_field(request, "password")
     password_confirm = await body_field(request, "password_confirm")
-    form = {"username": username, "display_name": display_name, "email": email}
+    target = _safe_next(await body_field(request, "next"))
+    form = {
+        "username": username,
+        "display_name": display_name,
+        "email": email,
+        "next": target,
+    }
     if password_confirm and password != password_confirm:
         return _page(
             request, "auth/register.html", error="Пароли не совпадают.", **form
@@ -121,7 +155,7 @@ async def register(request: Request) -> HTMLResponse:
         return _page(request, "auth/register.html", error=_error_message(exc), **form)
     session = res.session
     if session is not None:
-        response = RedirectResponse(AUTH_REDIRECT, status_code=303)
+        response = RedirectResponse(target, status_code=303)
         auth_service.set_auth_cookies(response, session)
         return response
     return _page(

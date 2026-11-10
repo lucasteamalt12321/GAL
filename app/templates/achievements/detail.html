@@ -19,7 +19,7 @@
       <span class="stat-label">Место в рейтинге</span>
       <span class="stat-value">{% if achievement.rank %}#{{ achievement.rank }}{% else %}?{% endif %}</span>
       {% if not achievement.rank and achievement.status == 'published' and achievement.evaluation_count < 3 %}
-        <span class="hint muted">появится после 3 оценок (сейчас {{ achievement.evaluation_count }})</span>
+        <span class="hint muted">появится после 2 оценок (сейчас {{ achievement.evaluation_count }})</span>
       {% endif %}
     </div>
     <div class="stat">
@@ -149,6 +149,13 @@
         </div>
         <p class="muted">Можно исправить доказательство и отправить заявку снова — прежняя заявка и её файлы будут заменены.</p>
         {% with form_title="Отправить исправленное доказательство", submit_label="Отправить снова" %}
+          {% include "achievements/_proof_form.html" %}
+        {% endwith %}
+      {% elif own_completion.status == 'pending' and not proofs %}
+        <div class="flash flash-error">
+          Доказательство не прикрепилось. Приложите файл или ссылку ещё раз.
+        </div>
+        {% with form_title="Приложить доказательство", submit_label="Отправить" %}
           {% include "achievements/_proof_form.html" %}
         {% endwith %}
       {% endif %}

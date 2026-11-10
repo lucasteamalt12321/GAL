@@ -21,15 +21,23 @@
               <a href="/achievements/{{ report.achievement.id }}">{{ report.achievement.title }}</a>
               <span class="badge badge-{{ report.achievement.status }}">{{ report.achievement.status|status_label }}</span>
             </p>
-            <form method="post" action="/reports/{{ report.id }}/accept" class="stack">
+            <form method="post" action="/reports/{{ report.id }}/accept" class="stack"
+                  data-confirm="Принять жалобу и скрыть достижение?">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <input type="text" name="resolution_reason" placeholder="Причина (необязательно)" maxlength="500">
-              <button type="submit" class="btn btn-danger"
-                      data-confirm="Принять жалобу и скрыть достижение?">Принять и скрыть достижение</button>
+              <label class="field">
+                <span class="field-label">Причина решения (необязательно)</span>
+                <textarea name="resolution_reason" rows="2" maxlength="500"
+                          placeholder="Комментарий модератора"></textarea>
+              </label>
+              <button type="submit" class="btn btn-danger">Принять и скрыть достижение</button>
             </form>
             <form method="post" action="/reports/{{ report.id }}/reject" class="stack">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <input type="text" name="resolution_reason" placeholder="Причина (необязательно)" maxlength="500">
+              <label class="field">
+                <span class="field-label">Причина решения (необязательно)</span>
+                <textarea name="resolution_reason" rows="2" maxlength="500"
+                          placeholder="Комментарий модератора"></textarea>
+              </label>
               <button type="submit" class="btn">Отклонить жалобу</button>
             </form>
           </article>

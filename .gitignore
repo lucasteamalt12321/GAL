@@ -1,7 +1,6 @@
 # environment
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 
 # python
@@ -12,6 +11,15 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .pytestlog.txt
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# одноразовые локальные скрипты (не коммитим)
+scripts/debug_*.py
+scripts/nudge_*.py
+scripts/fix_test_user.py
 
 # deployment
 .vercel/

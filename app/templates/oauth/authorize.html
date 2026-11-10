@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Доступ для {{ client_name }}{% endblock %}
+
+{% block content %}
+<section class="auth-card">
+  <h1>Вход через GAL</h1>
+  <p class="muted">
+    Приложение <strong>{{ client_name }}</strong> просит доступ к вашему профилю GAL.
+    Передаются только ник и отображаемое имя. Пароль не передаётся.
+  </p>
+  <div class="stack">
+    <p><strong>{{ profile.username }}</strong>{% if profile.display_name and profile.display_name != profile.username %} — {{ profile.display_name }}{% endif %}</p>
+  </div>
+  <form method="post" action="/oauth/authorize" class="stack">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    {% for name, value in params.items() %}
+      <input type="hidden" name="{{ name }}" value="{{ value }}">
+    {% endfor %}
+    <button type="submit" class="btn btn-primary" name="decision" value="allow">Продолжить</button>
+    <button type="submit" class="btn" name="decision" value="deny">Отмена</button>
+  </form>
+</section>
+{% endblock %}

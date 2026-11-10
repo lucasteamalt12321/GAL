@@ -3,6 +3,8 @@ from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from postgrest.exceptions import APIError
@@ -18,6 +20,7 @@ from app.routers import (
     health,
     lthub_auth,
     moderation,
+    oauth,
     rankings,
     reports,
     submissions,
@@ -53,12 +56,30 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 app.add_middleware(UserContextMiddleware)
 
 # Пути, которые обязаны отвечать JSON (API/документация), а не HTML-страницей.
-JSON_PATHS = ("/auth/me", "/health", "/openapi.json", "/docs", "/redoc")
+JSON_PATHS = (
+    "/auth/me",
+    "/health",
+    "/openapi.json",
+    "/docs",
+    "/redoc",
+    "/oauth/token",
+    "/oauth/userinfo",
+    "/.well-known/oauth-authorization-server",
+)
 ERROR_TEMPLATES = {
     403: "errors/403.html",
     404: "errors/404.html",
 }
 DEFAULT_ERROR_TEMPLATE = "errors/error.html"
+STATUS_MESSAGES = {
+    400: "Некорректный запрос.",
+    401: "Требуется вход в систему.",
+    403: "Недостаточно прав для этого действия.",
+    404: "Страница не найдена.",
+    405: "Этот способ запроса не поддерживается.",
+    409: "Запрос конфликтует с текущим состоянием данных.",
+    422: "Некорректные данные запроса.",
+}
 
 
 def _wants_json(request: Request) -> bool:
@@ -94,12 +115,40 @@ async def _handle_http_error(
             {"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers
         )
     template = ERROR_TEMPLATES.get(exc.status_code, DEFAULT_ERROR_TEMPLATE)
+    # Для 5xx не показываем внутреннюю формулировку: она может содержать
+    # имена таблиц/констрейнтов. Для 4xx — нейтральный русский текст по коду.
+    detail = STATUS_MESSAGES.get(exc.status_code)
+    if detail is None:
+        detail = (
+            "Сервис временно недоступен. Попробуйте позже."
+            if exc.status_code >= 500
+            else "Не удалось выполнить запрос."
+        )
     return templates.TemplateResponse(
         request=request,
         name=template,
-        context={"status_code": exc.status_code, "detail": exc.detail},
+        context={"status_code": exc.status_code, "detail": detail},
         status_code=exc.status_code,
         headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _handle_validation_error(
+    request: Request, exc: RequestValidationError
+) -> HTMLResponse | JSONResponse:
+    """Ошибки валидации параметров — HTML для страниц, JSON для API.
+
+    Без этого обработчика FastAPI отдавал JSON 422 даже на HTML-страницах,
+    например `/achievements?page=abc`.
+    """
+    if _wants_json(request):
+        return JSONResponse({"detail": jsonable_encoder(exc.errors())}, status_code=422)
+    return templates.TemplateResponse(
+        request=request,
+        name=DEFAULT_ERROR_TEMPLATE,
+        context={"status_code": 422, "detail": STATUS_MESSAGES[422]},
+        status_code=422,
     )
 
 
@@ -127,6 +176,7 @@ async def _handle_supabase_not_configured(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(lthub_auth.router)
+app.include_router(oauth.router)
 app.include_router(achievements.router)
 app.include_router(completions_router.router)
 app.include_router(evaluations.router)

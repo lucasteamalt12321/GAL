@@ -25,9 +25,21 @@ router = APIRouter(prefix="/auth/lthub", tags=["auth"])
 
 STATE_COOKIE = "gal_lthub_state"
 VERIFIER_COOKIE = "gal_lthub_verifier"
+NEXT_COOKIE = "gal_lthub_next"
 COOKIE_PATH = "/auth/lthub"
 COOKIE_MAX_AGE = 600
 CALLBACK_PATH = "/auth/lthub/callback"
+
+
+def _safe_next(value: str | None) -> str:
+    target = (value or "").strip()
+    if not target.startswith("/") or target.startswith("//"):
+        return "/"
+    if target.startswith(
+        ("/auth/login", "/auth/logout", "/auth/register", "/auth/lthub")
+    ):
+        return "/"
+    return target
 
 
 def _code_challenge(verifier: str) -> str:
@@ -63,31 +75,35 @@ def _fail(message: str) -> RedirectResponse:
 def _clear_cookies(response: RedirectResponse) -> None:
     response.delete_cookie(STATE_COOKIE, path=COOKIE_PATH)
     response.delete_cookie(VERIFIER_COOKIE, path=COOKIE_PATH)
+    response.delete_cookie(NEXT_COOKIE, path=COOKIE_PATH)
 
 
 @router.get("", response_class=HTMLResponse, include_in_schema=False)
-def start(request: Request) -> RedirectResponse:
+def start(
+    request: Request, next: str | None = None, intent: str | None = None
+) -> RedirectResponse:
     settings = get_settings()
     if not settings.lthub_oauth_enabled:
         return _fail("Вход через LTHub отключён.")
     state = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(48)
-    query = urlencode(
-        {
-            "response_type": "code",
-            "client_id": settings.lthub_client_id,
-            "redirect_uri": _redirect_uri(request),
-            "state": state,
-            "code_challenge": _code_challenge(verifier),
-            "code_challenge_method": "S256",
-        }
-    )
+    params = {
+        "response_type": "code",
+        "client_id": settings.lthub_client_id,
+        "redirect_uri": _redirect_uri(request),
+        "state": state,
+        "code_challenge": _code_challenge(verifier),
+        "code_challenge_method": "S256",
+    }
+    if (intent or "").strip().lower() == "register":
+        params["intent"] = "register"
     response = RedirectResponse(
-        f"{settings.lthub_authorize_url}?{query}", status_code=303
+        f"{settings.lthub_authorize_url}?{urlencode(params)}", status_code=303
     )
     kwargs = _cookie_kwargs()
     response.set_cookie(STATE_COOKIE, state, **kwargs)
     response.set_cookie(VERIFIER_COOKIE, verifier, **kwargs)
+    response.set_cookie(NEXT_COOKIE, _safe_next(next), **kwargs)
     return response
 
 
@@ -156,7 +172,9 @@ def callback(
     except Exception:  # noqa: BLE001 - не раскрываем внутренние детали
         return _fail("Не удалось войти через LTHub. Попробуйте ещё раз.")
 
-    response = RedirectResponse("/", status_code=303)
+    response = RedirectResponse(
+        _safe_next(request.cookies.get(NEXT_COOKIE)), status_code=303
+    )
     auth_service.set_auth_cookies(response, session)
     _clear_cookies(response)
     return response

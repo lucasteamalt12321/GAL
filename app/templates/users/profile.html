@@ -12,7 +12,7 @@
     {% endif %}
     <div>
       <h1>{{ profile.display_name or profile.username }}</h1>
-      <span class="muted">@{{ profile.username }}{% if profile.role != 'user' %} · {{ profile.role }}{% endif %}</span>
+      <span class="muted">@{{ profile.username }}{% if profile.role != 'user' %} · {{ profile.role|role_label }}{% endif %}</span>
     </div>
   </div>
   {% if is_owner %}

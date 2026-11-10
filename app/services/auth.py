@@ -386,18 +386,26 @@ def resolve_user(request: Request) -> CurrentUser | None:
 
     client = new_anon_client()
     resp = None
+    session_invalid = False
     try:
         resp = _retry_network(lambda: client.auth.get_user(jwt=access))
     except MalformedSessionTokenError:
         _drop_auth_cookies(request)
         return None
+    except (AuthInvalidJwtError, AuthSessionMissingError):
+        session_invalid = True
     except AUTH_ERRORS:
         resp = None
 
     if (resp is None or resp.user is None) and refresh:
         try:
             refreshed = _retry_network(lambda: client.auth.refresh_session(refresh))
-        except NON_RETRYABLE_AUTH_ERRORS:
+        except (
+            AuthSessionMissingError,
+            AuthInvalidJwtError,
+            AuthInvalidCredentialsError,
+        ):
+            session_invalid = True
             refreshed = None
         except AUTH_ERRORS:
             refreshed = None
@@ -418,7 +426,11 @@ def resolve_user(request: Request) -> CurrentUser | None:
                 resp = None
 
     if resp is None or resp.user is None:
-        _drop_auth_cookies(request)
+        # Удаляем cookies только при явно недействительной сессии. Сетевой
+        # сбой Supabase не должен разлогинивать пользователя навсегда: на
+        # следующем запросе токены ещё могут обновиться.
+        if session_invalid:
+            _drop_auth_cookies(request)
         return None
     profile = _fetch_profile(client, str(resp.user.id))
     return _build_user(resp.user, profile)

@@ -47,8 +47,8 @@
     </div>
   </header>
   <main class="container main" id="main">
-    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
-    {% if info %}<div class="flash flash-info">{{ info }}</div>{% endif %}
+    {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
+    {% if info %}<div class="flash flash-info" role="status" aria-live="polite">{{ info }}</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
   <footer class="site-footer">

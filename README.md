@@ -39,7 +39,7 @@ app/
 ├── templates/             # Jinja2-шаблоны
 └── static/                # CSS/JS/favicon
 
-migrations/                # SQL-миграции Supabase (001–014)
+migrations/                # SQL-миграции Supabase (001–022)
 scripts/                   # применение миграций и live-e2e
 tests/                     # pytest
 ```
@@ -77,6 +77,9 @@ cp .env.example .env
 | `LTHUB_CLIENT_ID` | OAuth client id в LTHub, по умолчанию `gal` |
 | `LTHUB_AUTHORIZE_URL` / `LTHUB_TOKEN_URL` / `LTHUB_USERINFO_URL` | endpoints LTHub |
 | `LTHUB_REDIRECT_URI` | callback; пусто — `APP_URL` + `/auth/lthub/callback` |
+| `OAUTH_PROVIDER_ENABLED` | GAL как OAuth 2.0 provider для LTHub (по умолчанию `true`) |
+| `OAUTH_LTHUB_CLIENT_ID` | client id LTHub, по умолчанию `lthub` |
+| `OAUTH_LTHUB_REDIRECT_URIS` | дополнительные redirect URI клиента LTHub через запятую (прод и localhost включены по умолчанию) |
 
 Без ключей приложение запустится, но страницы с данными вернут `503`, а `/health` покажет `supabase.configured: false`.
 
@@ -103,6 +106,19 @@ CI (`.github/workflows/ci.yml`) запускает ruff и pytest на кажд�
 ## Вход через LTHub
 
 GAL — публичный OAuth-клиент LTHub (authorization code + PKCE, без client secret). Кнопка есть на страницах входа и регистрации; при первом входе создаётся Supabase-аккаунт с **ником из LTHub** (если он свободен; иначе добавляется суффикс), привязанный к LTHub-профилю в `external_identities`. Подробности протокола — в `core/oauth.py` LTHub и `app/routers/lthub_auth.py`.
+
+## GAL как OAuth-провайдер
+
+GAL одновременно работает OAuth 2.0 provider для LTHub: LTHub регистрирует и логинит пользователей через GAL (кнопки «Зарегистрироваться через GAL» / «Войти через GAL»).
+
+- `GET /oauth/authorize` — consent-страница; анонимного пользователя ведёт на `/auth/login?next=...` и возвращает к подтверждению после входа.
+- `POST /oauth/authorize` — `allow`/`deny`; выдаёт одноразовый код (TTL 5 минут, в БД только SHA-256-хеш).
+- `POST /oauth/token` — `authorization_code` + PKCE S256, проверка `client_id`/`redirect_uri`/`code_verifier`, одноразовость; opaque access token на 30 дней (тоже хеш в БД).
+- `GET /oauth/userinfo` — `sub`, `preferred_username`, `login`, `name`, `display_name`, `avatar_url`.
+- `GET /.well-known/oauth-authorization-server` — metadata.
+- Клиенты задаются статическим реестром в `app/services/oauth_provider.py` (таблицы `oauth_clients` нет); LTHub — публичный клиент без `client_secret`. Доступ к таблицам OAuth — только `service_role` (миграция `021_oauth_provider.sql`).
+
+**Важно:** миграция `021_oauth_provider.sql` должна быть применена в Supabase до включения кнопок в LTHub.
 
 ## Bradley–Terry
 
@@ -136,6 +152,9 @@ python scripts/bt_experiment.py         # синтетический экспе�
 - `017_completion_difficulty.sql` — сложность, указанная при создании/прохождении, и её автоприменение после approve;
 - `018_auto_first_evaluation.sql` — первая подтверждённая заявка автоматически становится якорем личной шкалы + backfill;
 - `019_live_evaluations.sql` — новые оценки принимаются и после выхода в рейтинг; топ пересчитывается, lock снят.
+- `020_creation_requires_evaluation.sql` — создание достижения требует предварительной оценки опубликованного;
+- `021_oauth_provider.sql` — GAL как OAuth-провайдер (одноразовые коды и токены, PKCE, SHA-256-хеши);
+- `022_restore_ranking_and_proof_scheme.sql` — восстановление канонического пересчёта рангов и оценок, защита ссылок-доказательств.
 
 Применение:
 

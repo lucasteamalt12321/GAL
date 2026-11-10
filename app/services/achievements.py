@@ -71,8 +71,8 @@ def list_achievements(
     в глобальном обработчике.
 
     В список попадают опубликованные достижения с любым ranking_status:
-    - ranked (3+ оценок) — с рангом в топе
-    - unknown (1-2 оценки) — между ranked, но не влияют на нумерацию топа
+    - ranked (2+ оценок) — с рангом в топе
+    - unknown (0-1 оценка) — между ranked, но не влияют на нумерацию топа
     """
     client = auth_service.new_anon_client()
     category_id = _category_filter(category_slug)
@@ -107,15 +107,10 @@ def list_achievements(
 
     # Сортировка в Python
     if sort == SORT_NEW:
-        # Сначала ranked по created_at desc, потом unknown по created_at desc
-        # ranked идет первым в сортировке (ranking_status < 'unknown' lexicographically)
-        all_achievements.sort(
-            key=lambda a: (
-                a.get("ranking_status") or "unknown",
-                a.get("created_at") or "",
-            )
-        )
-        all_achievements.reverse()  # reverse чтобы created_at desc
+        # Сначала ranked, затем unknown; внутри групп — новые сверху.
+        # Две стабильные сортировки: вторая не ломает порядок created_at.
+        all_achievements.sort(key=lambda a: a.get("created_at") or "", reverse=True)
+        all_achievements.sort(key=lambda a: a.get("ranking_status") != "ranked")
     else:
         # Сортировка по рангу:
         # Сортируем все достижения по позиции (rank для ranked, average_position для unknown).

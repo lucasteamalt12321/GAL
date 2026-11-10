@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "GAL"
-    app_version: str = "1.5.0"
+    app_version: str = "1.6.0"
     app_env: str = "development"
     app_url: str = ""
 
@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     lthub_userinfo_url: str = "https://lthub.vercel.app/oauth/userinfo"
     # Пусто — берётся APP_URL (или origin запроса) + /auth/lthub/callback.
     lthub_redirect_uri: str = ""
+
+    # OAuth-провайдер GAL для LTHub (authorization code + PKCE, public client).
+    oauth_provider_enabled: bool = True
+    oauth_lthub_client_id: str = "lthub"
+    # Дополнительные redirect_uri через запятую (базовые заданы в сервисе).
+    oauth_lthub_redirect_uris: str = ""
 
     @property
     def is_production(self) -> bool:
