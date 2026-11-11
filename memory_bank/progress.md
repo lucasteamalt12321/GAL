@@ -336,4 +336,4 @@
 
 ## last_checked_commit
 
-`3d9bf0c feat: public achievement completers and player pages` (2026-11-11) — закоммичено и запушено в `main`, CI success, Vercel задеплоил v1.7; live-страницы проверены. Миграция `023_public_completions.sql` применена к проду 2026-11-11. Миграции `021_oauth_provider.sql` и `022_restore_ranking_and_proof_scheme.sql` не применены.
+`4bb66f9 feat(ranking): lower ranked threshold to 2 evaluations` (2026-11-11) — запушено в `main`, CI success. Миграции `022_restore_ranking_and_proof_scheme.sql` и `024_backfill_ranked_threshold.sql` применены к проду 2026-11-11; `023_public_completions.sql` — ранее. Не применена только `021_oauth_provider.sql`.
