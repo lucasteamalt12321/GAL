@@ -40,7 +40,7 @@ app/
 ├── templates/             # Jinja2-шаблоны
 └── static/                # CSS/JS/favicon
 
-migrations/                # SQL-миграции Supabase (001–023)
+migrations/                # SQL-миграции Supabase (001–024)
 scripts/                   # применение миграций и live-e2e
 tests/                     # pytest
 ```
@@ -157,6 +157,7 @@ python scripts/bt_experiment.py         # синтетический экспе�
 - `021_oauth_provider.sql` — GAL как OAuth-провайдер (одноразовые коды и токены, PKCE, SHA-256-хеши);
 - `022_restore_ranking_and_proof_scheme.sql` — восстановление канонического пересчёта рангов и оценок, защита ссылок-доказательств;
 - `023_public_completions.sql` — публичные RPC-списки прошедших достижение и пройденных игроком достижений (без proofs/email).
+- `024_backfill_ranked_threshold.sql` — перевод в `ranked` достижений, уже набравших 2 оценки до снижения порога, и пересчёт рангов.
 
 Применение:
 

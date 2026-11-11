@@ -194,7 +194,7 @@ declare
 begin
     select id into v_ach from public.achievements where title = 'E2E Achievement';
 
-    -- C: третья оценка -> переход в ranked + lock
+    -- C: третья оценка -> достижение остаётся ranked (порог 2)
     perform set_config('request.jwt.claims', '{{"sub":"'||v_c::text||'","role":"authenticated"}}', true);
     perform public.submit_evaluation(v_ach, 1);
     select evaluation_count, average_position, ranking_status, rank

@@ -24,6 +24,14 @@
 
 ## Changelog
 
+### 2026-11-11 — порог ranked снижен до 2 оценок
+
+**Запрос.** «Сделай так, чтобы для попадания достижения в топ требовалось 2 оценки, а не 3 из-за недостатка пользователей».
+
+**БД.** К проду применена миграция `022_restore_ranking_and_proof_scheme.sql` (HTTP 201): `submit_evaluation` и `apply_completion_evaluation` теперь промоутят в `ranked` при `v_count >= 2` (сверено с прод-версиями: отличие было только `3` → `2`; `recompute_ranks_internal` уже канонический). Попутно включён `proofs_link_scheme` (`NOT VALID`; нарушающих строк 0). Добавлена и применена `024_backfill_ranked_threshold.sql`: достижения с 2 оценками, оставшиеся `unknown`, переводятся в `ranked` с разными временными `rank` (max + row_number — защита `achievements_rank_unique`) и затем `recompute_ranks_internal()`.
+
+**Результат на проде.** #46 (2 оценки, BT 0.340) — rank 1, #33 (2, BT −0.469) — rank 2, #35 (3, BT −0.746) — rank 3. Опубликованных `unknown` с `evaluation_count >= 2` нет. Ручные e2e-скрипты (`scripts/e2e_evaluation.py`, `scripts/e2e_evaluation_sql.py`) обновлены под порог 2.
+
 ### 2026-11-11 — v1.7: публичные списки прошедших и проверка BT
 
 **Запрос.** Убедиться, что каждое сравнение — соревнование BT; публичная страница игрока показывает его публичные данные и пройденные достижения; карточка достижения показывает место, BT-силу, всех прошедших и кнопку отправки прохождения.
@@ -43,7 +51,7 @@
 
 **Тесты.** `tests/test_bradley_terry.py::test_every_pair_is_one_contest`; `tests/test_achievements.py` — публичный профиль с пройденными достижениями и карточка со списком прошедших; conftest по умолчанию мокает новые RPC (тесты не ходят в сеть). Итого **206 passed**, ruff check/format чисты (добавлен тест кнопки «Отправить прохождение» для авторизованного пользователя).
 
-**Прод-проверка.** Миграция 023 применена к проду 2026-11-11 (`python -m scripts.apply_migrations 023`, HTTP 201). RPC `achievement_completers(33)` вернул 2 строки, `user_completed_achievements(TonyBig)` — 1. Коммит `3d9bf0c` запушен, CI success, Vercel задеплоил за ~40 с. Live: `/achievements/33` — 200, список из 2 прошедших, место и BT-сила, анониму — CTA входа для отправки; `/users/lucasteam` и `/users/TonyBig` — 200, списки пройденных непустые, статистика на месте. **Не применена** миграция 022 (порог 2 + CHECK ссылок).
+**Прод-проверка.** Миграция 023 применена к проду 2026-11-11 (`python -m scripts.apply_migrations 023`, HTTP 201). RPC `achievement_completers(33)` вернул 2 строки, `user_completed_achievements(TonyBig)` — 1. Коммит `3d9bf0c` запушен, CI success, Vercel задеплоил за ~40 с. Live: `/achievements/33` — 200, список из 2 прошедших, место и BT-сила, анониму — CTA входа для отправки; `/users/lucasteam` и `/users/TonyBig` — 200, списки пройденных непустые, статистика на месте. Миграция 022 (порог 2 + CHECK ссылок) применена 2026-11-11; backfill — миграция 024.
 
 ### 2026-11-10 — GAL как OAuth-провайдер для регистрации/входа в LTHub
 
@@ -84,7 +92,7 @@
 
 **Тесты.** Новый `tests/test_hardening.py` (10): XSS-схемы URL, security-заголовки, HTML-422, сетевой сбой не разлогинивает, невалидная сессия разлогинивает, поиск LTHub-пользователя по email. Итого **196 passed**, ruff check/format чисты.
 
-**Не применено к проду.** `022_restore_ranking_and_proof_scheme.sql` требует подтверждения владельца: меняет порог ranked 3→2 и добавляет CHECK на proofs. До применения прод-функция `submit_evaluation` остаётся с порогом 3.
+**Применено к проду 2026-11-11.** `022_restore_ranking_and_proof_scheme.sql` снизил порог ranked до 2 и добавил CHECK на proofs (`NOT VALID`, нарушений 0); `024_backfill_ranked_threshold.sql` перевёл старые достижения с 2 оценками в `ranked`.
 
 ### 2026-11-09 — Вход по никнейму или email
 

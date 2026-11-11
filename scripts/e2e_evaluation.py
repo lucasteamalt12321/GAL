@@ -379,22 +379,22 @@ def main() -> int:
             "should still be unknown after 1 evaluation"
         )
 
-        # --- B evaluates ---
+        # --- B evaluates -> ranked (threshold is 2) ---
         r2 = rpc(b, 0)
         checks.ok() if r2["evaluation_count"] == 2 else checks.fail(
             f"B evaluation count wrong: {r2}"
         )
-        checks.ok() if r2["ranking_status"] == "unknown" else checks.fail(
-            "should still be unknown after 2 evaluations"
+        checks.ok() if r2["ranking_status"] == "ranked" else checks.fail(
+            "should be ranked after 2 evaluations"
         )
 
-        # --- C evaluates -> ranked, locked, rank assigned ---
+        # --- C evaluates -> still ranked, rank recomputed ---
         r3 = rpc(c, 0)
         checks.ok() if r3["evaluation_count"] == 3 else checks.fail(
             f"C evaluation count wrong: {r3}"
         )
         checks.ok() if r3["ranking_status"] == "ranked" else checks.fail(
-            "should be ranked after 3 evaluations"
+            "should stay ranked after 3 evaluations"
         )
         checks.ok() if r3["average_position"] == 1.0 else checks.fail(
             f"average_position wrong: {r3}"
