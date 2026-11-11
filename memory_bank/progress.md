@@ -17,12 +17,33 @@
 | D7  | Ranking Engine (тесты)            | completed |
 | D8  | Player Score + Leaderboard        | completed |
 | D9  | Reports                           | completed |
-| D10 | Polish (UI, security, errors)     | completed |
+| D10 | Polish + hardening (UI, security, errors) | completed |
 | D11 | Bugfix по итогам bug-hunt 09-28   | completed |
 | D12 | v1.1: функции, безопасность, CI   | completed |
 | D13 | v1.2: Bradley–Terry ранкинг       | completed |
 
 ## Changelog
+
+### 2026-11-11 — v1.7: публичные списки прошедших и проверка BT
+
+**Запрос.** Убедиться, что каждое сравнение — соревнование BT; публичная страница игрока показывает его публичные данные и пройденные достижения; карточка достижения показывает место, BT-силу, всех прошедших и кнопку отправки прохождения.
+
+**BT.** Аудит `app/services/bradley_terry.py`: `build_comparisons` создаёт по одному `Comparison` на каждую пару внутри личной шкалы (вес `1/(k-1)`), `fit_bradley_terry` учитывает каждое в `wins`, `losses`, `pair_weight` и `comparisons`. Добавлен тест-инвариант: сумма побед/поражений равна суммарному весу всех сравнений, а `sum(comparisons) == 2 × len(comparisons)`.
+
+**Публичные списки.** RLS `achievement_completions` пускал только владельца и модератора, поэтому добавлена миграция `023_public_completions.sql`:
+- `achievement_completers(bigint)` — approved-заявки опубликованного достижения: `user_id`, `username`, `display_name`, `avatar_url`, `approved_at` (до 500);
+- `user_completed_achievements(uuid)` — approved-заявки игрока по опубликованным достижениям: id, title, rank, ranking_status, bt_rating/strength, evaluation_count, категория, approved_at (до 500).
+Обе — `security definer`, `stable`, `search_path=public`, execute у `anon`/`authenticated`; proofs, email, pending/rejected не раскрываются. В сервисе ошибка RPC/сети ловится и даёт пустой список, чтобы страница не падала до применения миграции.
+
+**Страницы.**
+- `GET /users/{username}` (доступен анонимно): добавлены очки (`sum(1000/rank)` по ranked), число пройденных, дата регистрации, таблица «Пройденные достижения» (место, BT-рейтинг, категория, дата подтверждения) и секция «Созданные достижения».
+- `GET /achievements/{id}`: список «Прошедшие пользователи» с аватарами/профилями и датой; форма отправки переименована в «Отправить прохождение» (`submit_label` тоже).
+- A11y: таблицам добавлены `tabindex=0 role=region`, списку — семантический `<ul>`.
+- Мелочь: подсказка о ранге исправлена с `< 3` на `< 2` оценок.
+
+**Тесты.** `tests/test_bradley_terry.py::test_every_pair_is_one_contest`; `tests/test_achievements.py` — публичный профиль с пройденными достижениями и карточка со списком прошедших; conftest по умолчанию мокает новые RPC (тесты не ходят в сеть). Итого **206 passed**, ruff check/format чисты (добавлен тест кнопки «Отправить прохождение» для авторизованного пользователя).
+
+**Прод-проверка.** Миграция 023 применена к проду 2026-11-11 (`python -m scripts.apply_migrations 023`, HTTP 201). RPC `achievement_completers(33)` вернул 2 строки, `user_completed_achievements(TonyBig)` — 1; рендер `/achievements/33` и `/users/TonyBig` через приложение против прод-данных — 200, оба списка непустые. **Не применена** миграция 022 (порог 2 + CHECK ссылок).
 
 ### 2026-11-10 — GAL как OAuth-провайдер для регистрации/входа в LTHub
 
@@ -307,4 +328,4 @@
 
 ## last_checked_commit
 
-`18b995c memory bank: sync login by nickname feature and prod verification` (2026-11-09) + незакоммиченное рабочее дерево v1.6, OAuth-провайдера и parity `next`/`intent=register` (2026-11-10). Миграция `021_oauth_provider.sql` не применена.
+`18b995c memory bank: sync login by nickname feature and prod verification` (2026-11-09) + незакоммиченное рабочее дерево v1.6–v1.7, OAuth-провайдера и parity `next`/`intent=register` (2026-11-11). Миграции `021_oauth_provider.sql` и `022_restore_ranking_and_proof_scheme.sql` не применены; `023_public_completions.sql` применена 2026-11-11 и проверена на живых данных.

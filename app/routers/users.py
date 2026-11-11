@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app.services import achievements as achievements_service
+from app.services import completions as completions_service
 from app.templating import templates
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -34,12 +35,24 @@ def profile(request: Request, username: str, info: str | None = None) -> HTMLRes
     items = achievements_service.list_achievements_by_creator(
         request, profile_row["id"], statuses=statuses
     )
+    completed = completions_service.list_user_completed_achievements(
+        request, profile_row["id"]
+    )
+    ranked = [
+        row
+        for row in completed
+        if row.get("ranking_status") == "ranked" and row.get("rank")
+    ]
+    player_score = round(sum(1000.0 / float(row["rank"]) for row in ranked), 2)
     return templates.TemplateResponse(
         request=request,
         name="users/profile.html",
         context={
             "profile": profile_row,
             "achievements": items,
+            "completed": completed,
+            "completed_count": len(completed),
+            "player_score": player_score,
             "is_owner": is_owner,
             "info": PROFILE_INFO_MESSAGES.get(info, info),
         },

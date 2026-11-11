@@ -18,7 +18,7 @@
     <div class="stat">
       <span class="stat-label">Место в рейтинге</span>
       <span class="stat-value">{% if achievement.rank %}#{{ achievement.rank }}{% else %}?{% endif %}</span>
-      {% if not achievement.rank and achievement.status == 'published' and achievement.evaluation_count < 3 %}
+      {% if not achievement.rank and achievement.status == 'published' and achievement.evaluation_count < 2 %}
         <span class="hint muted">появится после 2 оценок (сейчас {{ achievement.evaluation_count }})</span>
       {% endif %}
     </div>
@@ -118,6 +118,31 @@
     </p>
   {% endif %}
 
+  {% if achievement.status == 'published' %}
+    <section class="prose completers-section">
+      <h2>Прошедшие пользователи{% if completers %} · {{ completers|length }}{% endif %}</h2>
+      {% if completers %}
+        <ul class="completer-list">
+          {% for c in completers %}
+            <li>
+              <a class="completer" href="/users/{{ c.username }}">
+                {% if c.avatar_url %}
+                  <img class="avatar avatar-sm" src="{{ c.avatar_url }}" alt="" width="28" height="28" referrerpolicy="no-referrer">
+                {% else %}
+                  <span class="avatar avatar-placeholder avatar-sm" aria-hidden="true">{{ (c.display_name or c.username)[:1]|upper }}</span>
+                {% endif %}
+                <span>{{ c.display_name or c.username }}</span>
+              </a>
+              {% if c.approved_at %}<span class="muted">· {{ c.approved_at|date_local }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">Пока никто не подтвердил выполнение. Станьте первым.</p>
+      {% endif %}
+    </section>
+  {% endif %}
+
   {% if achievement.status == 'published' and request.state.user %}
     <p class="muted">
       <a href="/achievements/{{ achievement.id }}/report">Пожаловаться на достижение</a>
@@ -161,7 +186,7 @@
       {% endif %}
     </section>
   {% elif can_submit %}
-    {% with form_title="Я выполнил это", form_hint="Приложите доказательство своего выполнения." %}
+    {% with form_title="Отправить прохождение", submit_label="Отправить прохождение", form_hint="Приложите доказательство своего выполнения." %}
       {% include "achievements/_proof_form.html" %}
     {% endwith %}
   {% elif not request.state.user %}

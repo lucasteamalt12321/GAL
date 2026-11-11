@@ -30,6 +30,22 @@ def test_build_comparisons_skips_short_and_tied_scales() -> None:
     assert comparisons == []
 
 
+def test_every_pair_is_one_contest() -> None:
+    """Каждая пара личной шкалы входит в модель ровно одним соревнованием."""
+    scales = {
+        "u1": [(1, 1.0), (2, 2.0), (3, 3.0)],
+        "u2": [(1, 1.0), (2, 2.0), (3, 3.0)],
+    }
+    comparisons = build_comparisons(scales)
+    assert len(comparisons) == 6
+
+    ratings = fit_bradley_terry({1, 2, 3}, comparisons)
+    total_weight = sum(c.weight for c in comparisons)
+    assert abs(sum(r.wins for r in ratings.values()) - total_weight) < 1e-9
+    assert abs(sum(r.losses for r in ratings.values()) - total_weight) < 1e-9
+    assert sum(r.comparisons for r in ratings.values()) == 2 * len(comparisons)
+
+
 def _synthetic_comparisons(
     strengths: dict[int, float], games: int = 80, seed: int = 7
 ) -> list[Comparison]:

@@ -83,6 +83,7 @@ OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (
   - `020_creation_requires_evaluation.sql` — RLS-запрет создания достижения без оценки опубликованного;
   - `021_oauth_provider.sql` — GAL как OAuth 2.0 provider (коды, токены, PKCE; клиенты — статический реестр в коде, таблицы `oauth_clients` нет; только `service_role`);
   - `022_restore_ranking_and_proof_scheme.sql` — канонический пересчёт рангов (BT + двухфазный bump), порог 2, защита ссылок-доказательств (`proofs_link_scheme`). **К проду не применена.**
+  - `023_public_completions.sql` — публичные RPC `achievement_completers(bigint)` и `user_completed_achievements(uuid)` для списков прошедших (approved + published, только поля профиля). **Применена к проду 2026-11-11** (HTTP 201), проверена на живых данных.
 - Storage bucket `proofs` — приватный; файлы по пути `{user_id}/{achievement_id}/{uuid}-{file}`; доступ по signed URL (TTL 3600), RLS на `storage.objects`.
 - Миграции применяются через Management API: `POST https://api.supabase.com/v1/projects/{ref}/database/query` с `Authorization: Bearer <PAT>` (успех = 201), т.к. `psql`/supabase CLI недоступны.
 - API supabase-py 2.31: auth = `supabase_auth.SyncGoTrueClient` (`SyncClient`/`SyncSupabaseAuthClient` — импорт падает); Storage = `client.storage.from_("proofs")` (`storage3._sync.file_api.SyncBucketProxy`, `upload(path, bytes, FileOptions)`, `create_signed_url(path, expires_in)` → dict с `signedURL`/`signedUrl`, `remove`, `list`); исключения `storage3.exceptions.StorageException`/`StorageApiError`.
@@ -100,7 +101,7 @@ OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (
 - GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
 - Push → Vercel (production).
 - Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .` (конфигурация — `ruff.toml`, `target-version = "py312"`, одноразовые скрипты исключены).
-- Тесты: 196 (ранкинг/BT, OAuth клиент и провайдер, «Мои заявки», сложность/сравнения, живые оценки, роуты, CSRF, resilience, hardening, v1.1–v1.6 сценарии).
+- Тесты: 206 (ранкинг/BT с инвариантом «каждая пара = соревнование», OAuth клиент и провайдер, «Мои заявки», сложность/сравнения, живые оценки, роуты, CSRF, resilience, hardening, публичные профили/списки прошедших, v1.1–v1.7 сценарии).
 - Bradley–Terry: `scripts/recompute_bt.py` (service role), эксперимент `scripts/bt_experiment.py`; формула/ограничения — `docs/bradley_terry.md`.
 - LTHub OAuth: публичный PKCE-клиент `gal`, provider в BankBot `core/oauth.py`; GAL-клиент — `app/routers/lthub_auth.py` + `app/services/lthub_accounts.py`.
 - GAL как OAuth-провайдер: `app/services/oauth_provider.py` + `app/routers/oauth.py`; клиент LTHub (`lthub`, публичный, PKCE S256) — статический реестр; LTHub-клиент — `core/gal_oauth.py` (BankBot).

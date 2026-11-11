@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import achievements as achievements_service
 from app.services import auth as auth_service
+from app.services import completions as completions_service
 
 client = TestClient(app)
 
@@ -81,9 +82,35 @@ def test_detail_renders(monkeypatch) -> None:
     monkeypatch.setattr(
         achievements_service, "get_achievement", lambda *_: _sample_achievement()
     )
+    monkeypatch.setattr(
+        completions_service, "list_achievement_completers", lambda *_: []
+    )
     resp = client.get("/achievements/1")
     assert resp.status_code == 200
     assert "Sample" in resp.text
+
+
+def test_detail_lists_completers(monkeypatch) -> None:
+    monkeypatch.setattr(
+        achievements_service, "get_achievement", lambda *_: _sample_achievement()
+    )
+    monkeypatch.setattr(
+        completions_service,
+        "list_achievement_completers",
+        lambda *_: [
+            {
+                "user_id": "11111111-1111-1111-1111-111111111111",
+                "username": "bob",
+                "display_name": "Bob",
+                "avatar_url": None,
+                "approved_at": "2026-11-01T10:00:00+00:00",
+            }
+        ],
+    )
+    resp = client.get("/achievements/1")
+    assert resp.status_code == 200
+    assert "Прошедшие пользователи" in resp.text
+    assert 'href="/users/bob"' in resp.text
 
 
 def test_create_page_requires_auth() -> None:
@@ -123,9 +150,54 @@ def test_profile_renders(monkeypatch) -> None:
     monkeypatch.setattr(
         achievements_service, "list_achievements_by_creator", lambda *_, **__: []
     )
+    monkeypatch.setattr(
+        completions_service, "list_user_completed_achievements", lambda *_: []
+    )
     resp = client.get("/users/alice")
     assert resp.status_code == 200
     assert "@alice" in resp.text
+    assert "Пройденные достижения" in resp.text
+
+
+def test_profile_shows_completed_achievements(monkeypatch) -> None:
+    monkeypatch.setattr(
+        achievements_service,
+        "get_profile",
+        lambda *_: {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "username": "alice",
+            "display_name": "Alice",
+            "avatar_url": None,
+            "role": "user",
+            "created_at": "2026-10-01T10:00:00+00:00",
+        },
+    )
+    monkeypatch.setattr(
+        achievements_service, "list_achievements_by_creator", lambda *_, **__: []
+    )
+    monkeypatch.setattr(
+        completions_service,
+        "list_user_completed_achievements",
+        lambda *_: [
+            {
+                "achievement_id": 7,
+                "title": "Water",
+                "rank": 2,
+                "ranking_status": "ranked",
+                "bt_rating": 1123.4,
+                "bt_strength": 0.7,
+                "evaluation_count": 4,
+                "category_name": "Sport",
+                "category_slug": "sport",
+                "approved_at": "2026-11-01T10:00:00+00:00",
+            }
+        ],
+    )
+    resp = client.get("/users/alice")
+    assert resp.status_code == 200
+    assert "Water" in resp.text
+    assert "#2" in resp.text
+    assert "500.00" in resp.text
 
 
 def test_create_page_blocked_without_evaluation(monkeypatch) -> None:

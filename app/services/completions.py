@@ -83,6 +83,7 @@ COMPLETION_ERRORS = (
     APIError,
     StorageException,
     httpx.HTTPError,
+    httpx.InvalidURL,
     auth_service.SupabaseNotConfiguredError,
 )
 
@@ -191,6 +192,37 @@ def list_proofs(request: Request, completion_id: int) -> list[dict]:
         .order("created_at")
         .execute()
     )
+    return res.data or []
+
+
+def list_achievement_completers(request: Request, achievement_id: int) -> list[dict]:
+    """Публичный список прошедших достижение (approved, только профили).
+
+    Читается через security definer RPC: RLS на achievement_completions
+    разрешает пользователю только собственные строки. Ошибка RPC (например,
+    миграция ещё не применена) не должна ломать карточку достижения.
+    """
+    try:
+        client = auth_service.client_for_request(request)
+        res = client.rpc(
+            "achievement_completers", {"p_achievement_id": achievement_id}
+        ).execute()
+    except COMPLETION_ERRORS:
+        logger.debug("Failed to load achievement completers", exc_info=True)
+        return []
+    return res.data or []
+
+
+def list_user_completed_achievements(request: Request, user_id: str) -> list[dict]:
+    """Публичный список пройденных достижений игрока (approved, published)."""
+    try:
+        client = auth_service.client_for_request(request)
+        res = client.rpc(
+            "user_completed_achievements", {"p_user_id": user_id}
+        ).execute()
+    except COMPLETION_ERRORS:
+        logger.debug("Failed to load user completed achievements", exc_info=True)
+        return []
     return res.data or []
 
 

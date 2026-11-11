@@ -1472,6 +1472,40 @@ select {
   font-weight: 700;
 }
 
+.avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+}
+
+.profile-stats {
+  margin-bottom: 24px;
+}
+
+/* ---------- Прошедшие достижение ---------- */
+
+.completer-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.completer-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.completer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
 /* ---------- Формы авторизации и настроек ---------- */
 
 .auth-card {

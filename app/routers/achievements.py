@@ -528,11 +528,17 @@ def detail(
         value = own_completion.get("requested_harder_count")
         if value is not None:
             existing_harder_count = str(value)
+    completers = (
+        completions_service.list_achievement_completers(request, achievement_id)
+        if item["status"] == "published"
+        else []
+    )
     return templates.TemplateResponse(
         request=request,
         name="achievements/detail.html",
         context={
             "achievement": item,
+            "completers": completers,
             "is_creator": is_creator,
             "is_moderator": is_moderator,
             "can_edit": is_creator and item["status"] == "pending",

@@ -97,7 +97,9 @@ gal/
 ```text
 1. submit_evaluation сохраняет позицию в личной шкале (SQL, атомарно)
 2. Python собирает все шкалы: published achievements + evaluations
-3. Строит попарные сравнения (A выше B ⇒ A сложнее), вес пары 1/(k-1)
+3. Строит попарные сравнения (A выше B ⇒ A сложнее), вес пары 1/(k-1);
+   каждая пара — отдельное соревнование (win/loss), ни одно не отбрасывается
+   (кроме равных позиций и шкал из одного достижения)
 4. MM-оценка сил: θ_i ← (W_i+α)/(Σ n_ij/(θ_i+θ_j)+α/(θ_i+1)), центрирование
 5. RPC apply_bt_ratings(jsonb): пишет bt_* и вызывает recompute_ranks_internal()
 6. Ранги: bt_strength desc, fallback average_position/rank_order/id
@@ -120,6 +122,7 @@ gal/
 - GAL как OAuth-провайдер: `oauth_*` таблицы хранят только SHA-256-хеши кодов/токенов и доступны исключительно `service_role`; authorize требует активную сессию GAL. Клиенты — статический реестр в `app/services/oauth_provider.py` (без таблицы `oauth_clients`); redirect URI расширяются через `OAUTH_LTHUB_REDIRECT_URIS`.
 - Все ответы получают security-заголовки (`nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, CSP `frame-ancestors 'none'`, HSTS в проде); CSRF-токен обязателен для POST.
 - Внешние ссылки-доказательства допускаются только со схемой `http(s)://` (сервис + CHECK в БД).
+- Публичные списки прошедших (023): `achievement_completers` и `user_completed_achievements` — `security definer`, отдают только approved-заявки опубликованных достижений и публичные поля профиля (без proofs, email, moderation_reviews).
 - `SERVICE_ROLE_KEY` никогда не попадает во frontend.
 
 ### 6. Оценка достижения (Personal Scale)
@@ -132,6 +135,11 @@ gal/
 
 - Создатель автоматически становится первым выполнившим и первым evaluater-ом при публикации.
 - Его оценка строится на его реальных достижениях (personal scale).
+
+### 8. Публичные страницы
+
+- `/users/{username}` — без авторизации: профиль (avatar, display_name, role, дата регистрации), очки `sum(1000/rank)`, число пройденных, пройденные достижения (approved + published) и созданные (для чужих — только published).
+- `/achievements/{id}` — место и BT-сила/рейтинг, прошедшие пользователи, форма «Отправить прохождение» (для авторизованного без своей заявки; для гостя — вход).
 
 ## Главная цепочка данных
 

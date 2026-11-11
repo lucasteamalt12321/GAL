@@ -24,24 +24,77 @@
   <div class="flash flash-info">Это ваш профиль. Достижения на модерации и отклонённые видны только вам.</div>
 {% endif %}
 
-{% if achievements %}
-  <div class="cards">
-    {% for a in achievements %}
-      <a class="card" href="/achievements/{{ a.id }}">
-        <div class="card-rank">{% if a.rank %}#{{ a.rank }}{% else %}?{% endif %}</div>
-        <div class="card-body">
-          <h2 class="card-title">{{ a.title }}</h2>
-          <div class="card-meta">
-            {% if a.category %}<span class="tag">{{ a.category.name }}</span>{% endif %}
-            {% if a.status != 'published' %}
-              <span class="badge badge-{{ a.status }}">{{ a.status|status_label }}</span>
-            {% endif %}
-          </div>
-        </div>
-      </a>
-    {% endfor %}
+<div class="detail-stats profile-stats">
+  <div class="stat">
+    <span class="stat-label">Очки</span>
+    <span class="stat-value">{{ "%.2f"|format(player_score) }}</span>
   </div>
-{% else %}
-  <section class="placeholder"><p>Пока нет достижений.</p></section>
-{% endif %}
+  <div class="stat">
+    <span class="stat-label">Пройдено достижений</span>
+    <span class="stat-value">{{ completed_count }}</span>
+  </div>
+  {% if profile.created_at %}
+    <div class="stat">
+      <span class="stat-label">На платформе с</span>
+      <span class="stat-value">{{ profile.created_at|date_local }}</span>
+    </div>
+  {% endif %}
+</div>
+
+<section class="leaderboard-section">
+  <h2>Пройденные достижения</h2>
+  {% if completed %}
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Пройденные достижения">
+      <table class="leaderboard-table">
+        <caption class="visually-hidden">Достижения, которые прошёл игрок</caption>
+        <thead>
+          <tr>
+            <th scope="col">Место</th>
+            <th scope="col">Достижение</th>
+            <th scope="col">Категория</th>
+            <th scope="col">BT-рейтинг</th>
+            <th scope="col">Подтверждено</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in completed %}
+            <tr>
+              <td class="lb-rank">{% if a.rank %}#{{ a.rank }}{% else %}?{% endif %}</td>
+              <td><a href="/achievements/{{ a.achievement_id }}">{{ a.title }}</a></td>
+              <td>{{ a.category_name or '—' }}</td>
+              <td>{{ "%.0f"|format(a.bt_rating) if a.bt_rating|default(none, true) is not none else '—' }}</td>
+              <td>{% if a.approved_at %}{{ a.approved_at|date_local }}{% else %}—{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">Пока нет подтверждённых достижений.</p>
+  {% endif %}
+</section>
+
+<section class="leaderboard-section">
+  <h2>Созданные достижения</h2>
+  {% if achievements %}
+    <div class="cards">
+      {% for a in achievements %}
+        <a class="card" href="/achievements/{{ a.id }}">
+          <div class="card-rank">{% if a.rank %}#{{ a.rank }}{% else %}?{% endif %}</div>
+          <div class="card-body">
+            <h2 class="card-title">{{ a.title }}</h2>
+            <div class="card-meta">
+              {% if a.category %}<span class="tag">{{ a.category.name }}</span>{% endif %}
+              {% if a.status != 'published' %}
+                <span class="badge badge-{{ a.status }}">{{ a.status|status_label }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <section class="placeholder"><p>Пока нет достижений.</p></section>
+  {% endif %}
+</section>
 {% endblock %}

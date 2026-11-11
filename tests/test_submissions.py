@@ -72,6 +72,32 @@ def test_submissions_filter(monkeypatch) -> None:
     assert resp.text.count("Исправить и отправить снова") == 1
 
 
+def test_detail_shows_submit_form_for_logged_in_user(monkeypatch) -> None:
+    _login(monkeypatch)
+    item = {
+        "id": 5,
+        "title": "Piano song",
+        "description": "",
+        "requirements": "",
+        "status": "published",
+        "rank": 3,
+        "average_position": 1.0,
+        "evaluation_count": 2,
+        "creator_id": "33333333-3333-3333-3333-333333333333",
+        "category": None,
+        "creator": None,
+    }
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(completions_service, "get_user_completion", lambda *_: None)
+    monkeypatch.setattr(
+        evaluation_service, "evaluate_context", lambda *_a, **_k: (False, None, None)
+    )
+    resp = client.get("/achievements/5")
+    assert resp.status_code == 200
+    assert "Отправить прохождение" in resp.text
+    assert 'action="/achievements/5/complete"' in resp.text
+
+
 def test_rejected_detail_shows_resubmit_form(monkeypatch) -> None:
     _login(monkeypatch)
     item = {
