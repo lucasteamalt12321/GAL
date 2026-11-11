@@ -43,7 +43,7 @@
 
 **Тесты.** `tests/test_bradley_terry.py::test_every_pair_is_one_contest`; `tests/test_achievements.py` — публичный профиль с пройденными достижениями и карточка со списком прошедших; conftest по умолчанию мокает новые RPC (тесты не ходят в сеть). Итого **206 passed**, ruff check/format чисты (добавлен тест кнопки «Отправить прохождение» для авторизованного пользователя).
 
-**Прод-проверка.** Миграция 023 применена к проду 2026-11-11 (`python -m scripts.apply_migrations 023`, HTTP 201). RPC `achievement_completers(33)` вернул 2 строки, `user_completed_achievements(TonyBig)` — 1; рендер `/achievements/33` и `/users/TonyBig` через приложение против прод-данных — 200, оба списка непустые. **Не применена** миграция 022 (порог 2 + CHECK ссылок).
+**Прод-проверка.** Миграция 023 применена к проду 2026-11-11 (`python -m scripts.apply_migrations 023`, HTTP 201). RPC `achievement_completers(33)` вернул 2 строки, `user_completed_achievements(TonyBig)` — 1. Коммит `3d9bf0c` запушен, CI success, Vercel задеплоил за ~40 с. Live: `/achievements/33` — 200, список из 2 прошедших, место и BT-сила, анониму — CTA входа для отправки; `/users/lucasteam` и `/users/TonyBig` — 200, списки пройденных непустые, статистика на месте. **Не применена** миграция 022 (порог 2 + CHECK ссылок).
 
 ### 2026-11-10 — GAL как OAuth-провайдер для регистрации/входа в LTHub
 
@@ -328,4 +328,4 @@
 
 ## last_checked_commit
 
-`18b995c memory bank: sync login by nickname feature and prod verification` (2026-11-09) + незакоммиченное рабочее дерево v1.6–v1.7, OAuth-провайдера и parity `next`/`intent=register` (2026-11-11). Миграции `021_oauth_provider.sql` и `022_restore_ranking_and_proof_scheme.sql` не применены; `023_public_completions.sql` применена 2026-11-11 и проверена на живых данных.
+`3d9bf0c feat: public achievement completers and player pages` (2026-11-11) — закоммичено и запушено в `main`, CI success, Vercel задеплоил v1.7; live-страницы проверены. Миграция `023_public_completions.sql` применена к проду 2026-11-11. Миграции `021_oauth_provider.sql` и `022_restore_ranking_and_proof_scheme.sql` не применены.
