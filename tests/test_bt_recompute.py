@@ -15,6 +15,14 @@ class _FakeRpc:
         return SimpleNamespace(data=1)
 
 
+def _settings(*, configured: bool = True) -> SimpleNamespace:
+    return SimpleNamespace(
+        service_role_configured=configured,
+        bt_bootstrap_replicates=60,
+        bt_bootstrap_seed=13,
+    )
+
+
 def test_recompute_builds_payload_from_published(monkeypatch) -> None:
     achievements = [
         {"id": 1, "status": "published"},
@@ -25,6 +33,12 @@ def test_recompute_builds_payload_from_published(monkeypatch) -> None:
         {"achievement_id": 1, "user_id": "u1", "position": 1},
         {"achievement_id": 2, "user_id": "u1", "position": 2},
         {"achievement_id": 3, "user_id": "u1", "position": 3},
+        {"achievement_id": 1, "user_id": "u2", "position": 2},
+        {"achievement_id": 2, "user_id": "u2", "position": 1},
+        {"achievement_id": 1, "user_id": "u3", "position": 1},
+        {"achievement_id": 2, "user_id": "u3", "position": 2},
+        {"achievement_id": 1, "user_id": "u4", "position": 2},
+        {"achievement_id": 2, "user_id": "u4", "position": 1},
     ]
     calls: list[tuple[str, dict]] = []
 
@@ -34,7 +48,7 @@ def test_recompute_builds_payload_from_published(monkeypatch) -> None:
     monkeypatch.setattr(
         bt_recompute.auth_service,
         "get_settings",
-        lambda: SimpleNamespace(service_role_configured=True),
+        lambda: _settings(),
     )
     monkeypatch.setattr(
         bt_recompute.auth_service, "new_service_client", lambda: _FakeRpc(calls)
@@ -44,17 +58,24 @@ def test_recompute_builds_payload_from_published(monkeypatch) -> None:
     summary = bt_recompute.recompute_global_ratings()
     assert summary is not None
     assert summary["items"] == 2
+    assert summary["replicates"] == 60
     assert calls and calls[0][0] == "apply_bt_ratings"
     payload = calls[0][1]["p_ratings"]
     assert {row["id"] for row in payload} == {1, 2}
-    assert all("strength" in row and "rating" in row for row in payload)
+    assert all(
+        {"strength", "rating", "comparisons", "se", "ci_low", "ci_high"} <= set(row)
+        for row in payload
+    )
+    assert any(row["se"] is not None and row["se"] > 0 for row in payload)
+    for row in payload:
+        assert row["ci_low"] <= row["ci_high"]
 
 
 def test_recompute_skips_without_service_role(monkeypatch) -> None:
     monkeypatch.setattr(
         bt_recompute.auth_service,
         "get_settings",
-        lambda: SimpleNamespace(service_role_configured=False),
+        lambda: _settings(configured=False),
     )
     assert bt_recompute.recompute_global_ratings() is None
 

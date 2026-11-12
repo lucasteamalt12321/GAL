@@ -138,3 +138,25 @@ def plural_ru(count: object, forms: tuple[str, str, str]) -> str:
     if 2 <= number % 10 <= 4 and not 12 <= number % 100 <= 14:
         return forms[1]
     return forms[2]
+
+
+def rating_ci(se: object, low: object, high: object, comparisons: object = 0) -> str:
+    """Компактная запись погрешности BT: «± 32 · 95% ДИ 1180–1244».
+
+    Пустая строка означает, что интервал показывать не нужно: данных мало
+    (менее двух сравнений) или бутстрэп вырожден (нулевая погрешность).
+    """
+    try:
+        count = int(comparisons)
+    except (TypeError, ValueError):
+        return ""
+    # До применения миграции 025 колонок нет и Jinja передаёт Undefined:
+    # проверяем типы, чтобы не уронить страницу.
+    if count < 2 or not all(
+        isinstance(value, (int, float)) for value in (se, low, high)
+    ):
+        return ""
+    error = float(se)
+    if error <= 0:
+        return ""
+    return f"± {round(error)} · 95% ДИ {round(low)}–{round(high)}"

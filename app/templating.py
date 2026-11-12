@@ -22,3 +22,4 @@ templates.env.filters["role_label"] = presentation.role
 templates.env.filters["datetime_local"] = presentation.datetime_local
 templates.env.filters["date_local"] = presentation.date_local
 templates.env.filters["plural_ru"] = presentation.plural_ru
+templates.env.filters["rating_ci"] = presentation.rating_ci

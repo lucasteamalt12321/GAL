@@ -81,6 +81,7 @@ gal/
 
 - `bt_strength` — логит-сила Bradley–Terry (`s_i`), больше = сложнее; `bt_rating = 1000 + 400·s/ln10` — Elo-подобное отображение.
 - `bt_comparisons` — число попарных сравнений достижения (надёжность).
+- `bt_rating_se`, `bt_rating_ci_low`, `bt_rating_ci_high` — погрешность и 95% ДИ (кластерный бутстрэп по шкалам); `NULL` при недостатке данных.
 - `average_position` — устаревшее среднее позиций, остаётся как fallback и tie-break, если BT ещё не посчитан.
 - `rank` — фактическое место: `bt_strength desc, average_position asc, rank_order asc, id asc`.
 
@@ -101,8 +102,9 @@ gal/
    каждая пара — отдельное соревнование (win/loss), ни одно не отбрасывается
    (кроме равных позиций и шкал из одного достижения)
 4. MM-оценка сил: θ_i ← (W_i+α)/(Σ n_ij/(θ_i+θ_j)+α/(θ_i+1)), центрирование
-5. RPC apply_bt_ratings(jsonb): пишет bt_* и вызывает recompute_ranks_internal()
-6. Ранги: bt_strength desc, fallback average_position/rank_order/id
+5. Кластерный бутстрэп по пользователям: SE и 95% percentile CI (≥3 шкал, ≥5 реплик)
+6. RPC apply_bt_ratings(jsonb): пишет bt_* (включая se/ci) и вызывает recompute_ranks_internal()
+7. Ранги: bt_strength desc, fallback average_position/rank_order/id; UI показывает «± SE · 95% ДИ» при ≥2 сравнениях
 7. Очки игроков выводятся из rank (1000/rank)
 ```
 

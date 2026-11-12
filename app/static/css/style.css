@@ -1045,6 +1045,13 @@ select {
   line-height: 24px;
 }
 
+.stat-sub {
+  color: var(--vkui-text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+
 .detail > .muted {
   margin-bottom: 12px;
 }
@@ -1407,6 +1414,16 @@ select {
 .leaderboard-table .lb-score {
   color: var(--vkui-positive);
   font-weight: 600;
+}
+
+.leaderboard-table .lb-ci {
+  display: block;
+  margin-top: 2px;
+  color: var(--vkui-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .submissions-table {

@@ -14,6 +14,8 @@ def test_login_page_ok() -> None:
     assert resp.status_code == 200
     assert 'name="email"' in resp.text
     assert 'name="password"' in resp.text
+    assert "Email или никнейм" in resp.text
+    assert 'autocomplete="username"' in resp.text
 
 
 def test_register_page_ok() -> None:
@@ -588,3 +590,85 @@ def test_login_unknown_username_generic_error(monkeypatch) -> None:
     resp = client.post("/auth/login", data={"email": "ghost", "password": "secret1"})
     assert resp.status_code == 200
     assert "Неверный email или пароль" in resp.text
+
+
+def test_resolve_login_email_swallows_service_failure(monkeypatch) -> None:
+    import httpx
+
+    class _BrokenService:
+        def table(self, _name):
+            raise httpx.ConnectError("database unavailable")
+
+    monkeypatch.setattr(auth_service, "get_settings", _service_settings)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: _BrokenService())
+    assert auth_service.resolve_login_email("TonyBig") is None
+
+
+def test_resolve_login_email_returns_none_without_auth_email(monkeypatch) -> None:
+    class _Row:
+        def __init__(self):
+            self.data = [{"id": "uid-1"}]
+
+    class _Query:
+        def ilike(self, *_a, **_k):
+            return self
+
+        def limit(self, *_a, **_k):
+            return self
+
+        def execute(self):
+            return _Row()
+
+    class _Table:
+        def select(self, *_a, **_k):
+            return _Query()
+
+    class _User:
+        email = None
+
+    class _Admin:
+        def get_user_by_id(self, _uid):
+            return SimpleNamespace(user=_User())
+
+    class _Service:
+        auth = SimpleNamespace(admin=_Admin())
+
+        def table(self, _name):
+            return _Table()
+
+    monkeypatch.setattr(auth_service, "get_settings", _service_settings)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: _Service())
+    assert auth_service.resolve_login_email("TonyBig") is None
+
+
+def test_login_wrong_password_does_not_leak_resolved_email(monkeypatch) -> None:
+    from supabase_auth.errors import AuthApiError
+
+    client.cookies.clear()
+
+    class _AuthStub:
+        def sign_in_with_password(self, _payload):
+            raise AuthApiError(
+                message="Invalid login credentials",
+                status=400,
+                code="invalid_credentials",
+            )
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    resolved_email = "tonybig11200@gmail.com"
+    monkeypatch.setattr(
+        auth_service, "resolve_login_email", lambda _ident: resolved_email
+    )
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+
+    resp = client.post(
+        "/auth/login",
+        data={"email": "TonyBig", "password": "wrong-password"},
+    )
+
+    assert resp.status_code == 200
+    assert "Неверный email или пароль" in resp.text
+    assert 'value="TonyBig"' in resp.text
+    assert resolved_email not in resp.text

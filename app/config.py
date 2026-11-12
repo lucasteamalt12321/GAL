@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "GAL"
-    app_version: str = "1.7.0"
+    app_version: str = "1.8.0"
     app_env: str = "development"
     app_url: str = ""
 
@@ -27,6 +27,11 @@ class Settings(BaseSettings):
 
     # Часовой пояс отображения дат в UI (смещение от UTC, часы).
     display_utc_offset_hours: int = 3
+
+    # Кластерный бутстрэп для погрешности Bradley–Terry. 0 отключает расчёт;
+    # фактическое число реплик дополнительно ограничивается объёмом данных.
+    bt_bootstrap_replicates: int = 200
+    bt_bootstrap_seed: int = 20260101
 
     # LTHub OAuth (публичный PKCE-клиент, без client_secret).
     lthub_oauth_enabled: bool = True

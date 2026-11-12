@@ -15,6 +15,7 @@ from app.services import auth as auth_service
 RANKED_SELECT = (
     "id,title,rank,ranking_status,average_position,evaluation_count,"
     "bt_strength,bt_rating,bt_comparisons,"
+    "bt_rating_se,bt_rating_ci_low,bt_rating_ci_high,"
     "category:categories(id,name,slug)"
 )
 PAGE_SIZE = 25

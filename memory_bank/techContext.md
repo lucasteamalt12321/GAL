@@ -46,6 +46,8 @@ APP_ENV=production           # CSRF + Secure cookies
 APP_URL=                     # ссылка сброса пароля
 SUPABASE_TIMEOUT_SECONDS=6   # таймаут PostgREST
 DISPLAY_UTC_OFFSET_HOURS=3   # даты в UI
+BT_BOOTSTRAP_REPLICATES=200  # бутстрэп SE/CI; 0 отключает
+BT_BOOTSTRAP_SEED=20260101   # детерминизм бутстрэпа
 LTHUB_OAUTH_ENABLED=true     # кнопка «Войти через LTHub»
 LTHUB_CLIENT_ID=gal          # публичный PKCE-клиент
 LTHUB_AUTHORIZE_URL=https://lthub.vercel.app/oauth/authorize
@@ -75,6 +77,7 @@ OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (
   - `005`–`012` — движок оценок, хардинг, integrity, lock, revoke internal execute;
   - `013_ui_features_and_hardening.sql` — soft-delete своих pending, приватность proofs, авторство истории модерации, deferred trigger «публикация только с approved proof создателя», постраничный `player_leaderboard_page`;
   - `014_bradley_terry.sql` — `bt_strength/bt_rating/bt_comparisons`, guard, ранжирование по BT, RPC `apply_bt_ratings(jsonb)` для `service_role`;
+  - `025_bt_uncertainty.sql` — `bt_rating_se/bt_rating_ci_low/bt_rating_ci_high`, guard новых полей, расширенный `apply_bt_ratings(jsonb)` (к проду не применена);
   - `015_external_identities.sql` — привязка LTHub identity к профилю (RLS, только `service_role`);
   - `016_completion_review_visibility.sql` — автор видит причину отклонения заявки;
   - `017_completion_difficulty.sql` — `requested_harder_count` + RPC `apply_completion_evaluation`;
@@ -102,8 +105,8 @@ OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (
 - GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
 - Push → Vercel (production).
 - Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .` (конфигурация — `ruff.toml`, `target-version = "py312"`, одноразовые скрипты исключены).
-- Тесты: 206 (ранкинг/BT с инвариантом «каждая пара = соревнование», OAuth клиент и провайдер, «Мои заявки», сложность/сравнения, живые оценки, роуты, CSRF, resilience, hardening, публичные профили/списки прошедших, v1.1–v1.7 сценарии).
-- Bradley–Terry: `scripts/recompute_bt.py` (service role), эксперимент `scripts/bt_experiment.py`; формула/ограничения — `docs/bradley_terry.md`.
+- Тесты: 222 (ранкинг/BT с инвариантом «каждая пара = соревнование», детерминизм и краевые случаи кластерного бутстрэпа, канонические определения SQL-миграций, guard/запись SE и CI, отказоустойчивость входа по нику, OAuth клиент и провайдер, «Мои заявки», сложность/сравнения, живые оценки, роуты, CSRF, resilience, hardening, публичные профили/списки прошедших, v1.1–v1.8 сценарии).
+- Bradley–Terry: `scripts/recompute_bt.py` (service role), эксперимент `scripts/bt_experiment.py`; SE/CI — кластерный бутстрэп (`BT_BOOTSTRAP_REPLICATES`, `BT_BOOTSTRAP_SEED`); формула/ограничения — `docs/bradley_terry.md`.
 - LTHub OAuth: публичный PKCE-клиент `gal`, provider в BankBot `core/oauth.py`; GAL-клиент — `app/routers/lthub_auth.py` + `app/services/lthub_accounts.py`.
 - GAL как OAuth-провайдер: `app/services/oauth_provider.py` + `app/routers/oauth.py`; клиент LTHub (`lthub`, публичный, PKCE S256) — статический реестр; LTHub-клиент — `core/gal_oauth.py` (BankBot).
 - `ruff` закреплён версией `0.17.4` в `requirements-dev.txt` (CI и локальная проверка совпадают).

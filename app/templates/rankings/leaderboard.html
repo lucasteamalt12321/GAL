@@ -6,6 +6,7 @@
     Место определяется силой Bradley–Terry: она оценивается по попарным сравнениям
     из личных шкал участников. BT-рейтинг 1000 — средний уровень; разница 400
     очков означает примерно десятикратное превосходство в шансах быть сложнее.
+    «±» и 95% ДИ показывают точность оценки: чем больше сравнений, тем интервал уже.
   </p>
 
   <section class="leaderboard-section">
@@ -30,7 +31,14 @@
                 <td class="lb-rank">#{{ a.rank }}</td>
                 <td><a href="/achievements/{{ a.id }}">{{ a.title }}</a></td>
                 <td>{{ a.category.name if a.category else '—' }}</td>
-                <td>{{ "%.0f"|format(a.bt_rating) if a.bt_rating|default(none, true) is not none else '—' }}</td>
+                <td>
+                  {{ "%.0f"|format(a.bt_rating) if a.bt_rating|default(none, true) is not none else '—' }}
+                  {% set ci = a.bt_rating_se|rating_ci(
+                       a.bt_rating_ci_low,
+                       a.bt_rating_ci_high,
+                       a.bt_comparisons|default(0, true)) %}
+                  {% if ci %}<span class="lb-ci">{{ ci }}</span>{% endif %}
+                </td>
                 <td>{{ a.bt_comparisons|default(0, true) }}</td>
                 <td>{{ a.evaluation_count }}</td>
               </tr>

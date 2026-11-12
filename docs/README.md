@@ -129,12 +129,12 @@ PostgreSQL  Auth     Storage
 
 Глобальная сложность считается моделью **Bradley–Terry** по попарным сравнениям из личных шкал (подробно — [`bradley_terry.md`](bradley_terry.md)):
 
-- `app/services/bradley_terry.py` — чистые функции: `build_comparisons` (все пары внутри шкалы, вес `1/(k-1)`), `fit_bradley_terry` (регуляризованный MM, prior κ=0.5), `win_probability`.
-- `app/services/bt_recompute.py` — service role читает все `evaluations` и опубликованные достижения, считает силы, вызывает RPC `apply_bt_ratings(jsonb)`.
-- RPC пишет `bt_strength` (логит), `bt_rating = 1000 + 400·s/ln10`, `bt_comparisons`, `bt_updated_at` и пересчитывает `rank` (сортировка `bt_strength desc, average_position asc, rank_order asc, id asc`).
+- `app/services/bradley_terry.py` — чистые функции: `build_comparisons` (все пары внутри шкалы, вес `1/(k-1)`), `fit_bradley_terry` (регуляризованный MM, prior κ=0.5), `with_bootstrap_intervals` (кластерный бутстрэп по личным шкалам), `win_probability`.
+- `app/services/bt_recompute.py` — service role читает все `evaluations` и опубликованные достижения, считает силы и интервалы, вызывает RPC `apply_bt_ratings(jsonb)`.
+- RPC пишет `bt_strength` (логит), `bt_rating = 1000 + 400·s/ln10`, `bt_comparisons`, `bt_rating_se`/`bt_rating_ci_low`/`bt_rating_ci_high`, `bt_updated_at` и пересчитывает `rank` (сортировка `bt_strength desc, average_position asc, rank_order asc, id asc`).
 - Пересчёт запускается после оценки, модерации и принятия жалобы; ошибка только логируется и не ломает сценарий. Ручной запуск — `python scripts/recompute_bt.py`.
 - `app/services/ranking.py` — чистое ядро порядка (BT desc, fallback на среднюю позицию), `player_score(rank) = 1000/rank`.
-- `GET /leaderboard` — две секции с независимой пагинацией по 25: топ достижений (rank, BT-рейтинг, сравнения, оценки, категория) и топ игроков.
+- `GET /leaderboard` — две секции с независимой пагинацией по 25: топ достижений (rank, BT-рейтинг с «± SE» и 95% ДИ, сравнения, оценки, категория) и топ игроков.
 - Очки игрока = `1000 / rank` за каждое `approved` выполнение ранжированного опубликованного достижения.
 - `public.player_leaderboard_page(p_limit, p_offset)` — постраничный security definer-агрегат (013).
 - Две секции грузятся параллельно (`ThreadPoolExecutor`), поэтому время страницы ограничено одним таймаутом Supabase.
@@ -194,8 +194,9 @@ PostgreSQL  Auth     Storage
 - `022_restore_ranking_and_proof_scheme.sql` — восстановление канонического `recompute_ranks_internal()` (BT + двухфазный bump + `security definer`), `submit_evaluation`/`apply_completion_evaluation` с порогом 2 и защитой ссылок-доказательств (`proofs_link_scheme`).
 - `023_public_completions.sql` — security-definer RPC `achievement_completers(bigint)` и `user_completed_achievements(uuid)`: только approved-заявки опубликованных достижений и публичные поля профиля; гранты `anon`/`authenticated`.
 - `024_backfill_ranked_threshold.sql` — backfill: опубликованные достижения с `evaluation_count >= 2`, оставшиеся в `unknown` до снижения порога, переводятся в `ranked`, затем `recompute_ranks_internal()` расставляет места по BT.
+- `025_bt_uncertainty.sql` — колонки `bt_rating_se/bt_rating_ci_low/bt_rating_ci_high`, guard новых полей, обновлённый RPC `apply_bt_ratings(jsonb)` с записью интервалов.
 
-**Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014 → 022** (008 и 022 содержат `create or replace` функций ранжирования; после 008 обязательно переприменение 010/011/014, после 022 — итоговая версия).
+**Порядок критичен: 008 → 009 → 010 → 011 → 012 → 013 → 014 → 022 → 025** (008, 022 и 025 содержат `create or replace` функций ранжирования/BT; после 008 обязательно переприменение 010/011/014, после 022 — итоговая версия, 025 должна идти последней и переопределяет guard и `apply_bt_ratings`).
 
 ## Данные
 
@@ -210,7 +211,7 @@ moderation_reviews
 reports
 ```
 
-**Производные значения** (не канон): `achievements.rank`, `bt_strength`, `bt_rating`, `bt_comparisons`, `average_position`, суммы очков игроков — пересчитываются из первичных данных (`evaluations`).
+**Производные значения** (не канон): `achievements.rank`, `bt_strength`, `bt_rating`, `bt_comparisons`, `bt_rating_se`, `bt_rating_ci_low`, `bt_rating_ci_high`, `average_position`, суммы очков игроков — пересчитываются из первичных данных (`evaluations`).
 
 ## Главная цепочка
 
@@ -241,15 +242,15 @@ Achievement → Creator Proof → Moderation → Published
 ## Развёртывание
 
 - Vercel: `vercel.json`, ASGI = `app.main:app`.
-- Переменные: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, опц. `SUPABASE_TIMEOUT_SECONDS`, `APP_ENV=production`, `APP_URL`.
+- Переменные: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, опц. `SUPABASE_TIMEOUT_SECONDS`, `APP_ENV=production`, `APP_URL`, `BT_BOOTSTRAP_REPLICATES`, `BT_BOOTSTRAP_SEED`.
 - `SERVICE_ROLE_KEY` только на сервере.
 
 ## Качество
 
-- `pytest` — 206 тестов: юнит-тесты ранкинга и Bradley–Terry (включая инвариант «каждая пара = одно соревнование»), роуты, CSRF, resilience, OAuth (клиент и провайдер), «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, вход по никнейму, публичные профили и списки прошедших, hardening (XSS в ссылках, security-заголовки, HTML-ошибки валидации, транзиентные сбои auth, LTHub-аккаунты), сценарии v1.1–v1.7.
+- `pytest` — 222 теста: юнит-тесты ранкинга и Bradley–Terry (включая инвариант «каждая пара = одно соревнование», детерминизм и краевые случаи бутстрэпа), статические инварианты итоговых определений миграций (BT-сортировка, двухфазный bump, порог 2, живые оценки, guard и запись SE/CI), отказоустойчивость входа по нику и отсутствие утечки email, роуты, CSRF, resilience, OAuth (клиент и провайдер), «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, публичные профили и списки прошедших, hardening (XSS в ссылках, security-заголовки, HTML-ошибки валидации, транзиентные сбои auth, LTHub-аккаунты), сценарии v1.1–v1.8.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 
 ## Статус
 
-Документация соответствует состоянию после v1.7: каркас, миграции 001–024, аутентификация и сброс пароля, вход через LTHub (OAuth + PKCE), GAL как OAuth-провайдер, достижения + профили + настройки, сложность при создании/прохождении, доказательства и модерация с понятными ошибками Storage и проверкой схемы ссылок, движок оценок с порогом 2, запрет создания достижения без оценки опубликованного достижения, глобальный ранкинг Bradley–Terry (каждая пара личной шкалы — отдельное соревнование), лидерборды с пагинацией, публичные профили с пройденными достижениями, карточки достижений со списком прошедших и кнопкой отправки прохождения, жалобы, «Мои заявки», CSRF/security-заголовки/HTML-ошибки, адаптивный UI в стиле VKUI (light/dark), CI. Обновлять при изменениях архитектуры, маршрутов и модулей.
+Документация соответствует состоянию после v1.8: каркас, миграции 001–025, аутентификация и сброс пароля, вход через LTHub (OAuth + PKCE), GAL как OAuth-провайдер, достижения + профили + настройки, сложность при создании/прохождении, доказательства и модерация с понятными ошибками Storage и проверкой схемы ссылок, движок оценок с порогом 2, запрет создания достижения без оценки опубликованного достижения, глобальный ранкинг Bradley–Terry (каждая пара личной шкалы — отдельное соревнование) с SE и 95% доверительным интервалом, лидерборды с пагинацией, публичные профили с пройденными достижениями, карточки достижений со списком прошедших и кнопкой отправки прохождения, жалобы, «Мои заявки», CSRF/security-заголовки/HTML-ошибки, адаптивный UI в стиле VKUI (light/dark), CI. Обновлять при изменениях архитектуры, маршрутов и модулей.

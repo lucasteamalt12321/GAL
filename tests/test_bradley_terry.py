@@ -2,10 +2,12 @@ import random
 
 from app.services.bradley_terry import (
     Comparison,
+    bootstrap_rounds,
     build_comparisons,
     fit_bradley_terry,
     ordered_ids,
     win_probability,
+    with_bootstrap_intervals,
 )
 
 
@@ -100,3 +102,56 @@ def test_identical_items_have_close_strengths() -> None:
     comparisons = [Comparison(1, 2)] * 10 + [Comparison(2, 1)] * 10
     ratings = fit_bradley_terry([1, 2], comparisons)
     assert abs(ratings[1].strength - ratings[2].strength) < 1e-6
+
+
+def _mixed_scales() -> dict[str, list[tuple[int, float]]]:
+    return {
+        "u1": [(1, 1.0), (2, 2.0), (3, 3.0)],
+        "u2": [(1, 1.0), (3, 2.0), (2, 3.0)],
+        "u3": [(2, 1.0), (1, 2.0), (3, 3.0)],
+        "u4": [(1, 1.0), (2, 2.0), (3, 3.0)],
+    }
+
+
+def test_bootstrap_intervals_are_deterministic() -> None:
+    scales = _mixed_scales()
+    comparisons = build_comparisons(scales)
+    base = fit_bradley_terry({1, 2, 3}, comparisons)
+
+    first = with_bootstrap_intervals(scales, base, replicates=60, seed=11)
+    second = with_bootstrap_intervals(scales, base, replicates=60, seed=11)
+
+    for item_id in (1, 2, 3):
+        assert first[item_id].se == second[item_id].se
+        assert first[item_id].ci_low == second[item_id].ci_low
+        assert first[item_id].ci_high == second[item_id].ci_high
+        rating = first[item_id]
+        assert rating.se is not None and rating.se > 0
+        assert rating.ci_low is not None and rating.ci_high is not None
+        assert rating.ci_low < rating.ci_high
+
+
+def test_bootstrap_requires_enough_scales() -> None:
+    scales = {
+        "u1": [(1, 1.0), (2, 2.0)],
+        "u2": [(1, 2.0), (2, 1.0)],
+    }
+    base = fit_bradley_terry({1, 2}, build_comparisons(scales))
+    result = with_bootstrap_intervals(scales, base, replicates=40, seed=3)
+    assert all(rating.se is None for rating in result.values())
+
+
+def test_bootstrap_skips_disconnected_items() -> None:
+    scales = _mixed_scales()
+    base = fit_bradley_terry({1, 2, 3, 99}, build_comparisons(scales))
+    result = with_bootstrap_intervals(scales, base, replicates=40, seed=5)
+    assert result[99].se is None
+    assert result[99].ci_low is None
+    assert result[1].se is not None
+
+
+def test_bootstrap_rounds_stay_within_budget() -> None:
+    assert bootstrap_rounds(0, 0) == 0
+    assert bootstrap_rounds(600, 200) == 200
+    assert bootstrap_rounds(10_000, 200) == 20
+    assert bootstrap_rounds(1, 5000) == 1000

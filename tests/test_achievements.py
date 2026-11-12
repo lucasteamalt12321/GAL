@@ -36,6 +36,12 @@ def _sample_achievement() -> dict:
         "rank": 1,
         "average_position": 1.5,
         "evaluation_count": 3,
+        "bt_strength": 0.7,
+        "bt_rating": 1123.4,
+        "bt_comparisons": 5,
+        "bt_rating_se": 21.0,
+        "bt_rating_ci_low": 1082.0,
+        "bt_rating_ci_high": 1164.0,
         "creator_id": "00000000-0000-0000-0000-000000000000",
         "category": {"id": 1, "name": "Chess", "slug": "chess"},
         "creator": {
@@ -88,6 +94,27 @@ def test_detail_renders(monkeypatch) -> None:
     resp = client.get("/achievements/1")
     assert resp.status_code == 200
     assert "Sample" in resp.text
+    assert "1123" in resp.text
+    assert "± 21 · 95% ДИ 1082–1164" in resp.text
+    assert "доверительный интервал" in resp.text
+
+
+def test_detail_hides_interval_without_enough_comparisons(monkeypatch) -> None:
+    achievement = {
+        **_sample_achievement(),
+        "bt_comparisons": 1,
+        "bt_rating_se": None,
+        "bt_rating_ci_low": None,
+        "bt_rating_ci_high": None,
+    }
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: achievement)
+    monkeypatch.setattr(
+        completions_service, "list_achievement_completers", lambda *_: []
+    )
+    resp = client.get("/achievements/1")
+    assert resp.status_code == 200
+    assert "95% ДИ" not in resp.text
+    assert "нужно ≥ 2 сравнений для интервала" in resp.text
 
 
 def test_detail_lists_completers(monkeypatch) -> None:

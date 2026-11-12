@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 FETCH_BATCH = 1000
 
 
+def _round_optional(value: float | None, digits: int = 4) -> float | None:
+    return None if value is None else round(value, digits)
+
+
 def _fetch_all(client, table: str, select: str, order: str) -> list[dict]:
     rows: list[dict] = []
     start = 0
@@ -48,7 +52,8 @@ def recompute_global_ratings() -> dict | None:
 
     Возвращает сводку или None, если service role не настроен/нет данных.
     """
-    if not auth_service.get_settings().service_role_configured:
+    settings = auth_service.get_settings()
+    if not settings.service_role_configured:
         return None
     client = auth_service.new_service_client()
 
@@ -78,26 +83,40 @@ def recompute_global_ratings() -> dict | None:
 
     item_ids = {item for c in comparisons for item in (c.winner, c.loser)}
     ratings = bradley_terry.fit_bradley_terry(item_ids, comparisons)
+    rounds = bradley_terry.bootstrap_rounds(
+        len(comparisons), settings.bt_bootstrap_replicates
+    )
+    ratings = bradley_terry.with_bootstrap_intervals(
+        scales,
+        ratings,
+        replicates=rounds,
+        seed=settings.bt_bootstrap_seed,
+    )
     payload = [
         {
             "id": rating.item_id,
             "strength": round(rating.strength, 10),
             "rating": round(rating.rating, 4),
             "comparisons": rating.comparisons,
+            "se": _round_optional(rating.se),
+            "ci_low": _round_optional(rating.ci_low),
+            "ci_high": _round_optional(rating.ci_high),
         }
         for rating in ratings.values()
     ]
     client.rpc("apply_bt_ratings", {"p_ratings": payload}).execute()
     logger.info(
-        "BT ratings recomputed: items=%s comparisons=%s scales=%s",
+        "BT ratings recomputed: items=%s comparisons=%s scales=%s replicates=%s",
         len(payload),
         len(comparisons),
         len(scales),
+        rounds,
     )
     return {
         "items": len(payload),
         "comparisons": len(comparisons),
         "scales": len(scales),
+        "replicates": rounds,
     }
 
 

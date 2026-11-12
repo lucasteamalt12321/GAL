@@ -6,7 +6,18 @@ from app.services import rankings as rankings_service
 client = TestClient(app)
 
 
-def _achievement(aid: int, rank: int, avg: float = 1.5, count: int = 3) -> dict:
+def _achievement(
+    aid: int,
+    rank: int,
+    avg: float = 1.5,
+    count: int = 3,
+    *,
+    rating: float | None = 1200.0,
+    se: float | None = 18.0,
+    ci_low: float | None = 1165.0,
+    ci_high: float | None = 1235.0,
+    comparisons: int = 6,
+) -> dict:
     return {
         "id": aid,
         "title": f"Achievement {aid}",
@@ -14,6 +25,11 @@ def _achievement(aid: int, rank: int, avg: float = 1.5, count: int = 3) -> dict:
         "ranking_status": "ranked",
         "average_position": avg,
         "evaluation_count": count,
+        "bt_rating": rating,
+        "bt_comparisons": comparisons,
+        "bt_rating_se": se,
+        "bt_rating_ci_low": ci_low,
+        "bt_rating_ci_high": ci_high,
         "category": {"id": 1, "name": "Chess", "slug": "chess"},
     }
 
@@ -52,6 +68,41 @@ def test_leaderboard_renders_rows(monkeypatch) -> None:
     assert "Achievement 1" in body
     assert "Alice" in body
     assert "1500.0" in body
+    assert "1200" in body
+    assert "± 18 · 95% ДИ 1165–1235" in body
+
+
+def test_leaderboard_omits_interval_without_enough_data(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rankings_service,
+        "leaderboard_achievements",
+        lambda **_: (
+            [_achievement(1, 1, se=None, ci_low=None, ci_high=None, comparisons=1)],
+            1,
+        ),
+    )
+    monkeypatch.setattr(
+        rankings_service, "player_leaderboard", lambda **_: (_players(), 2)
+    )
+    resp = client.get("/leaderboard")
+    assert resp.status_code == 200
+    assert "± " not in resp.text
+    assert "1165" not in resp.text
+
+
+def test_leaderboard_survives_missing_uncertainty_columns(monkeypatch) -> None:
+    row = _achievement(1, 1)
+    for key in ("bt_rating_se", "bt_rating_ci_low", "bt_rating_ci_high"):
+        row.pop(key)
+    monkeypatch.setattr(
+        rankings_service, "leaderboard_achievements", lambda **_: ([row], 1)
+    )
+    monkeypatch.setattr(
+        rankings_service, "player_leaderboard", lambda **_: (_players(), 2)
+    )
+    resp = client.get("/leaderboard")
+    assert resp.status_code == 200
+    assert "Achievement 1" in resp.text
 
 
 def test_leaderboard_empty_state(monkeypatch) -> None:
