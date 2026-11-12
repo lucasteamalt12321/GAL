@@ -132,6 +132,7 @@ PostgreSQL  Auth     Storage
 - `app/services/bradley_terry.py` — чистые функции: `build_comparisons` (все пары внутри шкалы, вес `1/(k-1)`), `fit_bradley_terry` (регуляризованный MM, prior κ=0.5), `with_bootstrap_intervals` (кластерный бутстрэп по личным шкалам), `win_probability`.
 - `app/services/bt_recompute.py` — service role читает все `evaluations` и опубликованные достижения, считает силы и интервалы, вызывает RPC `apply_bt_ratings(jsonb)`.
 - RPC пишет `bt_strength` (логит), `bt_rating = 1000 + 400·s/ln10`, `bt_comparisons`, `bt_rating_se`/`bt_rating_ci_low`/`bt_rating_ci_high`, `bt_updated_at` и пересчитывает `rank` (сортировка `bt_strength desc, average_position asc, rank_order asc, id asc`).
+- Лидерборд устойчив к деплою до миграции 025: при ошибке о неизвестных колонках интервала он повторяет запрос без них (`LEGACY_RANKED_SELECT`), а после применения миграции автоматически читает SE/CI.
 - Пересчёт запускается после оценки, модерации и принятия жалобы; ошибка только логируется и не ломает сценарий. Ручной запуск — `python scripts/recompute_bt.py`.
 - `app/services/ranking.py` — чистое ядро порядка (BT desc, fallback на среднюю позицию), `player_score(rank) = 1000/rank`.
 - `GET /leaderboard` — две секции с независимой пагинацией по 25: топ достижений (rank, BT-рейтинг с «± SE» и 95% ДИ, сравнения, оценки, категория) и топ игроков.
@@ -247,7 +248,7 @@ Achievement → Creator Proof → Moderation → Published
 
 ## Качество
 
-- `pytest` — 222 теста: юнит-тесты ранкинга и Bradley–Terry (включая инвариант «каждая пара = одно соревнование», детерминизм и краевые случаи бутстрэпа), статические инварианты итоговых определений миграций (BT-сортировка, двухфазный bump, порог 2, живые оценки, guard и запись SE/CI), отказоустойчивость входа по нику и отсутствие утечки email, роуты, CSRF, resilience, OAuth (клиент и провайдер), «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, публичные профили и списки прошедших, hardening (XSS в ссылках, security-заголовки, HTML-ошибки валидации, транзиентные сбои auth, LTHub-аккаунты), сценарии v1.1–v1.8.
+- `pytest` — 225 тестов: юнит-тесты ранкинга и Bradley–Terry (включая инвариант «каждая пара = одно соревнование», детерминизм и краевые случаи бутстрэпа), статические инварианты итоговых определений миграций (BT-сортировка, двухфазный bump, порог 2, живые оценки, guard и запись SE/CI), отказоустойчивость входа по нику и отсутствие утечки email, роуты, CSRF, resilience, OAuth (клиент и провайдер), «Мои заявки», сложность/сравнения, загрузка proof-файлов и ошибки Storage, блокировка создания достижения без оценки, валидация email и маппинг ошибок регистрации, публичные профили и списки прошедших, hardening (XSS в ссылках, security-заголовки, HTML-ошибки валидации, транзиентные сбои auth, LTHub-аккаунты), сценарии v1.1–v1.8.
 - `ruff check` / `ruff format --check`; CI в `.github/workflows/ci.yml`.
 - Live-e2e: `scripts/e2e_evaluation_sql.py`, `scripts/e2e_reports_sql.py`; эксперимент BT — `scripts/bt_experiment.py`.
 

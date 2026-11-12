@@ -105,7 +105,7 @@ OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (
 - GitHub Actions: `.github/workflows/ci.yml` — `ruff check`, `ruff format --check`, `pytest` на push в `main` и PR.
 - Push → Vercel (production).
 - Локальная проверка: `pytest`, `ruff check .`, `ruff format --check .` (конфигурация — `ruff.toml`, `target-version = "py312"`, одноразовые скрипты исключены).
-- Тесты: 222 (ранкинг/BT с инвариантом «каждая пара = соревнование», детерминизм и краевые случаи кластерного бутстрэпа, канонические определения SQL-миграций, guard/запись SE и CI, отказоустойчивость входа по нику, OAuth клиент и провайдер, «Мои заявки», сложность/сравнения, живые оценки, роуты, CSRF, resilience, hardening, публичные профили/списки прошедших, v1.1–v1.8 сценарии).
+- Тесты: 225 (ранкинг/BT с инвариантом «каждая пара = соревнование», детерминизм и краевые случаи кластерного бутстрэпа, канонические определения SQL-миграций, guard/запись SE и CI, отказоустойчивость входа по нику, OAuth клиент и провайдер, «Мои заявки», сложность/сравнения, живые оценки, роуты, CSRF, resilience, hardening, публичные профили/списки прошедших, v1.1–v1.8 сценарии).
 - Bradley–Terry: `scripts/recompute_bt.py` (service role), эксперимент `scripts/bt_experiment.py`; SE/CI — кластерный бутстрэп (`BT_BOOTSTRAP_REPLICATES`, `BT_BOOTSTRAP_SEED`); формула/ограничения — `docs/bradley_terry.md`.
 - LTHub OAuth: публичный PKCE-клиент `gal`, provider в BankBot `core/oauth.py`; GAL-клиент — `app/routers/lthub_auth.py` + `app/services/lthub_accounts.py`.
 - GAL как OAuth-провайдер: `app/services/oauth_provider.py` + `app/routers/oauth.py`; клиент LTHub (`lthub`, публичный, PKCE S256) — статический реестр; LTHub-клиент — `core/gal_oauth.py` (BankBot).
