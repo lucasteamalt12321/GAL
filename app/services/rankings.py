@@ -8,17 +8,49 @@ completions, недоступным публично под RLS).
 
 from __future__ import annotations
 
+import logging
+
 from postgrest.exceptions import APIError
 
 from app.services import auth as auth_service
 
+logger = logging.getLogger(__name__)
+
+LEGACY_RANKED_SELECT = (
+    "id,title,rank,ranking_status,average_position,evaluation_count,"
+    "bt_strength,bt_rating,bt_comparisons,"
+    "category:categories(id,name,slug)"
+)
 RANKED_SELECT = (
     "id,title,rank,ranking_status,average_position,evaluation_count,"
     "bt_strength,bt_rating,bt_comparisons,"
     "bt_rating_se,bt_rating_ci_low,bt_rating_ci_high,"
     "category:categories(id,name,slug)"
 )
+UNCERTAINTY_FIELDS = ("bt_rating_se", "bt_rating_ci_low", "bt_rating_ci_high")
 PAGE_SIZE = 25
+
+
+def _is_missing_uncertainty_columns(exc: APIError) -> bool:
+    """Миграция 025 может быть ещё не применена к БД.
+
+    Новый select тогда падает на неизвестных колонках; это не сбой хранилища,
+    поэтому лидерборд откатывается к прежнему набору полей.
+    """
+    text = f"{getattr(exc, 'message', '')} {getattr(exc, 'details', '')}".lower()
+    return any(field in text for field in UNCERTAINTY_FIELDS)
+
+
+def _ranked_page(client, select: str, start: int, limit: int):
+    return (
+        client.table("achievements")
+        .select(select)
+        .eq("status", "published")
+        .eq("ranking_status", "ranked")
+        .order("rank")
+        .range(start, start + limit - 1)
+        .execute()
+    )
 
 
 def leaderboard_achievements(
@@ -43,15 +75,15 @@ def leaderboard_achievements(
     start = (page - 1) * limit
     if start >= total:
         return [], total
-    res = (
-        client.table("achievements")
-        .select(RANKED_SELECT)
-        .eq("status", "published")
-        .eq("ranking_status", "ranked")
-        .order("rank")
-        .range(start, start + limit - 1)
-        .execute()
-    )
+    try:
+        res = _ranked_page(client, RANKED_SELECT, start, limit)
+    except APIError as exc:
+        if not _is_missing_uncertainty_columns(exc):
+            raise
+        logger.warning(
+            "BT uncertainty columns are missing in Supabase; using legacy select"
+        )
+        res = _ranked_page(client, LEGACY_RANKED_SELECT, start, limit)
     return res.data or [], total
 
 

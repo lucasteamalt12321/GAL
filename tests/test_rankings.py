@@ -1,9 +1,69 @@
+from types import SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 
 from app.main import app
 from app.services import rankings as rankings_service
+from app.services.rankings import leaderboard_achievements as fetch_ranked_page
 
 client = TestClient(app)
+
+
+class _FakeQuery:
+    def __init__(self, fake_client: "_FakeClient") -> None:
+        self.fake_client = fake_client
+        self.select_arg = ""
+
+    def select(self, select: str, **_kwargs):
+        self.select_arg = select
+        return self
+
+    def eq(self, *_args):
+        return self
+
+    def order(self, *_args):
+        return self
+
+    def range(self, *_args):
+        return self
+
+    def limit(self, *_args):
+        return self
+
+    def execute(self):
+        self.fake_client.selects.append(self.select_arg)
+        if self.select_arg == "id":
+            return SimpleNamespace(data=[], count=1)
+        if any(
+            field in self.select_arg for field in rankings_service.UNCERTAINTY_FIELDS
+        ):
+            if self.fake_client.error_message is not None:
+                raise APIError(
+                    {
+                        "message": self.fake_client.error_message,
+                        "code": self.fake_client.error_code,
+                        "details": None,
+                        "hint": None,
+                    }
+                )
+            return SimpleNamespace(data=[{"id": 7, "title": "With CI"}], count=None)
+        return SimpleNamespace(data=[{"id": 7, "title": "Legacy"}], count=None)
+
+
+class _FakeClient:
+    def __init__(
+        self,
+        error_message: str | None = None,
+        error_code: str = "PGRST204",
+    ) -> None:
+        self.error_message = error_message
+        self.error_code = error_code
+        self.selects: list[str] = []
+
+    def table(self, _name: str) -> _FakeQuery:
+        return _FakeQuery(self)
 
 
 def _achievement(
@@ -88,6 +148,52 @@ def test_leaderboard_omits_interval_without_enough_data(monkeypatch) -> None:
     assert resp.status_code == 200
     assert "± " not in resp.text
     assert "1165" not in resp.text
+
+
+def test_leaderboard_service_falls_back_before_migration(monkeypatch) -> None:
+    fake_client = _FakeClient(
+        error_message="Could not find the 'bt_rating_se' column in the schema cache"
+    )
+    monkeypatch.setattr(
+        rankings_service.auth_service, "new_anon_client", lambda: fake_client
+    )
+
+    rows, total = fetch_ranked_page()
+
+    assert total == 1
+    assert rows == [{"id": 7, "title": "Legacy"}]
+    assert fake_client.selects == [
+        "id",
+        rankings_service.RANKED_SELECT,
+        rankings_service.LEGACY_RANKED_SELECT,
+    ]
+
+
+def test_leaderboard_service_keeps_new_select_after_migration(monkeypatch) -> None:
+    fake_client = _FakeClient()
+    monkeypatch.setattr(
+        rankings_service.auth_service, "new_anon_client", lambda: fake_client
+    )
+
+    rows, total = fetch_ranked_page()
+
+    assert total == 1
+    assert rows == [{"id": 7, "title": "With CI"}]
+    assert fake_client.selects == ["id", rankings_service.RANKED_SELECT]
+
+
+def test_leaderboard_service_propagates_other_storage_errors(monkeypatch) -> None:
+    fake_client = _FakeClient(
+        error_message="permission denied for table achievements",
+        error_code="42501",
+    )
+    monkeypatch.setattr(
+        rankings_service.auth_service, "new_anon_client", lambda: fake_client
+    )
+
+    with pytest.raises(APIError):
+        fetch_ranked_page()
+    assert fake_client.selects == ["id", rankings_service.RANKED_SELECT]
 
 
 def test_leaderboard_survives_missing_uncertainty_columns(monkeypatch) -> None:
