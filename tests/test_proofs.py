@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from storage3.exceptions import StorageApiError
 
 from app.main import app
@@ -171,6 +172,75 @@ def test_storage_payload_too_large_message(monkeypatch: pytest.MonkeyPatch) -> N
     assert "4 МБ" in str(excinfo.value)
 
 
+class _SignedUrlBucket:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int]] = []
+
+    def create_signed_url(self, path: str, expires_in: int) -> dict:
+        self.calls.append((path, expires_in))
+        return {"signedURL": f"https://signed.example/{path}"}
+
+
+class _ServiceClient:
+    def __init__(self) -> None:
+        self.bucket = _SignedUrlBucket()
+        self.storage = SimpleNamespace(from_=lambda _name: self.bucket)
+
+
+def test_public_proofs_validate_links_and_sign_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _ServiceClient()
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: fake)
+    rows = [
+        {
+            "username": "bob",
+            "proofs": [
+                {
+                    "id": 1,
+                    "proof_type": "link",
+                    "storage_path": "https://example.org/run",
+                },
+                {
+                    "id": 2,
+                    "proof_type": "link",
+                    "storage_path": "javascript:alert(1)",
+                },
+                {"id": 3, "proof_type": "video", "storage_path": "u/1/clip.mp4"},
+            ],
+        }
+    ]
+
+    out = completions_service._decorate_public_completions(rows)
+
+    proofs = out[0]["proofs"]
+    assert proofs[0]["url"] == "https://example.org/run"
+    assert proofs[1]["url"] is None
+    assert proofs[2]["url"] == "https://signed.example/u/1/clip.mp4"
+    assert all("storage_path" not in proof for proof in proofs)
+    assert fake.bucket.calls == [("u/1/clip.mp4", completions_service.PROOF_URL_TTL)]
+
+
+def test_public_file_proof_without_service_role_has_no_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _missing():
+        raise auth_service.SupabaseNotConfiguredError("not configured")
+
+    monkeypatch.setattr(auth_service, "new_service_client", _missing)
+    rows = [{"proofs": [{"id": 1, "proof_type": "image", "storage_path": "u/1/p.png"}]}]
+
+    out = completions_service._decorate_public_completions(rows)
+
+    assert out[0]["proofs"][0]["url"] is None
+
+
+def test_public_completions_tolerate_missing_proofs() -> None:
+    out = completions_service._decorate_public_completions([{"username": "bob"}])
+
+    assert out[0]["proofs"] == []
+
+
 def test_complete_endpoint_accepts_multipart_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -204,3 +274,69 @@ def test_complete_endpoint_accepts_multipart_file(
     assert content == b"\x89PNG\r\n"
     assert options["content-type"] == "image/png"
     assert path.startswith(f"{USER.id}/5/")
+
+
+class _CompletionsTable:
+    def __init__(self, errors: list[Exception] | None = None) -> None:
+        self.payloads: list[dict] = []
+        self.errors = list(errors or [])
+
+    def insert(self, payload: dict) -> _CompletionsTable:
+        self.payloads.append(dict(payload))
+        return self
+
+    def execute(self) -> _Result:
+        if self.errors:
+            raise self.errors.pop(0)
+        return _Result([{"id": 42}])
+
+
+class _CompletionClient:
+    def __init__(self, errors: list[Exception] | None = None) -> None:
+        self.completions = _CompletionsTable(errors)
+
+    def table(self, name: str) -> _CompletionsTable:
+        assert name == "achievement_completions"
+        return self.completions
+
+
+def test_create_completion_stores_hidden_proofs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _CompletionClient()
+    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _request: fake)
+
+    completions_service.create_completion(_request(), 42, USER.id, proofs_visible=False)
+
+    assert fake.completions.payloads[0]["proofs_visible"] is False
+
+
+def test_create_completion_keeps_visible_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _CompletionClient()
+    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _request: fake)
+
+    completions_service.create_completion(_request(), 42, USER.id)
+
+    assert "proofs_visible" not in fake.completions.payloads[0]
+
+
+def test_create_completion_degrades_before_visibility_migration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing = APIError(
+        {
+            "message": "Could not find the 'proofs_visible' column",
+            "code": "PGRST204",
+            "details": None,
+            "hint": None,
+        }
+    )
+    fake = _CompletionClient(errors=[missing])
+    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _request: fake)
+
+    completions_service.create_completion(_request(), 42, USER.id, proofs_visible=False)
+
+    assert fake.completions.payloads[0]["proofs_visible"] is False
+    assert "proofs_visible" not in fake.completions.payloads[1]

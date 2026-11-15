@@ -16,6 +16,15 @@
         <input type="url" name="external_url" placeholder="https://...">
       </label>
     </fieldset>
+    {% if is_creator %}
+      <p class="muted">Доказательство верификации создателя всегда видно другим пользователям.</p>
+    {% else %}
+      <label class="checkbox-field">
+        <input type="checkbox" name="hide_proofs" value="on">
+        <span>Скрыть доказательство от других пользователей</span>
+      </label>
+      <p class="muted">Модераторы увидят доказательство при проверке в любом случае.</p>
+    {% endif %}
     <label class="field">
       <span class="field-label">Комментарий</span>
       <textarea name="description" rows="3" maxlength="2000"></textarea>

@@ -133,6 +133,13 @@ async def register(request: Request) -> HTMLResponse:
     email_error = auth_service.validate_email(email)
     if email_error:
         return _page(request, "auth/register.html", error=email_error, **form)
+    if auth_service.is_reserved_service_email(email):
+        return _page(
+            request,
+            "auth/register.html",
+            error="Этот email зарезервирован для служебных аккаунтов.",
+            **form,
+        )
     try:
         if not auth_service.username_available(username):
             return _page(
@@ -175,7 +182,13 @@ def recover_page(request: Request) -> HTMLResponse:
 async def recover(request: Request) -> HTMLResponse:
     email = (await body_field(request, "email")).strip()
     options = {}
-    app_url = get_settings().app_url.strip() or str(request.base_url).rstrip("/")
+    settings = get_settings()
+    # В production не выводим URL сброса из Host-заголовка (password reset
+    # poisoning): если APP_URL не задан, redirect_to опускаем — Supabase
+    # использует настроенный SITE_URL. Fallback на origin допустим только в dev.
+    app_url = settings.app_url.strip()
+    if not app_url and not settings.is_production:
+        app_url = str(request.base_url).rstrip("/")
     if app_url:
         options["redirect_to"] = f"{app_url.rstrip('/')}/auth/update-password"
     try:

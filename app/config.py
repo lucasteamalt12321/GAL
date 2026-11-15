@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "GAL"
-    app_version: str = "1.8.0"
+    app_version: str = "1.10.0"
     app_env: str = "development"
     app_url: str = ""
 

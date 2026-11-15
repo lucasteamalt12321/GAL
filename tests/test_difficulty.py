@@ -113,6 +113,56 @@ def test_completion_passes_harder_count(monkeypatch) -> None:
     assert captured == [0]
 
 
+def _completion_post(monkeypatch, creator_id: str, data: dict) -> dict:
+    _login(monkeypatch)
+    item = {
+        "id": 5,
+        "title": "Existing",
+        "status": "published",
+        "creator_id": creator_id,
+    }
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(
+        evaluation_service, "list_user_scale", lambda _r: [_scale_item(2, "Old")]
+    )
+    captured: dict = {}
+
+    def _submit(*_args, **kwargs):
+        captured.update(kwargs)
+        return {"id": 1}
+
+    monkeypatch.setattr(completions_service, "submit_completion", _submit)
+    resp = client.post(
+        "/achievements/5/complete",
+        data={"external_url": "https://example.org/proof", "harder_count": "0", **data},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    return captured
+
+
+def test_completion_hides_proof_when_requested(monkeypatch) -> None:
+    captured = _completion_post(
+        monkeypatch,
+        "33333333-3333-3333-3333-333333333333",
+        {"hide_proofs": "on"},
+    )
+
+    assert captured["proofs_visible"] is False
+
+
+def test_completion_shows_proof_by_default(monkeypatch) -> None:
+    captured = _completion_post(monkeypatch, "33333333-3333-3333-3333-333333333333", {})
+
+    assert captured["proofs_visible"] is True
+
+
+def test_creator_completion_ignores_hide_request(monkeypatch) -> None:
+    captured = _completion_post(monkeypatch, USER.id, {"hide_proofs": "on"})
+
+    assert captured["proofs_visible"] is True
+
+
 def test_completion_without_difficulty_is_rejected(monkeypatch) -> None:
     _login(monkeypatch)
     item = {

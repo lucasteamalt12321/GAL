@@ -49,7 +49,15 @@
             </td>
             <td>{{ item.created_at|datetime_local }}</td>
             <td>
-              {% if item.proof_count %}
+              {% if item.proof_views %}
+                {% for p in item.proof_views %}
+                  {% if p.url %}
+                    <a class="tag" href="{{ p.url }}" target="_blank" rel="noopener noreferrer" title="Открыть доказательство">{{ p.proof_type|proof_type_label }}</a>
+                  {% else %}
+                    <span class="muted">{{ p.proof_type|proof_type_label }}</span>
+                  {% endif %}
+                {% endfor %}
+              {% elif item.proof_count %}
                 {{ item.proof_count }} {{ item.proof_count|plural_ru(('доказательство', 'доказательства', 'доказательств')) }}
               {% else %}
                 <span class="muted">—</span>

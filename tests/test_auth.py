@@ -466,6 +466,37 @@ def test_resolve_login_email_username_without_service_role(monkeypatch) -> None:
     assert auth_service.resolve_login_email("TonyBig") is None
 
 
+def test_register_rejects_reserved_lthub_email() -> None:
+    resp = client.post(
+        "/auth/register",
+        data={
+            "username": "attacker",
+            "email": "lthub-oauth-8@example.com",
+            "password": "secret1",
+        },
+    )
+    assert resp.status_code == 200
+    assert "зарезервирован" in resp.text
+
+
+def test_is_reserved_service_email() -> None:
+    assert auth_service.is_reserved_service_email("lthub-oauth-8@example.com")
+    assert auth_service.is_reserved_service_email("LTHUB-OAUTH-abc.def@example.com")
+    assert not auth_service.is_reserved_service_email("user@example.com")
+    assert not auth_service.is_reserved_service_email("lthub-oauth-8@gmail.com")
+    assert not auth_service.is_reserved_service_email("")
+
+
+def test_resolve_login_email_rejects_wildcard(monkeypatch) -> None:
+    monkeypatch.setattr(auth_service, "get_settings", _service_settings)
+
+    def _no_client():
+        raise AssertionError("service client must not be called for wildcard")
+
+    monkeypatch.setattr(auth_service, "new_service_client", _no_client)
+    assert auth_service.resolve_login_email("Ton*") is None
+
+
 def _service_settings() -> Settings:
     return Settings(
         supabase_url="https://x.supabase.co", supabase_service_role_key="key"

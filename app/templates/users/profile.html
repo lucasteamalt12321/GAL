@@ -53,16 +53,30 @@
             <th scope="col">Достижение</th>
             <th scope="col">Категория</th>
             <th scope="col">BT-рейтинг</th>
+            <th scope="col">Доказательство</th>
             <th scope="col">Подтверждено</th>
           </tr>
         </thead>
         <tbody>
           {% for a in completed %}
             <tr>
-              <td class="lb-rank">{% if a.rank %}#{{ a.rank }}{% else %}?{% endif %}</td>
+              <td class="lb-rank">{% if a.rank %}#{{ a.rank }}{% if a.is_temporary %}*{% endif %}{% else %}?{% endif %}</td>
               <td><a href="/achievements/{{ a.achievement_id }}">{{ a.title }}</a></td>
               <td>{{ a.category_name or '—' }}</td>
               <td>{{ "%.0f"|format(a.bt_rating) if a.bt_rating|default(none, true) is not none else '—' }}</td>
+              <td class="proof-cell">
+                {% if a.proofs %}
+                  {% for p in a.proofs %}
+                    {% if p.url %}
+                      <a class="tag" href="{{ p.url }}" target="_blank" rel="noopener noreferrer" title="Открыть доказательство">{{ p.proof_type|proof_type_label }}</a>
+                    {% else %}
+                      <span class="muted">{{ p.proof_type|proof_type_label }}</span>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
               <td>{% if a.approved_at %}{{ a.approved_at|date_local }}{% else %}—{% endif %}</td>
             </tr>
           {% endfor %}
@@ -80,7 +94,7 @@
     <div class="cards">
       {% for a in achievements %}
         <a class="card" href="/achievements/{{ a.id }}">
-          <div class="card-rank">{% if a.rank %}#{{ a.rank }}{% else %}?{% endif %}</div>
+          <div class="card-rank">{% if a.rank %}#{{ a.rank }}{% if a.is_temporary %}*{% endif %}{% else %}?{% endif %}</div>
           <div class="card-body">
             <h2 class="card-title">{{ a.title }}</h2>
             <div class="card-meta">

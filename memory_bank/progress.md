@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D14 completed; D14 реализован локально, миграция 025 к проду не применена).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D17 completed; миграции 025/026/027 применены к проду 2026-11-14, 028 — 2026-11-15; 029/030 добавлены 2026-11-15, к проду не применены).
 
 ## Deliverables статус
 
@@ -22,8 +22,78 @@
 | D12 | v1.1: функции, безопасность, CI   | completed |
 | D13 | v1.2: Bradley–Terry ранкинг       | completed |
 | D14 | v1.8: надёжность BT (SE + 95% CI) | completed |
+| D15 | v1.9: предварительный топ-5       | completed |
+| D16 | v1.10: видимость доказательств    | completed |
+| D17 | Bugfix по итогам bug-hunt 11-15   | completed |
 
 ## Changelog
+
+### 2026-11-15 — D17: сквозной баг-хант по всему GAL
+
+**Запрос.** «сделай багхант по всему GAL. по мере нахождения багов сразу их фикси». Аудит четырьмя субагентами (auth/безопасность, ранкинг/топ-5, SQL/скрипты/фронтенд; контент/модерация — вручную после сбоя субагента B по лимиту кредитов), находки проверялись вручную и исправлялись сразу.
+
+**Auth и безопасность (`app/services/auth.py`, `app/database/connection.py`, роутеры).**
+- A1/A7: `ClientOptions(auto_refresh_token=False, postgrest_client_timeout=...)` во всех фабриках клиентов. Библиотека supabase_auth по умолчанию запускает не-демон `threading.Timer` фонового refresh, который перехватывал обновление токена и мог переживать запрос; отключён явно. `connection.py` реэкспортирует `SupabaseNotConfiguredError` (обработчик main.py ловит его для oauth_provider).
+- A2: `_is_invalid_session_error` — разлогин только при явно невалидной сессии (`AuthInvalidJwtError`/`AuthSessionMissingError`/`AuthInvalidCredentialsError` либо `AuthApiError` со статусом 400/401/403, но не rate-limit коды); транзиентный `AuthRetryableError` cookies не стирает.
+- A3: `is_reserved_service_email` (`lthub-oauth-*@example.com`) запрещает регистрацию служебных email LTHub.
+- A4: `recover` не доверяет `Host`-заголовку в проде (`redirect_to` только из `settings.app_url`; fallback на base_url лишь вне прода).
+- A5: `lthub_auth.callback` сравнивает state через `hmac.compare_digest` по UTF-8 байтам — не-ASCII state больше не даёт 500 (`TypeError`).
+- A6: `resolve_login_email` отклоняет `*` (wildcard PostgREST ilike).
+- A8: `change_password` после смены пароля перезаходит (`sign_in_with_password`) и обновляет cookies сессии.
+
+**Ранкинг и топ-5 (`app/services/bt_recompute.py`, `app/routers/users.py`, `app/services/achievements.py`).**
+- C1: `_reference_key` использует `float(rank_order)` вместо `int` — дробный rank_order опор не теряется.
+- C2: фильтр постоянных мест в профиле берёт `permanent_rank` независимо от `is_temporary` (ranked+2 оценки+approved-заявка имеют оба признака).
+- C4: `_sort_rows` каталога добавляет `rank_order` как tiebreaker перед `id` (канонический порядок BT).
+- C3: `migrations/030_top5_apply_upsert.sql` — `apply_temporary_ratings` вместо `delete all` делает адресное удаление потерявших eligibility строк (условия повторяют `_temporary_payload`: approved + published + `evaluation_count < 3` + `rank is null or rank > 5`) и upsert `on conflict (achievement_id) do update`. Advisory lock и service-role-check сохранены. В стационарном режиме поведение идентично 027 (payload содержит все eligible-заявки); в гонке stale payload больше не стирает свежие строки одобренных заявок.
+
+**SQL и фронтенд.**
+- D3: `migrations/029_submit_evaluation_position_clamp.sql` — `submit_evaluation` зажимает позицию по `count(*)` других оценок пользователя (`least(greatest(p_harder_count,0), v_other_count)+1`) вместо `max(position)`: при редактировании не-последней оценки остальные сжимаются, и старый clamp оставлял «дыру». Инварианты 022 сохранены (security definer, advisory lock, NOT_FOUND, порог 2, recompute).
+- D1: `app/static/js/main.js` — текст средней ветки бинарного поиска исправлен: «Легче, чем titleAt(lo-1), но сложнее, чем titleAt(lo)» (раньше сложнее/легче были перепутаны).
+
+**Контент и модерация (ручной аудит).** Новых багов не найдено. Проверены: 028 proof visibility (триггер создателя + фильтры `proofs_visible`/владелец/модератор + UUID-префикс storage_path), модерация (role-guard в роутере, RLS, оптимистичная блокировка по `status='pending'`, порядок approve creator completion → publish), achievements (валидация длин, `ilike_literal`, authorization creator+pending), completions (`safe_external_url` http(s) на записи и рендере, `_safe_filename`+UUID-префикс от path traversal, размер до чтения), evaluation (строгий `parse_harder_count`, RPC-authorization), reports (RLS insert-own-pending/moderator-update, идемпотентность решения), profiles (update только `user.id`, avatar http(s), uniqueness username). Гипотеза о 500 из-за кириллицы в `?error=` опровергнута эмпирически: `RedirectResponse` сам percent-энкодит URL.
+
+**Тесты.** Новые регрессионные: `test_hardening.py` (invalid_grant APIError стирает cookies, rate-limit APIError сохраняет, auto_refresh отключён), `test_bt_recompute.py` (дробный rank_order), `test_achievements.py` (очки профиля с permanent_rank при временном overlay), `test_auth.py` (reserved email, wildcard-логин), `test_lthub_oauth.py` (не-ASCII state), `test_migration_invariants.py` (clamp позиции 029, merge вместо wipe 030). Итого **298 passed** (было 296), `ruff check`/`format` чисты.
+
+**Состояние.** Код, тесты и Memory Bank обновлены; коммит не создавался. Миграции **029/030 к проду не применены** (требуется подтверждение владельца; 021 также не применена). Применение 029/030 не меняет контракт RPC и обратно совместимо.
+
+### 2026-11-15 — v1.10 (D16): видимость доказательств при прохождении
+
+**Запрос.** «Человек при прохождении может указать, показать/скрыть доказательство для всех пользователей. Если доказательство не скрыто, ссылка на него указана рядом с прохождением. Верификация достижения (прохождение достижения от его создателя) не может быть скрыта. Модераторы видят скрытые доказательства».
+
+**БД.** `migrations/028_proof_visibility.sql` (**применена к проду 2026-11-15**, HTTP 201): колонка `achievement_completions.proofs_visible boolean not null default true` (по умолчанию доказательства не скрыты); триггер `achievement_completions_creator_visibility` (`before insert or update`, security definer) принудительно ставит `true`, если `user_id` совпадает с `creator_id` достижения; `achievement_completers` и `user_completed_achievements` пересозданы из 026/027 без изменения контракта, но proofs-агрегат фильтруется по `c.proofs_visible or c.user_id = auth.uid() or public.is_moderator()`; гранты `anon/authenticated` и `notify pgrst, 'reload schema'` в конце. Скрытое доказательство не попадает в публичный ответ RPC, но возвращается владельцу и модератору; очередь модерации видит его напрямую под RLS.
+
+**Сервис.** `app/services/completions.py`: `create_completion(..., proofs_visible=True)` и `submit_completion(..., proofs_visible=True)`; скрытие пишется только как `proofs_visible: false` (видимое — дефолт БД); `_update_completion` + `_is_missing_visibility` дают fallback при деплое до миграции (`PGRST204`/`42703` или упоминание колонки) — заявка обрабатывается без нового поля. `_decorate_public_completions` не менялся: подпись/валидация ссылок по-прежнему на сервере.
+
+**UI.** `app/routers/achievements.py`: `POST /achievements/{id}/complete` принимает `hide_proofs`; для создателя флаг игнорируется (`proofs_visible=is_creator or hide_proofs != "on"`), верификация всегда публична. `_proof_form.html`: обычному пользователю — чекбокс «Скрыть доказательство от других пользователей» и пояснение про модераторов; создателю — текст «Доказательство верификации создателя всегда видно другим пользователям» без чекбокса. CSS — `.checkbox-field`; `style.css?v=3`; версия приложения `1.10.0`.
+
+**Тесты.** `tests/test_migration_invariants.py` — фильтр видимости в обеих RPC и триггер создателя; `tests/test_proofs.py` — payload скрытого/видимого доказательства и fallback без колонки; `tests/test_difficulty.py` — `hide_proofs` для обычного пользователя и создателя; `tests/test_submissions.py` — наличие чекбокса у обычного пользователя и его отсутствие у создателя. Итого **296 passed** (было 277), `ruff check`/`format` чисты.
+
+**Применение.** Перед применением 028 проверена на проде в `BEGIN/ROLLBACK` (HTTP 201): при скрытии чужого прохождения публичный `achievement_completers` отдаёт 0 proofs, владелец видит 1 в карточке и профиле, создатель остаётся `proofs_visible = true`, триггер и фильтры на месте; откат подтверждён. Затем `python -m scripts.apply_migrations 028` — HTTP 201. Postflight: колонка `boolean NOT NULL DEFAULT true`, 11/11 прохождений видимы, триггер `achievement_completions_creator_visibility` создан, обе RPC содержат фильтр `proofs_visible`; живые вызовы `achievement_completers(33)` (2 строки, 2 с proofs) и `user_completed_achievements` (1 строка с proof) работают.
+
+**Состояние.** Код, шаблоны, документация и Memory Bank обновлены; миграция 028 применена к проду 2026-11-15, скрытие действует для новых прохождений с `hide_proofs`; существующие доказательства остались видимыми. Коммит не создавался.
+
+### 2026-11-14 — миграции 025/026/027 применены к проду
+
+**Запрос.** «Подтверждаю» — применение в порядке 025 → 026 → 027 после успешной проверки 027 в `BEGIN/ROLLBACK`.
+
+**Применение.** `python -m scripts.apply_migrations 025 026 027` через Management API: все три — HTTP 201. Preflight подтвердил, что колонок SE/CI, вьюхи `public_achievements` и таблиц топ-5 до применения не было.
+
+**Postflight.** Колонки `bt_rating_se/ci_low/ci_high` — 3; `public_achievements` и лидерборд — по 5 published-строк; 5 таблиц топ-5; `user_completed_achievements` возвращает `permanent_rank`, `is_temporary`, `proofs`.
+
+**Live-проверка.** В DO-блоке с принудительным `raise exception` (HTTP 400, изменения откатаны) для достижения #31 создана approved-заявка и вызван `apply_temporary_ratings` (service role, сила 3.1): вьюха отдала `is_temporary=true`, `display_rank=1`, `permanent_rank=null`, `bt_strength/sort_strength=3.1`, временных оценщиков 1; профильный RPC — те же значения. Конверсия на третьей оценке не проверялась на живых данных из-за уникальности approved-заявки на пользователя; покрыта unit-тестами и миграционными инвариантами.
+
+**Состояние.** `pytest` — 277 passed, ruff чист. Пересчёт BT для заполнения SE/CI не запускался (требует отдельного подтверждения).
+
+### 2026-11-13 — v1.9 (D15): предварительный рейтинг топ-5
+
+**Запрос.** Полное ТЗ «система предварительного рейтинга топ-5 в GAL»: постоянный рейтинг не трогать, добавить временный слой для достижений, одобренных модератором/экспертами, с общим топом `#3` / `#3*`, раздельным хранением голосов, журналированием решений и переходом на третьей обычной оценке.
+
+**БД.** `migrations/027_top5_temporary_rating.sql` (**применена к проду 2026-11-14**, HTTP 201): enum-типы `top5_application_status`, `top5_evaluator_type`, `top5_request_status`; таблицы `top5_applications`, `top5_evaluations`, `top5_expert_requests`, `top5_events`, `achievement_temporary_ratings`; RLS, guard/триггеры (запрет самоодобрения, независимость голоса автора, один голос эксперта на заявку, журналирование); RPC подачи/отзыва/оценки/решения; `apply_temporary_ratings(jsonb)` только для service role; вьюха `public.public_achievements` (`permanent_rank`, `display_rank as rank`, `is_temporary`, `in_leaderboard`, `sort_strength`). Временная запись снимается, когда `evaluation_count >= 3`.
+
+**Сервис и UI.** `app/services/top5.py` (заявки, решения, приглашения, очередь), `app/routers/top5.py` (`/top5`), формы в `templates/top5/`, блок заявок в очереди модерации, `*` в лидерборде/каталоге/карточке/профиле. Общий топ и карточки читаются из вьюхи с fallback на таблицы при `PGRST205`; `permanent_rank` используется для проверки права на заявку, чтобы сдвиг display-номеров не блокировал новых кандидатов. `bt_recompute.py`: `recompute_temporary_ratings` считает `anchored_strength` против фиксированного топ-5; голос-место сравнивается только с соседними опорами, prior α=10 вокруг стартовой силы; без голосов берётся постоянная BT-сила или предложенное место; при наличии обычных оценок силы смешиваются.
+
+**Проверка.** `pytest` — **277 passed** (переходы 0/1/2/3, независимость голосов, запрет самоодобрения, очередь/страницы/решения, anchored strength, вьюха и fallback), ruff check/format чисты. Ревью-фиксы: PGRST204 не маскируется под отсутствие вьюхи, списки топ-5 возвращают пусто без 027, очки профиля берут только `permanent_rank`, каталог пагинирует чтение >1000 строк, эксперт без активного приглашения не голосует, тип уже записанной оценки не меняется, причина отказа ≤1000 символов, `rank_order` участвует в сортировке опор, BT-сила не учитывается дважды. SQL 027 проверен на проде 2026-11-14 в `BEGIN/ROLLBACK` (HTTP 201): вьюха отдаёт 5 published-строк, `user_completed_achievements` работает, триггеры созданы, service-role RPC и anon-SELECT на вьюху подтверждены; изменения откатаны. После подтверждения владельца применены 025 → 026 → 027 (все HTTP 201); postflight подтвердил колонки SE/CI, 5 строк во вьюхе и лидерборде, 5 таблиц топ-5 и новые поля профильного RPC. Live-проверка в откатываемой транзакции: одобренная заявка на #31 + `apply_temporary_ratings` → `is_temporary=true`, `rank=1`, `permanent_rank=null`, временных оценщиков 1; изменения откатаны.
 
 ### 2026-11-12 — hotfix: 503 на `/leaderboard` после автодеплоя v1.8
 
@@ -39,7 +109,7 @@
 
 **Модель.** `app/services/bradley_terry.py`: кластерный непараметрический бутстрэп по личным шкалам (ресэмплинг пользователей с возвращением; повторный пользователь даёт шкалу повторно). Для каждого достижения собираются силы из реплик, где оно участвовало; `se = stdev(s)·400/ln10`, границы — перцентили 2.5/97.5 (метод 7) в единицах рейтинга. Требуется ≥3 шкалы, ≥5 валидных реплик и ≥2 сравнения у достижения; иначе `NULL`. Seed фиксирован (`BT_BOOTSTRAP_SEED`, по умолчанию `20260101`), число реплик по умолчанию 200 и адаптивно ограничивается `max(20, 120000/comparisons)`; `BT_BOOTSTRAP_REPLICATES=0` отключает. MM-реплики стартуют с тёплого старта. Замер: 900 сравнений, 133 реплики — 0.33 с.
 
-**БД и данные.** `migrations/025_bt_uncertainty.sql` (не применена к проду): колонки `bt_rating_se/bt_rating_ci_low/bt_rating_ci_high`, переобъявленные `guard_ranking_fields()` и `apply_bt_ratings(jsonb)`. `bt_recompute.py` передаёт `se/ci_low/ci_high` (с `null` при недостатке данных); `RANKED_SELECT` читает новые поля.
+**БД и данные.** `migrations/025_bt_uncertainty.sql` (**применена к проду 2026-11-14**): колонки `bt_rating_se/bt_rating_ci_low/bt_rating_ci_high`, переобъявленные `guard_ranking_fields()` и `apply_bt_ratings(jsonb)`. `bt_recompute.py` передаёт `se/ci_low/ci_high` (с `null` при недостатке данных); `RANKED_SELECT` читает новые поля.
 
 **UI.** Фильтр `rating_ci` в `presentation.py`/`templating.py`; карточка достижения показывает «± SE · 95% ДИ low–high» и пояснение, лидерборд — вторую строку в ячейке BT-рейтинга и легенду. При `comparisons < 2`, `se <= 0` или `NULL` интервал скрывается; в карточке выводится подсказка о пороге. Добавлены `.stat-sub` и `.lb-ci`, используются токены VKUI (тёмная тема автоматически), мобильный скролл таблиц сохранён.
 
@@ -52,6 +122,30 @@
 **Реализовано.** `tests/test_auth.py`: форма входа проверяет label «Email или никнейм» и `autocomplete=username`; `resolve_login_email` возвращает `None` при сетевом сбое service role и при пустом email auth-пользователя; неверный пароль для ника не выводит разрешённый email в HTML и сохраняет общий текст ошибки. Новый `tests/test_migration_invariants.py`: собирает последнее определение каждой SQL-функции в порядке миграций и защищает уникальность номеров, canonical BT-сортировку, двухфазный bump `rank`, `security definer`, advisory lock, `NOT_FOUND`, порог 2, незаблокированные живые оценки и безусловный пересчёт рангов.
 
 **Проверка.** `pytest` — **213 passed**, `ruff check`/`ruff format --check` чисты. Продовый код, удалённая БД и миграции не изменялись; изменения находятся в рабочем дереве без коммита.
+
+### 2026-11-11 — доказательства в публичных прохождениях
+
+**Запрос.** «Я не вижу доказательств рядом с прохождениями».
+
+**БД.** Добавлена `migrations/026_public_completion_proofs.sql` (**применена к проду 2026-11-14**): RPC `achievement_completers(bigint)` и `user_completed_achievements(uuid)` из 023 пересозданы с полем `proofs jsonb`. Агрегат собирает id/тип/описание/storage_path/created_at доказательств только для approved-прохождений опубликованных достижений; pending/rejected, email и moderation_reviews по-прежнему не раскрываются. SQL проверен на проде в `begin … rollback`: функции создаются, сигнатуры содержат `proofs jsonb`, `achievement_completers(33)` вернул 2 строки, `user_completed_achievements(TonyBig)` — 1, массивы proofs корректны; откат подтверждён.
+
+**Сервис.** `_decorate_public_completions` в `app/services/completions.py`: link-доказательства проходят `safe_external_url` (javascript:/data: отбрасываются), файлы подписываются service-role клиентом (`create_signed_url`, TTL 3600), `storage_path` удаляется из отдаваемых данных. Ошибка подписи/отсутствие service role не ломают страницу — доказательство остаётся без ссылки.
+
+**UI.** Карточка достижения: рядом с каждым прошедшим — «доказательство:» + теги типов (ссылка/видео/изображение…); если ссылку подписать не удалось, выводится только тип. Публичный профиль: колонка «Доказательство» в таблице пройденных, «Мои заявки» — ссылки на собственные proofs. CSS — `.completer-proofs`, `.proof-cell`.
+
+**Прод-данные.** У approved-прохождений есть link-доказательства (#31, #33, #35, #36) и image-доказательства (#35, #46); для изображений нужен `SERVICE_ROLE_KEY` на сервере, иначе выводится только тип без ссылки.
+
+**Тесты.** `tests/test_proofs.py` — валидация link-URL, подпись файла, деградация без service role, отсутствие proofs; `tests/test_achievements.py` — ссылки на доказательства в карточке и профиле. Итого **211 passed**, ruff check/format чисты.
+
+### 2026-11-11 — предварительные позиции в лидерборде
+
+**Запрос.** «Достижения с 1 оценкой должны ставиться выше или ниже оценённых по предварительному месту, но не влиять на нумерацию (типа ?, 1, 2, ?, 3 топ должен выглядеть)».
+
+**Сервис.** `app/services/rankings.py::leaderboard_achievements` больше не фильтрует по `ranking_status = 'ranked'`: в выборку входят все опубликованные достижения с `evaluation_count >= 1`. Сортировка повторяет `recompute_ranks_internal` — `bt_strength desc nulls last`, `average_position`, `rank`, `id`; поэтому однооценочные строки встают выше/ниже ranked по предварительной BT-силе, а ranked сохраняют свои номера. `total` — число оценённых достижений.
+
+**UI.** Лидерборд: у строки без `rank` выводится «?» (`lb-rank-unknown`, подсказка «нужна вторая оценка»), добавлено пояснение в шапке; пустое состояние и счётчик переформулированы. Лендинг: `?` вместо `#None`, исправлены устаревшие тексты «три оценки» → «две». CSS не менялся.
+
+**Тесты.** `tests/test_rankings.py`: смешанный список (`?`, 1, `?`, 2, 3) сохраняет порядок сервиса и номера; сервисный тест подтверждает `gte evaluation_count >= 1`, отсутствие фильтра по `ranking_status` и сортировку по `bt_strength desc`. Итого **208 passed**, ruff check/format чисты.
 
 ### 2026-11-11 — порог ranked снижен до 2 оценок
 
@@ -365,4 +459,4 @@
 
 ## last_checked_commit
 
-`b1fa1cd fix(ranking): fall back when BT uncertainty columns are missing` (2026-11-12) — запушен в `main`; `022`/`024` применены к проду, не применены `021_oauth_provider.sql` и `025_bt_uncertainty.sql`. В `main` также `8f068e0` (v1.8: bootstrap SE/CI и регрессионные тесты). Vercel задеплоил v1.8 автоматически; инцидент 503 на `/leaderboard` из-за отсутствия 025 устранён fallback-ом. Всего **225 passed**, ruff чисто.
+`c7d507e memory bank: record leaderboard fallback hotfix` (2026-11-13) — `main` содержит v1.8 и hotfix; к проду применены `022`/`024`, 2026-11-14 — `025_bt_uncertainty.sql`, `026_public_completion_proofs.sql`, `027_top5_temporary_rating.sql`, 2026-11-15 — `028_proof_visibility.sql`; не применены `021_oauth_provider.sql`, `029_submit_evaluation_position_clamp.sql`, `030_top5_apply_upsert.sql`. Локально в рабочем дереве (не закоммичено): предварительные позиции и доказательства в публичных прохождениях, v1.9 топ-5, v1.10 видимость доказательств, баг-хант D17 (auth/ранкинг/контент/SQL/фронтенд + миграции 029/030), документация и Memory Bank; `pytest` — 298 passed, ruff чист.

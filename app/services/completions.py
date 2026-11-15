@@ -195,8 +195,57 @@ def list_proofs(request: Request, completion_id: int) -> list[dict]:
     return res.data or []
 
 
+def _signed_proof_url(client: Client, storage_path: str) -> str | None:
+    try:
+        signed = client.storage.from_(PROOFS_BUCKET).create_signed_url(
+            storage_path, PROOF_URL_TTL
+        )
+    except COMPLETION_ERRORS:
+        logger.debug("Failed to sign public proof %s", storage_path, exc_info=True)
+        return None
+    if not signed:
+        return None
+    return signed.get("signedURL") or signed.get("signedUrl")
+
+
+def _decorate_public_completions(rows: list[dict]) -> list[dict]:
+    """Добавляет ссылки к доказательствам публичных прохождений.
+
+    Link-доказательства проходят проверку http(s); файлы подписываются
+    service-role клиентом, потому что Storage RLS не пускает anon. Ошибка
+    подписи не скрывает прохождение — доказательство остаётся без ссылки.
+    """
+    if not rows:
+        return rows
+    needs_signing = any(
+        proof.get("proof_type") != LINK_PROOF
+        for row in rows
+        for proof in row.get("proofs") or []
+    )
+    service_client = None
+    if needs_signing:
+        try:
+            service_client = auth_service.new_service_client()
+        except COMPLETION_ERRORS:
+            logger.debug("Service role unavailable for public proofs", exc_info=True)
+    for row in rows:
+        decorated = []
+        for proof in row.get("proofs") or []:
+            item = dict(proof)
+            if item.get("proof_type") == LINK_PROOF:
+                item["url"] = safe_external_url(item.get("storage_path"))
+            elif service_client is not None and item.get("storage_path"):
+                item["url"] = _signed_proof_url(service_client, item["storage_path"])
+            else:
+                item["url"] = None
+            item.pop("storage_path", None)
+            decorated.append(item)
+        row["proofs"] = decorated
+    return rows
+
+
 def list_achievement_completers(request: Request, achievement_id: int) -> list[dict]:
-    """Публичный список прошедших достижение (approved, только профили).
+    """Публичный список прошедших достижение (approved, профили и proofs).
 
     Читается через security definer RPC: RLS на achievement_completions
     разрешает пользователю только собственные строки. Ошибка RPC (например,
@@ -210,7 +259,7 @@ def list_achievement_completers(request: Request, achievement_id: int) -> list[d
     except COMPLETION_ERRORS:
         logger.debug("Failed to load achievement completers", exc_info=True)
         return []
-    return res.data or []
+    return _decorate_public_completions(res.data or [])
 
 
 def list_user_completed_achievements(request: Request, user_id: str) -> list[dict]:
@@ -223,7 +272,7 @@ def list_user_completed_achievements(request: Request, user_id: str) -> list[dic
     except COMPLETION_ERRORS:
         logger.debug("Failed to load user completed achievements", exc_info=True)
         return []
-    return res.data or []
+    return _decorate_public_completions(res.data or [])
 
 
 def list_user_completions(request: Request, limit: int = 200) -> list[dict]:
@@ -238,7 +287,7 @@ def list_user_completions(request: Request, limit: int = 200) -> list[dict]:
             "id,achievement_id,status,created_at,approved_at,"
             "achievement:achievements(id,title,status,creator_id,"
             "category:categories(name)),"
-            "proofs(id,proof_type,description,created_at)"
+            "proofs(id,storage_path,proof_type,description,created_at)"
         )
         .eq("user_id", user.id)
         .order("created_at", desc=True)
@@ -271,6 +320,7 @@ def list_user_completions(request: Request, limit: int = 200) -> list[dict]:
     for row in rows:
         row["rejection_reason"] = reasons.get(row["id"])
         row["proof_count"] = len(row.get("proofs") or [])
+        row["proof_views"] = decorate_proofs(request, row.get("proofs") or [])
         row["has_evaluation"] = int(row["achievement_id"]) in evaluated
     return rows
 
@@ -393,11 +443,45 @@ def decorate_proofs(request: Request, proofs: list[dict]) -> list[dict]:
     return [proof_view(client, p) for p in proofs]
 
 
+def _is_missing_visibility(exc: Exception) -> bool:
+    """Ошибка «колонки proofs_visible ещё нет» (деплой раньше миграции 028)."""
+    code = str(getattr(exc, "code", "") or "").upper()
+    text = str(exc).lower()
+    return code in {"PGRST204", "42703"} or (
+        "proofs_visible" in text and "column" in text
+    )
+
+
+def _update_completion(client: Client, completion_id: int, fields: dict) -> None:
+    """Обновляет заявку; без миграции 028 опускает неизвестную колонку."""
+    try:
+        (
+            client.table("achievement_completions")
+            .update(fields)
+            .eq("id", completion_id)
+            .execute()
+        )
+        return
+    except APIError as exc:
+        if "proofs_visible" not in fields or not _is_missing_visibility(exc):
+            raise
+    logger.info("proofs_visible is not applied yet; updating completion without it")
+    fallback = {key: value for key, value in fields.items() if key != "proofs_visible"}
+    if fallback:
+        (
+            client.table("achievement_completions")
+            .update(fallback)
+            .eq("id", completion_id)
+            .execute()
+        )
+
+
 def create_completion(
     request: Request,
     achievement_id: int,
     user_id: str,
     harder_count: int | None = None,
+    proofs_visible: bool = True,
 ) -> dict:
     client = auth_service.user_client_from_request(request)
     if client is None:
@@ -409,8 +493,20 @@ def create_completion(
     }
     if harder_count is not None:
         payload["requested_harder_count"] = harder_count
+    if not proofs_visible:
+        # true совпадает с default из миграции 028 и не требует новой колонки.
+        payload["proofs_visible"] = False
     try:
-        res = client.table("achievement_completions").insert(payload).execute()
+        try:
+            res = client.table("achievement_completions").insert(payload).execute()
+        except APIError as exc:
+            if "proofs_visible" not in payload or not _is_missing_visibility(exc):
+                raise
+            logger.info(
+                "proofs_visible is not applied yet; creating visible completion"
+            )
+            payload.pop("proofs_visible")
+            res = client.table("achievement_completions").insert(payload).execute()
     except APIError as exc:
         if getattr(exc, "code", None) == "23505" or "duplicate" in str(exc).lower():
             raise AlreadyCompletedError(
@@ -554,6 +650,7 @@ def submit_completion(
     external_url: str,
     uploaded,
     harder_count: int | None = None,
+    proofs_visible: bool = True,
 ) -> dict:
     user = request.state.user
     if user is None:
@@ -583,10 +680,10 @@ def submit_completion(
                 "Не удалось обновить заявку. Попробуйте ещё раз."
             ) from exc
         completion = {"id": res.data[0]["completion_id"]}
+        fields = {"proofs_visible": proofs_visible}
         if harder_count is not None:
-            client.table("achievement_completions").update(
-                {"requested_harder_count": harder_count}
-            ).eq("id", completion["id"]).execute()
+            fields["requested_harder_count"] = harder_count
+        _update_completion(client, completion["id"], fields)
     elif (
         existing is not None
         and existing["status"] == "pending"
@@ -596,17 +693,21 @@ def submit_completion(
         # иначе пользователь попадал в тупик (форма не показывалась, а повторная
         # отправка упиралась в AlreadyCompletedError).
         completion = existing
+        fields = {"proofs_visible": proofs_visible}
         if harder_count is not None:
-            client.table("achievement_completions").update(
-                {"requested_harder_count": harder_count}
-            ).eq("id", completion["id"]).execute()
+            fields["requested_harder_count"] = harder_count
+        _update_completion(client, completion["id"], fields)
     elif existing is not None:
         raise AlreadyCompletedError(
             "Вы уже отправляли доказательство для этого достижения."
         )
     else:
         completion = create_completion(
-            request, achievement_id, user.id, harder_count=harder_count
+            request,
+            achievement_id,
+            user.id,
+            harder_count=harder_count,
+            proofs_visible=proofs_visible,
         )
 
     external_url = (external_url or "").strip()

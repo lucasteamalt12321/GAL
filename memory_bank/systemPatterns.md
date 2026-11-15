@@ -84,16 +84,19 @@ gal/
 - `bt_rating_se`, `bt_rating_ci_low`, `bt_rating_ci_high` — погрешность и 95% ДИ (кластерный бутстрэп по шкалам); `NULL` при недостатке данных.
 - `average_position` — устаревшее среднее позиций, остаётся как fallback и tie-break, если BT ещё не посчитан.
 - `rank` — фактическое место: `bt_strength desc, average_position asc, rank_order asc, id asc`.
+- `permanent_rank` (вьюха `public.public_achievements`) — постоянное место; `display_rank`/`rank` — место в общем топе с учётом временных позиций; `is_temporary` и `in_leaderboard` — признаки вхождения.
+- `achievement_temporary_ratings` — временная сила одобренной заявки топ-5 до третьей обычной оценки; не канон и снимается автоматически.
 
 ### 3. Жизненный цикл сущностей
 
 - **Achievement:** `pending → published` (после модерации), либо `rejected`; `deleted` — автором (только `pending`) или модератором (hide/принятие жалобы).
-- **Completion:** `pending → approved` / `rejected` (модерация proof). `UNIQUE(achievement, user)`. При reject/hide достижения его pending-заявки отклоняются; автор может переотправить rejected-заявку (reset RPC + замена proof) из карточки или `/submissions`.
+- **Completion:** `pending → approved` / `rejected` (модерация proof). `UNIQUE(achievement, user)`. При reject/hide достижения его pending-заявки отклоняются; автор может переотправить rejected-заявку (reset RPC + замена proof) из карточки или `/submissions`. Флаг `proofs_visible` (028) скрывает доказательство от остальных; верификация создателя всегда видима.
 - **Evaluation:** `UNIQUE(achievement, user)`. Новые оценки принимаются в любой момент, включая `ranked`; после каждой оценки пересчитываются среднее, ранги и BT. `locked` оставлен в схеме для совместимости, но всегда false.
+- **Top-5 application:** `pending → approved` (временная позиция) / `rejected` (с причиной) / `expert_review` (приглашённые эксперты); `cancelled` — автором или модератором. Одна активная заявка на достижение; третья обычная оценка снимает временную запись.
 - **Report:** `pending → accepted` / `rejected`.
 - **Moderation review:** пишется при каждом решении (achievement/completion), только от имени текущего модератора (RLS 013), виден модераторам в `/moderation/history`.
 
-### 4. Ranking recompute (Bradley–Terry)
+### 4. Ranking recompute (Bradley–Terry + временный топ-5)
 
 ```text
 1. submit_evaluation сохраняет позицию в личной шкале (SQL, атомарно)
@@ -105,7 +108,13 @@ gal/
 5. Кластерный бутстрэп по пользователям: SE и 95% percentile CI (≥3 шкал, ≥5 реплик)
 6. RPC apply_bt_ratings(jsonb): пишет bt_* (включая se/ci) и вызывает recompute_ranks_internal()
 7. Ранги: bt_strength desc, fallback average_position/rank_order/id; UI показывает «± SE · 95% ДИ» при ≥2 сравнениях
-7. Очки игроков выводятся из rank (1000/rank)
+8. recompute_temporary_ratings: anchored_strength против постоянного топ-5
+   (голос-место → сравнение с соседними опорами по avg/rank_order; prior α=10
+   вокруг опоры, BT-сила смешивается один раз), RPC apply_temporary_ratings
+   (030: адресное удаление не-eligible строк + upsert по achievement_id,
+   а не очистка всего кэша — stale payload не стирает свежие строки)
+9. Общий display_rank = ranked + временные; permanent_rank не меняется
+10. Очки игроков выводятся только из permanent_rank (1000/rank), временные #N* не учитываются
 ```
 
 Пересчёт запускается после оценки, модерации и принятия жалобы; запись
@@ -118,13 +127,15 @@ gal/
 - Moderator: проверка submissions, approve/reject/hide, ревью reports, история модерации.
 - Backend не доверяет frontend: `rank`, `points`, `approved` вычисляет только сервер.
 - proofs видны владельцу и модератору; публичная политика `proofs_select_approved_public` удалена в 013.
+- Публичные RPC списков прошедших отдают proofs только для `proofs_visible = true`, либо когда вызывающий — владелец прохождения (`auth.uid()`) или модератор. Триггер 028 принудительно делает proof создателя видимым.
 - Публикация достижения без `approved`-выполнения создателя с proof запрещена deferred constraint trigger-ом (013).
 - `bt_*` меняются только RPC `apply_bt_ratings` (security definer, execute у `service_role`); guard-триггер откатывает прямые изменения.
 - LTHub OAuth: публичный клиент + PKCE S256, одноразовые коды (TTL 5 мин), opaque tokens (30 дней); GAL проверяет state и создаёт Supabase-сессию через service role; привязка в `external_identities` недоступна anon/authenticated.
 - GAL как OAuth-провайдер: `oauth_*` таблицы хранят только SHA-256-хеши кодов/токенов и доступны исключительно `service_role`; authorize требует активную сессию GAL. Клиенты — статический реестр в `app/services/oauth_provider.py` (без таблицы `oauth_clients`); redirect URI расширяются через `OAUTH_LTHUB_REDIRECT_URIS`.
 - Все ответы получают security-заголовки (`nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, CSP `frame-ancestors 'none'`, HSTS в проде); CSRF-токен обязателен для POST.
 - Внешние ссылки-доказательства допускаются только со схемой `http(s)://` (сервис + CHECK в БД).
-- Публичные списки прошедших (023): `achievement_completers` и `user_completed_achievements` — `security definer`, отдают только approved-заявки опубликованных достижений и публичные поля профиля (без proofs, email, moderation_reviews).
+- Публичные списки прошедших (023/026/028): `achievement_completers` и `user_completed_achievements` — `security definer`, отдают только approved-заявки опубликованных достижений, публичные поля профиля и proofs с учётом `proofs_visible` (без email и moderation_reviews); скрытые proofs опускаются для всех, кроме владельца и модераторов.
+- Топ-5 (027): автор не может одобрить свою заявку; голос автора не даёт топ-5; экспертные голоса хранятся отдельно от `evaluations` и не меняют `evaluation_count`; один эксперт — один голос на заявку; каждое решение пишется в `top5_events`; временные силы пишет только `apply_temporary_ratings` (service role).
 - `SERVICE_ROLE_KEY` никогда не попадает во frontend.
 
 ### 6. Оценка достижения (Personal Scale)
@@ -140,8 +151,9 @@ gal/
 
 ### 8. Публичные страницы
 
-- `/users/{username}` — без авторизации: профиль (avatar, display_name, role, дата регистрации), очки `sum(1000/rank)`, число пройденных, пройденные достижения (approved + published) и созданные (для чужих — только published).
-- `/achievements/{id}` — место и BT-сила/рейтинг, прошедшие пользователи, форма «Отправить прохождение» (для авторизованного без своей заявки; для гостя — вход).
+- `/users/{username}` — без авторизации: профиль (avatar, display_name, role, дата регистрации), очки `sum(1000/permanent_rank)` без временных мест, число пройденных, пройденные достижения (approved + published, с доказательствами) и созданные (для чужих — только published).
+- `/achievements/{id}` — место и BT-сила/рейтинг, прошедшие пользователи с доказательствами, форма «Отправить прохождение» (для авторизованного без своей заявки; для гостя — вход).
+- `/leaderboard` — топ достижений и игроков. В достижения входят ranked (с номером) и опубликованные с одной оценкой: их позиция предварительная (BT, затем среднее место) и выводится как «?», не занимая номер в нумерации.
 
 ## Главная цепочка данных
 

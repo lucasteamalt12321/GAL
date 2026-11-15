@@ -21,8 +21,10 @@
   <div class="detail-stats">
     <div class="stat">
       <span class="stat-label">Место в рейтинге</span>
-      <span class="stat-value">{% if achievement.rank %}#{{ achievement.rank }}{% else %}?{% endif %}</span>
-      {% if not achievement.rank and achievement.status == 'published' and achievement.evaluation_count < 2 %}
+      <span class="stat-value">{% if achievement.rank %}#{{ achievement.rank }}{% if achievement.is_temporary %}*{% endif %}{% else %}?{% endif %}</span>
+      {% if achievement.is_temporary %}
+        <span class="hint muted">временное место в топ-5 — до третьей обычной оценки</span>
+      {% elif not achievement.rank and achievement.status == 'published' and achievement.evaluation_count < 2 %}
         <span class="hint muted">появится после 2 оценок (сейчас {{ achievement.evaluation_count }})</span>
       {% endif %}
     </div>
@@ -55,7 +57,32 @@
         Погрешность и 95% доверительный интервал показывают точность оценки:
         чем больше попарных сравнений, тем он уже.
       {% endif %}
+      {% if achievement.is_temporary %}
+        Временная сила учитывает обычные оценки, голоса модераторов и
+        приглашённых экспертов, сравнённые с текущим постоянным топом.
+      {% endif %}
     </p>
+  {% endif %}
+
+  {% if top5_context and is_creator and achievement.status == 'published' %}
+    {% if top5_context.my_application %}
+      <div class="evaluation-box">
+        <p>
+          Заявка в топ-5: <strong>{{ top5_context.my_application.status|top5_status_label }}</strong>.
+        </p>
+        <a class="btn" href="/top5/{{ top5_context.my_application.id }}">Открыть заявку</a>
+      </div>
+    {% elif top5_context.can_apply %}
+      <div class="evaluation-box">
+        <p>
+          Достижение можно выдвинуть на временное место в топ-5: заявку
+          рассмотрит модератор, при необходимости — приглашённые эксперты.
+        </p>
+        <a class="btn" href="/top5/apply/{{ achievement.id }}">Подать заявку в топ-5</a>
+      </div>
+    {% elif top5_context.apply_blocked_reason %}
+      <p class="muted evaluation-hint">{{ top5_context.apply_blocked_reason }}</p>
+    {% endif %}
   {% endif %}
 
   {% if is_creator and achievement.status == 'pending' %}
@@ -146,6 +173,18 @@
                 <span>{{ c.display_name or c.username }}</span>
               </a>
               {% if c.approved_at %}<span class="muted">· {{ c.approved_at|date_local }}</span>{% endif %}
+              {% if c.proofs %}
+                <span class="completer-proofs">
+                  <span class="muted">· доказательство:</span>
+                  {% for p in c.proofs %}
+                    {% if p.url %}
+                      <a class="tag" href="{{ p.url }}" target="_blank" rel="noopener noreferrer" title="Открыть доказательство">{{ p.proof_type|proof_type_label }}</a>
+                    {% else %}
+                      <span class="muted">{{ p.proof_type|proof_type_label }}</span>
+                    {% endif %}
+                  {% endfor %}
+                </span>
+              {% endif %}
             </li>
           {% endfor %}
         </ul>

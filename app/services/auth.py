@@ -93,6 +93,12 @@ def _client_options() -> ClientOptions:
     """
     return ClientOptions(
         postgrest_client_timeout=get_settings().supabase_timeout_seconds,
+        # Сервер сам управляет refresh через resolve_user. Фоновый auto-refresh
+        # библиотеки запускает недемонический Timer на каждый set_session, который
+        # ротирует refresh-токен в выброшенном клиенте: браузер остаётся со старым
+        # токеном, GoTrue по reuse detection отзывает семейство → разлогин, плюс
+        # утечка потоков.
+        auto_refresh_token=False,
     )
 
 
@@ -187,6 +193,21 @@ def validate_email(email: str) -> str | None:
     return None
 
 
+LTHUB_SERVICE_EMAIL_RE = re.compile(
+    r"^lthub-oauth-[A-Za-z0-9_.-]+@example\.com$", re.IGNORECASE
+)
+
+
+def is_reserved_service_email(email: str) -> bool:
+    """Служебный email LTHub-аккаунта нельзя зарегистрировать вручную.
+
+    Иначе атакующий занимает `lthub-oauth-<sub жертвы>@example.com`, и при первом
+    входе жертвы через LTHub её identity привяжется к аккаунту атакующего
+    (create_user → email_exists → reuse по email).
+    """
+    return bool(LTHUB_SERVICE_EMAIL_RE.fullmatch((email or "").strip()))
+
+
 def friendly_auth_error(exc: Exception) -> str:
     """Переводит ошибки Supabase Auth в понятные сообщения на русском.
 
@@ -271,6 +292,11 @@ def resolve_login_email(identifier: str) -> str | None:
         return None
     if "@" in value:
         return value
+    # PostgREST трактует `*` в ilike как wildcard (%). В username его быть не
+    # может (USERNAME_RE), поэтому такой идентификатор ником не является —
+    # иначе `Ton*` резолвил бы чужой email и создавал timing-оракул.
+    if "*" in value:
+        return None
     if not get_settings().service_role_configured:
         return None
     try:
@@ -372,6 +398,27 @@ def _drop_auth_cookies(request: Request) -> None:
     cookies.append((REFRESH_COOKIE, "", {"max_age": 0, "path": "/"}))
 
 
+def _is_invalid_session_error(exc: Exception) -> bool:
+    """Явно невалидная сессия (а не транзиентный сбой).
+
+    supabase_auth маппит HTTP-ошибки GoTrue в AuthApiError, поэтому истёкший или
+    отозванный refresh-токен приходит как AuthApiError 400/401/403, а не как
+    AuthInvalidJwtError/AuthSessionMissingError. Без этого куки мёртвой сессии
+    никогда не удалялись и каждая страница анонима делала get_user + refresh.
+    AuthRetryableError (5xx) и rate-limit (429) не считаем невалидной сессией.
+    """
+    if isinstance(
+        exc,
+        (AuthInvalidJwtError, AuthSessionMissingError, AuthInvalidCredentialsError),
+    ):
+        return True
+    if isinstance(exc, AuthApiError):
+        if getattr(exc, "code", None) in _RATE_LIMIT_CODES:
+            return False
+        return getattr(exc, "status", None) in (400, 401, 403)
+    return False
+
+
 def resolve_user(request: Request) -> CurrentUser | None:
     access = request.cookies.get(SESSION_COOKIE)
     refresh = request.cookies.get(REFRESH_COOKIE)
@@ -392,22 +439,17 @@ def resolve_user(request: Request) -> CurrentUser | None:
     except MalformedSessionTokenError:
         _drop_auth_cookies(request)
         return None
-    except (AuthInvalidJwtError, AuthSessionMissingError):
-        session_invalid = True
-    except AUTH_ERRORS:
+    except AUTH_ERRORS as exc:
+        if _is_invalid_session_error(exc):
+            session_invalid = True
         resp = None
 
     if (resp is None or resp.user is None) and refresh:
         try:
             refreshed = _retry_network(lambda: client.auth.refresh_session(refresh))
-        except (
-            AuthSessionMissingError,
-            AuthInvalidJwtError,
-            AuthInvalidCredentialsError,
-        ):
-            session_invalid = True
-            refreshed = None
-        except AUTH_ERRORS:
+        except AUTH_ERRORS as exc:
+            if _is_invalid_session_error(exc):
+                session_invalid = True
             refreshed = None
         if refreshed is not None and refreshed.session is not None:
             session = refreshed.session

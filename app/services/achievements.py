@@ -21,8 +21,45 @@ ACHIEVEMENT_SELECT = (
 CATEGORY_SELECT = "id,name,slug"
 PROFILE_SELECT = "id,username,display_name,avatar_url,role,created_at"
 
+# Вьюха эффективного топа (миграция 027). До неё каталог работает по таблице,
+# поэтому все обращения к ней терпимы к отсутствию отношения.
+VIEW_NAME = "public_achievements"
+VIEW_SELECT = "*"
+VIEW_RANK_FIELDS = (
+    "rank",
+    "permanent_rank",
+    "is_temporary",
+    "in_leaderboard",
+    "ranking_status",
+    "average_position",
+    "bt_strength",
+    "bt_rating",
+    "bt_comparisons",
+    "bt_rating_se",
+    "bt_rating_ci_low",
+    "bt_rating_ci_high",
+)
+
+
+def _is_missing_view(exc: APIError) -> bool:
+    """Отсутствие вьюхи, а не неизвестная колонка (PGRST204)."""
+    code = str(getattr(exc, "code", "") or "").upper()
+    text = f"{getattr(exc, 'message', '')} {getattr(exc, 'details', '')}".lower()
+    if code == "PGRST205" or "pgrst205" in text:
+        return True
+    if code == "PGRST204" or "column" in text:
+        return False
+    return VIEW_NAME in text and any(
+        marker in text
+        for marker in ("could not find", "does not exist", "schema cache")
+    )
+
+
 DEFAULT_LIMIT = 60
 PAGE_SIZE = 24
+# PostgREST отдаёт максимум 1000 строк за запрос; каталог тянет все строки
+# для серверной сортировки, поэтому читаем страницами.
+FETCH_BATCH = 1000
 SORT_RANK = "rank"
 SORT_NEW = "new"
 ALLOWED_SORTS = (SORT_RANK, SORT_NEW)
@@ -74,68 +111,146 @@ def list_achievements(
     - ranked (2+ оценок) — с рангом в топе
     - unknown (0-1 оценка) — между ranked, но не влияют на нумерацию топа
     """
-    client = auth_service.new_anon_client()
     category_id = _category_filter(category_slug)
     if category_slug and category_id is None:
         return [], 0
 
-    def _apply_filters(request):
-        request = request.eq("status", "published")
+    page = max(1, page)
+    start = (page - 1) * limit
+
+    def _apply_filters(request, *, view: bool):
+        if not view:
+            request = request.eq("status", "published")
         if category_id is not None:
             request = request.eq("category_id", category_id)
         if query:
             request = request.ilike("title", f"%{auth_service.ilike_literal(query)}%")
         return request
 
-    # Подсчет всех опубликованных достижений (включая unknown)
+    def _fetch_all_rows(*, view: bool, expected: int) -> list[dict]:
+        table = VIEW_NAME if view else "achievements"
+        select = VIEW_SELECT if view else ACHIEVEMENT_SELECT
+        rows: list[dict] = []
+        while len(rows) < expected:
+            batch = (
+                _apply_filters(client.table(table).select(select), view=view)
+                .range(len(rows), len(rows) + FETCH_BATCH - 1)
+                .execute()
+                .data
+                or []
+            )
+            if not batch:
+                break
+            rows.extend(batch)
+        return rows
+
+    def _sort_rows(rows: list[dict]) -> list[dict]:
+        if sort == SORT_NEW:
+            # Сначала ranked/временные, затем предварительные; внутри групп —
+            # новые сверху. Две стабильные сортировки сохраняют created_at.
+            rows.sort(key=lambda a: a.get("created_at") or "", reverse=True)
+            rows.sort(
+                key=lambda a: (
+                    not (a.get("ranking_status") == "ranked" or a.get("is_temporary"))
+                )
+            )
+            return rows
+
+        def sort_key(a):
+            strength = a.get("sort_strength")
+            average = a.get("average_position")
+            rank_order = a.get("rank_order")
+            return (
+                strength is None,
+                -float(strength) if strength is not None else 0.0,
+                float(average) if average is not None else float("inf"),
+                float(rank_order) if rank_order is not None else float("inf"),
+                int(a["id"]),
+            )
+
+        rows.sort(key=sort_key)
+        return rows
+
+    client = auth_service.new_anon_client()
+    try:
+        count_res = (
+            _apply_filters(
+                client.table(VIEW_NAME).select("id", count="exact"), view=True
+            )
+            .limit(1)
+            .execute()
+        )
+        total = count_res.count if count_res.count is not None else 0
+        if start >= total:
+            return [], total
+        rows = _fetch_all_rows(view=True, expected=total)
+        return _sort_rows(rows)[start : start + limit], total
+    except APIError as exc:
+        if not _is_missing_view(exc):
+            raise
+
     count_res = (
-        _apply_filters(client.table("achievements").select("id", count="exact"))
+        _apply_filters(
+            client.table("achievements").select("id", count="exact"), view=False
+        )
         .limit(1)
         .execute()
     )
     total = count_res.count if count_res.count is not None else 0
-    page = max(1, page)
-    start = (page - 1) * limit
     if start >= total:
         return [], total
 
-    data_query = _apply_filters(client.table("achievements").select(ACHIEVEMENT_SELECT))
-
-    # Получаем все данные без range (для сортировки в Python)
-    all_res = data_query.execute()
-    all_achievements = all_res.data or []
-
-    # Сортировка в Python
+    rows = _fetch_all_rows(view=False, expected=total)
+    # Прежний порядок: rank для ranked, average_position для предварительных.
     if sort == SORT_NEW:
-        # Сначала ranked, затем unknown; внутри групп — новые сверху.
-        # Две стабильные сортировки: вторая не ломает порядок created_at.
-        all_achievements.sort(key=lambda a: a.get("created_at") or "", reverse=True)
-        all_achievements.sort(key=lambda a: a.get("ranking_status") != "ranked")
+        rows.sort(key=lambda a: a.get("created_at") or "", reverse=True)
+        rows.sort(key=lambda a: a.get("ranking_status") != "ranked")
     else:
-        # Сортировка по рангу:
-        # Сортируем все достижения по позиции (rank для ranked, average_position для unknown).
-        # Unknown вставляются между ranked на основе average_position, но не занимают место в rank.
-        def sort_key(a):
-            if a.get("ranking_status") == "ranked":
-                # ranked: используем rank как дробное число для сортировки
-                rank = a.get("rank")
-                created_at = a.get("created_at") or ""
-                if rank is None:
-                    return (float("inf"), "ranked", created_at)
-                return (float(rank), "ranked", created_at)
-            else:
-                # unknown: используем average_position для вставки между ranked
-                avg_pos = a.get("average_position")
-                created_at = a.get("created_at") or ""
-                if avg_pos is None:
-                    return (float("inf"), "unknown", created_at)
-                return (float(avg_pos), "unknown", created_at)
 
-        all_achievements.sort(key=sort_key)
+        def legacy_sort_key(a):
+            value = a.get("rank") if a.get("ranking_status") == "ranked" else None
+            if value is None:
+                value = a.get("average_position")
+            return (
+                value is None,
+                float(value) if value is not None else float("inf"),
+                a.get("created_at") or "",
+            )
 
-    # Применяем pagination
-    paginated = all_achievements[start : start + limit]
-    return paginated, total
+        rows.sort(key=legacy_sort_key)
+    return rows[start : start + limit], total
+
+
+def _attach_view_fields(client, rows: list[dict]) -> None:
+    """Подменяет постоянное место эффективным (с учётом временного топ-5).
+
+    Вьюха содержит только published-строки; для остальных статусов поля
+    остаются как в таблице. Если миграция 027 ещё не применена, тихо
+    возвращаемся к постоянным значениям.
+    """
+    published_ids = [row["id"] for row in rows if row.get("status") == "published"]
+    if not published_ids:
+        return
+    try:
+        res = (
+            client.table(VIEW_NAME)
+            .select(",".join(("id", *VIEW_RANK_FIELDS)))
+            .in_("id", published_ids)
+            .execute()
+        )
+    except APIError as exc:
+        if _is_missing_view(exc):
+            return
+        raise
+    by_id = {row["id"]: row for row in res.data or []}
+    for row in rows:
+        view_row = by_id.get(row["id"])
+        if view_row is None:
+            continue
+        for field in VIEW_RANK_FIELDS:
+            if field in view_row:
+                row[field] = view_row[field]
+        row["is_temporary"] = bool(view_row.get("is_temporary"))
 
 
 def get_achievement(request: Request, achievement_id: int) -> dict | None:
@@ -149,7 +264,9 @@ def get_achievement(request: Request, achievement_id: int) -> dict | None:
     )
     if res is None:
         return None
-    return res.data
+    item = res.data
+    _attach_view_fields(client, [item])
+    return item
 
 
 def list_achievements_by_creator(
@@ -168,7 +285,9 @@ def list_achievements_by_creator(
     if statuses:
         query = query.in_("status", list(statuses))
     res = query.order("created_at", desc=True).limit(limit).execute()
-    return res.data or []
+    rows = res.data or []
+    _attach_view_fields(client, rows)
+    return rows
 
 
 def get_profile(request: Request, username: str) -> dict | None:

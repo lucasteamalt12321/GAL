@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.services import achievements as achievements_service
 from app.services import completions as completions_service
 from app.services import evaluation as evaluation_service
+from app.services import top5 as top5_service
 from app.templating import templates
 
 router = APIRouter(prefix="/achievements", tags=["achievements"])
@@ -268,6 +269,7 @@ def create(
             external_url=external_url,
             uploaded=file,
             harder_count=parsed_harder,
+            proofs_visible=True,
         )
     except completions_service.CompletionError as exc:
         return RedirectResponse(
@@ -386,6 +388,7 @@ def complete(
     description: str = Form(""),
     external_url: str = Form(""),
     harder_count: str = Form(""),
+    hide_proofs: str = Form(""),
     file: Annotated[UploadFile | None, File()] = None,
 ) -> HTMLResponse:
     if request.state.user is None:
@@ -416,6 +419,9 @@ def complete(
             external_url=external_url,
             uploaded=file,
             harder_count=parsed,
+            # Верификация создателя всегда публична; обычный пользователь
+            # может скрыть доказательство от остальных.
+            proofs_visible=is_creator or hide_proofs != "on",
         )
     except completions_service.CompletionError as exc:
         return RedirectResponse(
@@ -554,6 +560,7 @@ def detail(
             "can_evaluate": can_evaluate,
             "eval_reason": eval_reason,
             "max_proof_bytes": completions_service.MAX_REQUEST_PROOF_BYTES,
+            "top5_context": top5_service.application_context(request, item),
             "error": error,
             "info": info_messages.get(info, info),
         },

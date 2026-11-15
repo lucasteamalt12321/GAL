@@ -24,6 +24,7 @@ from app.routers import (
     rankings,
     reports,
     submissions,
+    top5,
     users,
 )
 from app.routers import (
@@ -185,6 +186,7 @@ app.include_router(rankings.router)
 app.include_router(reports.router)
 app.include_router(settings_router.router)
 app.include_router(submissions.router)
+app.include_router(top5.router)
 app.include_router(users.router)
 
 

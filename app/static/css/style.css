@@ -599,6 +599,19 @@ select {
   line-height: 16px;
 }
 
+.checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--vkui-text-primary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.checkbox-field input {
+  margin-top: 2px;
+}
+
 .field input,
 .field select,
 .field textarea {
@@ -1521,6 +1534,20 @@ select {
   align-items: center;
   gap: 8px;
   font-weight: 500;
+}
+
+.completer-proofs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.proof-cell {
+  white-space: nowrap;
+}
+
+.proof-cell .tag {
+  margin-right: 4px;
 }
 
 /* ---------- Формы авторизации и настроек ---------- */

@@ -109,6 +109,67 @@ def rating_from_strength(strength: float) -> float:
     return RATING_BASE + RATING_SCALE * strength
 
 
+def anchored_strength(
+    candidate: int,
+    comparisons: Iterable[Comparison],
+    references: Mapping[int, float],
+    *,
+    initial: float = 0.0,
+    prior: float = DEFAULT_PRIOR,
+    max_iter: int = DEFAULT_MAX_ITER,
+    tol: float = DEFAULT_TOL,
+) -> float:
+    """Сила кандидата против фиксированных опорных достижений.
+
+    Временный рейтинг топ-5 должен быть сопоставим с постоянным bt_strength,
+    поэтому опорные силы (текущий постоянный топ) не пересчитываются. Для
+    кандидата решается та же MM-задача, что и в fit_bradley_terry, но
+    знаменатель считается по зафиксированным theta опор:
+
+        theta_c <- (W + prior/2) / (Σ n_j/(theta_c+theta_j) + prior/(theta_c+theta0))
+
+    Здесь W — взвешенные победы кандидата, n_j — вес сравнений с опорой j.
+    prior — число псевдосравнений (поровну побед и поражений) вокруг
+    theta0 = exp(initial): при малом числе голосов сила не улетает далеко от
+    соседней опоры. Если сравнений нет, возвращается initial.
+    """
+    refs = {
+        int(item_id): min(max(exp(float(strength)), _MIN_THETA), _MAX_THETA)
+        for item_id, strength in references.items()
+    }
+    wins = 0.0
+    counts: dict[int, float] = defaultdict(float)
+    for comparison in comparisons:
+        weight = float(comparison.weight)
+        if weight <= 0:
+            continue
+        if comparison.winner == candidate and comparison.loser in refs:
+            wins += weight
+            counts[int(comparison.loser)] += weight
+        elif comparison.loser == candidate and comparison.winner in refs:
+            counts[int(comparison.winner)] += weight
+
+    if not counts:
+        return float(initial)
+
+    theta = min(max(exp(float(initial)), _MIN_THETA), _MAX_THETA)
+    # Априорное распределение центрируем в initial, а не в среднем уровне:
+    # одна победа над #1 не должна уводить временную силу на +3000 рейтинга.
+    prior_theta = theta
+    for _ in range(max_iter):
+        denominator = sum(
+            weight / (theta + refs[item_id]) for item_id, weight in counts.items()
+        )
+        denominator += prior / (theta + prior_theta)
+        updated = (wins + prior / 2.0) / max(denominator, 1e-300)
+        updated = min(max(updated, _MIN_THETA), _MAX_THETA)
+        delta = abs(log(updated) - log(theta))
+        theta = updated
+        if delta < tol:
+            break
+    return log(theta)
+
+
 def fit_bradley_terry(
     item_ids: Iterable[int],
     comparisons: Iterable[Comparison],

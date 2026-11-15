@@ -73,6 +73,20 @@ def test_lthub_callback_rejects_wrong_state(monkeypatch) -> None:
     assert resp.headers["location"].startswith("/auth/login?error=")
 
 
+def test_lthub_callback_non_ascii_state_no_500(monkeypatch) -> None:
+    # hmac.compare_digest(str, str) бросал TypeError на не-ASCII state → 500.
+    _enable(monkeypatch)
+    local = TestClient(app)
+    local.cookies.set("gal_lthub_state", "expected", path="/auth/lthub")
+    local.cookies.set("gal_lthub_verifier", "v" * 64, path="/auth/lthub")
+    resp = local.get(
+        "/auth/lthub/callback?code=abc&state=%C3%A9",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/auth/login?error=")
+
+
 def test_lthub_callback_creates_session(monkeypatch) -> None:
     _enable(monkeypatch)
 

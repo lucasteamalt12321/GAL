@@ -100,6 +100,12 @@ def change_password(
             {"email": user.email, "password": current_password}
         )
         client.auth.update_user({"password": new_password})
+        # GoTrue при смене пароля может отозвать прочие сессии, поэтому
+        # перелогиниваемся с новым паролем и кладём свежую сессию в куки —
+        # иначе после «Пароль изменён» пользователя выкидывало на /auth/login.
+        renewed = client.auth.sign_in_with_password(
+            {"email": user.email, "password": new_password}
+        )
     except auth_service.AUTH_ERRORS as exc:
         message = str(exc)
         if "Invalid" in message or "credentials" in message.lower():
@@ -107,3 +113,9 @@ def change_password(
         raise ProfileError(
             "Не удалось изменить пароль. Попробуйте выйти и войти заново."
         ) from exc
+    session = renewed.session
+    if session is not None:
+        request.state.pending_cookies = [
+            (auth_service.SESSION_COOKIE, session.access_token, {}),
+            (auth_service.REFRESH_COOKIE, session.refresh_token, {}),
+        ]

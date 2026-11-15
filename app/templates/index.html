@@ -37,7 +37,7 @@
     <li>
       <span class="step-number">4</span>
       <h3>Получите общий рейтинг</h3>
-      <p>После трёх независимых оценок достижение входит в глобальный рейтинг, а вы получаете очки.</p>
+      <p>После двух независимых оценок достижение входит в глобальный рейтинг, а вы получаете очки.</p>
     </li>
   </ol>
 </section>
@@ -52,14 +52,14 @@
       <ol class="home-list">
         {% for a in top_achievements %}
           <li>
-            <span class="home-rank">#{{ a.rank }}</span>
+            <span class="home-rank">{{ '#' ~ a.rank ~ ('*' if a.is_temporary else '') if a.rank is not none else '?' }}</span>
             <a href="/achievements/{{ a.id }}">{{ a.title }}</a>
             {% if a.category %}<span class="muted">{{ a.category.name }}</span>{% endif %}
           </li>
         {% endfor %}
       </ol>
     {% else %}
-      <p class="muted">Рейтинг появится, когда достижения получат три оценки.</p>
+      <p class="muted">Рейтинг появится, когда достижения получат две оценки.</p>
     {% endif %}
   </section>
 

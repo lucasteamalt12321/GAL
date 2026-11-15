@@ -102,7 +102,7 @@
           result.textContent = "Легче всех достижений в вашей личной шкале.";
         } else {
           result.textContent =
-            "Сложнее, чем «" + titleAt(lo - 1) + "», но легче, чем «" + titleAt(lo) + "».";
+            "Легче, чем «" + titleAt(lo - 1) + "», но сложнее, чем «" + titleAt(lo) + "».";
         }
         compare.hidden = true;
         reset.hidden = false;

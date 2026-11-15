@@ -124,7 +124,11 @@ def callback(
 
     expected_state = request.cookies.get(STATE_COOKIE)
     verifier = request.cookies.get(VERIFIER_COOKIE)
-    if not expected_state or not hmac.compare_digest(state, expected_state):
+    # Сравниваем байты: hmac.compare_digest(str, str) бросает TypeError на
+    # не-ASCII state из query (?state=%C3%A9), что давало 500 вместо отказа.
+    if not expected_state or not hmac.compare_digest(
+        state.encode("utf-8"), expected_state.encode("utf-8")
+    ):
         return _fail("Неверный state OAuth. Попробуйте войти ещё раз.")
     if not verifier:
         return _fail("Сессия входа через LTHub истекла. Попробуйте ещё раз.")

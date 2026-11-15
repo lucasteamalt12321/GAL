@@ -55,6 +55,35 @@ RANKING_STATUS_LABELS = {
     "ranked": "В рейтинге",
 }
 
+TOP5_STATUS_LABELS = {
+    "pending": "На рассмотрении",
+    "expert_review": "У экспертов",
+    "approved": "Временное место в топ-5",
+    "rejected": "Отклонена",
+    "converted": "Переведена в постоянный рейтинг",
+    "cancelled": "Отозвана",
+}
+
+TOP5_EVALUATOR_LABELS = {
+    "moderator": "Модератор",
+    "expert": "Эксперт",
+}
+
+TOP5_REQUEST_LABELS = {
+    "pending": "Ожидает ответа",
+    "submitted": "Оценка отправлена",
+    "declined": "Отказ",
+}
+
+TOP5_EVENT_LABELS = {
+    "submitted": "Заявка подана",
+    "status_changed": "Статус изменён",
+    "expert_invited": "Эксперт приглашён",
+    "expert_status_changed": "Ответ эксперта",
+    "evaluation_recorded": "Оценка добавлена",
+    "evaluation_updated": "Оценка обновлена",
+}
+
 ROLE_LABELS = {
     "user": "Пользователь",
     "moderator": "Модератор",
@@ -98,6 +127,22 @@ def ranking_status(value: object) -> str:
 
 def role(value: object) -> str:
     return _label(ROLE_LABELS, value)
+
+
+def top5_status(value: object) -> str:
+    return _label(TOP5_STATUS_LABELS, value)
+
+
+def top5_evaluator(value: object) -> str:
+    return _label(TOP5_EVALUATOR_LABELS, value)
+
+
+def top5_request(value: object) -> str:
+    return _label(TOP5_REQUEST_LABELS, value)
+
+
+def top5_event(value: object) -> str:
+    return _label(TOP5_EVENT_LABELS, value)
 
 
 def _parse_datetime(value: object) -> datetime | None:

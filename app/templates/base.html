@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#19191a" media="(prefers-color-scheme: dark)">
   <title>{% block title %}GAL{% endblock %} — Global Achievement List</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=2">
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=3">
   <script src="{{ url_for('static', path='/js/main.js') }}" defer></script>
 </head>
 <body>
@@ -25,6 +25,7 @@
         {% if request.state.user %}
           <a class="nav-link" href="/achievements/create">Предложить</a>
           <a class="nav-link" href="/submissions">Мои заявки</a>
+          <a class="nav-link" href="/top5">Топ-5</a>
           {% if request.state.user.role in ('moderator', 'admin') %}
             <a class="nav-link" href="/moderation">Модерация</a>
             <a class="nav-link" href="/reports">Жалобы</a>

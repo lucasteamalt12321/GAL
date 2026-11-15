@@ -155,6 +155,39 @@ def test_invalid_session_drops_cookies(monkeypatch) -> None:
     assert {"gal_session", "gal_refresh"} <= dropped
 
 
+def test_invalid_grant_api_error_drops_cookies(monkeypatch) -> None:
+    # Реальный GoTrue отдаёт истёкший/отозванный refresh как AuthApiError 400,
+    # а не AuthInvalidJwtError — куки мёртвой сессии всё равно должны удаляться.
+    _patch_settings(monkeypatch)
+    error = AuthApiError("Invalid Refresh Token", 400, "invalid_grant")
+    _patch_client(monkeypatch, _FailingAuth(error, error))
+    request = _request_with_session()
+    assert auth_service.resolve_user(request) is None
+    dropped = {
+        name
+        for name, _value, kwargs in request.state.pending_cookies
+        if kwargs.get("max_age") == 0
+    }
+    assert {"gal_session", "gal_refresh"} <= dropped
+
+
+def test_rate_limit_api_error_keeps_cookies(monkeypatch) -> None:
+    # 429 rate-limit — транзиентный сбой, не повод разлогинивать.
+    _patch_settings(monkeypatch)
+    error = AuthApiError("Too many requests", 429, "over_request_rate_limit")
+    _patch_client(monkeypatch, _FailingAuth(error, error))
+    request = _request_with_session()
+    assert auth_service.resolve_user(request) is None
+    assert request.state.pending_cookies == []
+
+
+def test_client_options_disable_auto_refresh(monkeypatch) -> None:
+    # Фоновый auto-refresh библиотеки ротировал refresh-токен в выброшенном
+    # клиенте и разлогинивал пользователя; сервер управляет refresh сам.
+    _patch_settings(monkeypatch)
+    assert auth_service._client_options().auto_refresh_token is False
+
+
 # --- LTHub: поиск только по детерминированному email ------------------------
 
 

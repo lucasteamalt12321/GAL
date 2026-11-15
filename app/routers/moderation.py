@@ -1,7 +1,10 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services import moderation as moderation_service
+from app.services import top5 as top5_service
 from app.templating import templates
 
 router = APIRouter(prefix="/moderation", tags=["moderation"])
@@ -33,6 +36,7 @@ def queue(request: Request, error: str | None = None) -> HTMLResponse:
                 request
             ),
             "pending_completions": moderation_service.list_pending_completions(request),
+            "top5_applications": top5_service.try_moderation_queue(request),
             "error": error,
         },
     )
@@ -104,6 +108,70 @@ def hide_achievement(
     return RedirectResponse(
         f"/achievements/{achievement_id}?info=hidden", status_code=303
     )
+
+
+@router.post(
+    "/top5/{application_id}",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+def decide_top5(
+    request: Request,
+    application_id: int,
+    decision: str = Form(...),
+    reason: str = Form(""),
+    estimated_position: str = Form(""),
+) -> HTMLResponse:
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+    try:
+        top5_service.decide_application(
+            request,
+            application_id,
+            decision=decision,
+            reason=reason,
+            estimated_position=estimated_position,
+        )
+    except top5_service.Top5Error as exc:
+        return RedirectResponse(
+            f"/top5/{application_id}?error={quote(str(exc))}", status_code=303
+        )
+    except top5_service.TOP5_ERRORS:
+        return RedirectResponse(
+            f"/top5/{application_id}"
+            f"?error={quote('Не удалось сохранить решение. Попробуйте ещё раз.')}",
+            status_code=303,
+        )
+    return RedirectResponse(f"/top5/{application_id}?info=decided", status_code=303)
+
+
+@router.post(
+    "/top5/{application_id}/invite",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+def invite_top5_expert(
+    request: Request,
+    application_id: int,
+    username: str = Form(""),
+) -> HTMLResponse:
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+    try:
+        top5_service.invite_expert(request, application_id, username)
+    except top5_service.Top5Error as exc:
+        return RedirectResponse(
+            f"/top5/{application_id}?error={quote(str(exc))}", status_code=303
+        )
+    except top5_service.TOP5_ERRORS:
+        return RedirectResponse(
+            f"/top5/{application_id}"
+            f"?error={quote('Не удалось пригласить эксперта. Попробуйте ещё раз.')}",
+            status_code=303,
+        )
+    return RedirectResponse(f"/top5/{application_id}?info=invited", status_code=303)
 
 
 @router.post(

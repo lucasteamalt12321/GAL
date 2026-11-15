@@ -99,6 +99,19 @@ def test_detail_renders(monkeypatch) -> None:
     assert "доверительный интервал" in resp.text
 
 
+def test_detail_marks_temporary_top5(monkeypatch) -> None:
+    item = {**_sample_achievement(), "rank": 3, "is_temporary": True}
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(
+        completions_service, "list_achievement_completers", lambda *_: []
+    )
+    resp = client.get("/achievements/1")
+    assert resp.status_code == 200
+    assert "#3*" in resp.text
+    assert "временное место в топ-5" in resp.text
+    assert "голоса модераторов" in resp.text
+
+
 def test_detail_hides_interval_without_enough_comparisons(monkeypatch) -> None:
     achievement = {
         **_sample_achievement(),
@@ -131,6 +144,15 @@ def test_detail_lists_completers(monkeypatch) -> None:
                 "display_name": "Bob",
                 "avatar_url": None,
                 "approved_at": "2026-11-01T10:00:00+00:00",
+                "proofs": [
+                    {
+                        "id": 1,
+                        "proof_type": "link",
+                        "description": "",
+                        "url": "https://example.org/run",
+                        "created_at": "2026-11-01T10:00:00+00:00",
+                    }
+                ],
             }
         ],
     )
@@ -138,6 +160,8 @@ def test_detail_lists_completers(monkeypatch) -> None:
     assert resp.status_code == 200
     assert "Прошедшие пользователи" in resp.text
     assert 'href="/users/bob"' in resp.text
+    assert 'href="https://example.org/run"' in resp.text
+    assert "Ссылка" in resp.text
 
 
 def test_create_page_requires_auth() -> None:
@@ -217,6 +241,15 @@ def test_profile_shows_completed_achievements(monkeypatch) -> None:
                 "category_name": "Sport",
                 "category_slug": "sport",
                 "approved_at": "2026-11-01T10:00:00+00:00",
+                "proofs": [
+                    {
+                        "id": 5,
+                        "proof_type": "video",
+                        "description": "",
+                        "url": "https://example.org/video",
+                        "created_at": "2026-11-01T10:00:00+00:00",
+                    }
+                ],
             }
         ],
     )
@@ -225,6 +258,198 @@ def test_profile_shows_completed_achievements(monkeypatch) -> None:
     assert "Water" in resp.text
     assert "#2" in resp.text
     assert "500.00" in resp.text
+    assert 'href="https://example.org/video"' in resp.text
+    assert "Видео" in resp.text
+
+
+def test_profile_score_ignores_temporary_places(monkeypatch) -> None:
+    monkeypatch.setattr(
+        achievements_service,
+        "get_profile",
+        lambda *_: {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "username": "alice",
+            "display_name": "Alice",
+            "avatar_url": None,
+            "role": "user",
+        },
+    )
+    monkeypatch.setattr(
+        achievements_service, "list_achievements_by_creator", lambda *_, **__: []
+    )
+    monkeypatch.setattr(
+        completions_service,
+        "list_user_completed_achievements",
+        lambda *_: [
+            {
+                "achievement_id": 7,
+                "title": "Permanent",
+                "rank": 2,
+                "permanent_rank": 2,
+                "is_temporary": False,
+                "ranking_status": "ranked",
+                "bt_rating": 1123.4,
+                "evaluation_count": 4,
+                "category_name": "Sport",
+                "category_slug": "sport",
+                "approved_at": "2026-11-01T10:00:00+00:00",
+                "proofs": [],
+            },
+            {
+                "achievement_id": 8,
+                "title": "Temporary",
+                "rank": 1,
+                "permanent_rank": None,
+                "is_temporary": True,
+                "ranking_status": "unknown",
+                "bt_rating": None,
+                "evaluation_count": 1,
+                "category_name": "Sport",
+                "category_slug": "sport",
+                "approved_at": "2026-11-02T10:00:00+00:00",
+                "proofs": [],
+            },
+        ],
+    )
+
+    resp = client.get("/users/alice")
+
+    assert resp.status_code == 200
+    # 1000/2, временное #1 не добавляет очков и не подменяет постоянное место.
+    assert "500.00" in resp.text
+    assert "1000.00" not in resp.text
+
+
+def test_profile_score_counts_permanent_rank_with_temporary_overlay(
+    monkeypatch,
+) -> None:
+    # Ranked-достижение с одобренной топ-5 заявкой имеет is_temporary=True И
+    # permanent_rank — оно должно давать очки по постоянному месту.
+    monkeypatch.setattr(
+        achievements_service,
+        "get_profile",
+        lambda *_: {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "username": "alice",
+            "display_name": "Alice",
+            "avatar_url": None,
+            "role": "user",
+        },
+    )
+    monkeypatch.setattr(
+        achievements_service, "list_achievements_by_creator", lambda *_, **__: []
+    )
+    monkeypatch.setattr(
+        completions_service,
+        "list_user_completed_achievements",
+        lambda *_: [
+            {
+                "achievement_id": 9,
+                "title": "RankedWithOverlay",
+                "rank": 1,
+                "permanent_rank": 8,
+                "is_temporary": True,
+                "ranking_status": "ranked",
+                "bt_rating": 1100.0,
+                "evaluation_count": 2,
+                "category_name": "Sport",
+                "category_slug": "sport",
+                "approved_at": "2026-11-01T10:00:00+00:00",
+                "proofs": [],
+            },
+        ],
+    )
+
+    resp = client.get("/users/alice")
+
+    assert resp.status_code == 200
+    # 1000/8 = 125.00 по permanent_rank, а не 1000/1 по временному месту.
+    assert "125.00" in resp.text
+    assert "1000.00" not in resp.text
+
+
+def test_missing_view_detection_ignores_column_errors() -> None:
+    from postgrest.exceptions import APIError
+
+    def _error(code: str, message: str) -> APIError:
+        return APIError(
+            {"message": message, "code": code, "details": None, "hint": None}
+        )
+
+    missing = _error(
+        "PGRST205",
+        "Could not find the table 'public.public_achievements' in the schema cache",
+    )
+    column = _error(
+        "PGRST204",
+        "Could not find the 'sort_strength' column of 'public_achievements' "
+        "in the schema cache",
+    )
+    assert achievements_service._is_missing_view(missing) is True
+    assert achievements_service._is_missing_view(column) is False
+
+
+class _PagedQuery:
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows = rows
+        self.select_arg = ""
+        self.start = 0
+        self.end = 0
+
+    def select(self, select: str, **_kwargs):
+        self.select_arg = select
+        return self
+
+    def eq(self, *_args):
+        return self
+
+    def ilike(self, *_args):
+        return self
+
+    def limit(self, *_args):
+        return self
+
+    def range(self, start: int, end: int):
+        self.start = start
+        self.end = end
+        return self
+
+    def execute(self):
+        if self.select_arg == "id":
+            return SimpleNamespace(data=[], count=len(self.rows))
+        return SimpleNamespace(data=self.rows[self.start : self.end + 1], count=None)
+
+
+class _PagedClient:
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows = rows
+
+    def table(self, _name: str) -> _PagedQuery:
+        return _PagedQuery(self.rows)
+
+
+def test_catalog_reads_past_postgrest_page_limit(monkeypatch) -> None:
+    rows = [
+        {
+            "id": i,
+            "sort_strength": float(i),
+            "average_position": 1.0,
+            "ranking_status": "ranked",
+            "created_at": "",
+        }
+        for i in range(1, 1002)
+    ]
+    monkeypatch.setattr(
+        achievements_service.auth_service,
+        "new_anon_client",
+        lambda: _PagedClient(rows),
+    )
+
+    page, total = achievements_service.list_achievements(page=42, limit=24)
+
+    assert total == 1001
+    assert len(page) == 17
+    assert page[-1]["id"] == 1
 
 
 def test_create_page_blocked_without_evaluation(monkeypatch) -> None:

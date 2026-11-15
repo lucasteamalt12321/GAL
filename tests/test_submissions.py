@@ -37,6 +37,9 @@ def _row(status: str = "rejected") -> dict:
         },
         "proofs": [{"id": 1, "proof_type": "link"}],
         "proof_count": 1,
+        "proof_views": [
+            {"id": 1, "proof_type": "link", "url": "https://example.org/video"}
+        ],
         "rejection_reason": "Плохое качество видео",
     }
 
@@ -58,6 +61,8 @@ def test_submissions_renders_and_shows_reason(monkeypatch) -> None:
     assert "Piano song" in resp.text
     assert "Плохое качество видео" in resp.text
     assert "/achievements/5#proof" in resp.text
+    assert 'href="https://example.org/video"' in resp.text
+    assert "Ссылка" in resp.text
 
 
 def test_submissions_filter(monkeypatch) -> None:
@@ -96,6 +101,62 @@ def test_detail_shows_submit_form_for_logged_in_user(monkeypatch) -> None:
     assert resp.status_code == 200
     assert "Отправить прохождение" in resp.text
     assert 'action="/achievements/5/complete"' in resp.text
+
+
+def test_detail_offers_to_hide_proof_for_regular_user(monkeypatch) -> None:
+    _login(monkeypatch)
+    item = {
+        "id": 5,
+        "title": "Piano song",
+        "description": "",
+        "requirements": "",
+        "status": "published",
+        "rank": 3,
+        "average_position": 1.0,
+        "evaluation_count": 2,
+        "creator_id": "33333333-3333-3333-3333-333333333333",
+        "category": None,
+        "creator": None,
+    }
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(completions_service, "get_user_completion", lambda *_: None)
+    monkeypatch.setattr(
+        evaluation_service, "evaluate_context", lambda *_a, **_k: (False, None, None)
+    )
+
+    resp = client.get("/achievements/5")
+
+    assert resp.status_code == 200
+    assert 'name="hide_proofs"' in resp.text
+    assert "Скрыть доказательство от других пользователей" in resp.text
+
+
+def test_creator_verification_proof_cannot_be_hidden(monkeypatch) -> None:
+    _login(monkeypatch)
+    item = {
+        "id": 5,
+        "title": "Piano song",
+        "description": "",
+        "requirements": "",
+        "status": "published",
+        "rank": 3,
+        "average_position": 1.0,
+        "evaluation_count": 2,
+        "creator_id": USER.id,
+        "category": None,
+        "creator": None,
+    }
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(completions_service, "get_user_completion", lambda *_: None)
+    monkeypatch.setattr(
+        evaluation_service, "evaluate_context", lambda *_a, **_k: (False, None, None)
+    )
+
+    resp = client.get("/achievements/5")
+
+    assert resp.status_code == 200
+    assert 'name="hide_proofs"' not in resp.text
+    assert "Доказательство верификации создателя всегда видно" in resp.text
 
 
 def test_rejected_detail_shows_resubmit_form(monkeypatch) -> None:

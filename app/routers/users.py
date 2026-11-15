@@ -38,12 +38,18 @@ def profile(request: Request, username: str, info: str | None = None) -> HTMLRes
     completed = completions_service.list_user_completed_achievements(
         request, profile_row["id"]
     )
-    ranked = [
-        row
-        for row in completed
-        if row.get("ranking_status") == "ranked" and row.get("rank")
-    ]
-    player_score = round(sum(1000.0 / float(row["rank"]) for row in ranked), 2)
+    # Временное место топ-5 не даёт постоянных очков: считаем только
+    # permanent_rank. Чисто временные строки имеют permanent_rank=None и
+    # отсеиваются сами; ranked-достижение с временным слоем сохраняет свой
+    # permanent_rank и должно давать очки. До миграции 027 RPC не возвращает
+    # новые поля — тогда rank и есть постоянное место.
+    ranked = [row for row in completed if row.get("permanent_rank", row.get("rank"))]
+    player_score = round(
+        sum(
+            1000.0 / float(row.get("permanent_rank", row.get("rank"))) for row in ranked
+        ),
+        2,
+    )
     return templates.TemplateResponse(
         request=request,
         name="users/profile.html",

@@ -45,6 +45,37 @@
     <p class="muted">Нет достижений на проверке.</p>
   {% endif %}
 
+  <h2>Заявки в топ-5</h2>
+  {% if top5_applications %}
+    <ul class="mod-list">
+      {% for a in top5_applications %}
+        <li class="mod-card">
+          <div class="mod-card-head">
+            <a class="card-title" href="/top5/{{ a.id }}">
+              {{ a.achievement.title if a.achievement else a.achievement_id }}
+            </a>
+            <span class="tag">{{ a.status|top5_status_label }}</span>
+            <span class="muted">предлагает #{{ a.proposed_position }}</span>
+          </div>
+          {% if a.applicant %}
+            <p class="muted">
+              Заявитель: {{ a.applicant.display_name or a.applicant.username }}
+              · {{ a.created_at|datetime_local }}
+            </p>
+          {% endif %}
+          <p class="muted">
+            Голосов: {{ a.evaluation_count }}
+            (модераторов {{ a.moderator_votes }}, экспертов {{ a.expert_votes }})
+            · приглашено {{ a.invited_count }}, ответили {{ a.submitted_count }}
+          </p>
+          <p><a class="btn" href="/top5/{{ a.id }}">Рассмотреть заявку</a></p>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">Нет активных заявок в топ-5.</p>
+  {% endif %}
+
   <h2>Заявки о выполнении</h2>
   {% if pending_completions %}
     <ul class="mod-list">
