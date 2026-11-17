@@ -21,7 +21,6 @@ templates.env.filters["ranking_status_label"] = presentation.ranking_status
 templates.env.filters["role_label"] = presentation.role
 templates.env.filters["top5_status_label"] = presentation.top5_status
 templates.env.filters["top5_evaluator_label"] = presentation.top5_evaluator
-templates.env.filters["top5_request_label"] = presentation.top5_request
 templates.env.filters["top5_event_label"] = presentation.top5_event
 templates.env.filters["datetime_local"] = presentation.datetime_local
 templates.env.filters["date_local"] = presentation.date_local

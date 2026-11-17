@@ -92,7 +92,7 @@ gal/
 - **Achievement:** `pending → published` (после модерации), либо `rejected`; `deleted` — автором (только `pending`) или модератором (hide/принятие жалобы).
 - **Completion:** `pending → approved` / `rejected` (модерация proof). `UNIQUE(achievement, user)`. При reject/hide достижения его pending-заявки отклоняются; автор может переотправить rejected-заявку (reset RPC + замена proof) из карточки или `/submissions`. Флаг `proofs_visible` (028) скрывает доказательство от остальных; верификация создателя всегда видима.
 - **Evaluation:** `UNIQUE(achievement, user)`. Новые оценки принимаются в любой момент, включая `ranked`; после каждой оценки пересчитываются среднее, ранги и BT. `locked` оставлен в схеме для совместимости, но всегда false.
-- **Top-5 application:** `pending → approved` (временная позиция) / `rejected` (с причиной) / `expert_review` (приглашённые эксперты); `cancelled` — автором или модератором. Одна активная заявка на достижение; третья обычная оценка снимает временную запись.
+- **Top-5 application:** `pending → approved` (временная позиция, место 1–6 выставляет модератор вручную) / `rejected` (с причиной); `cancelled` — автором или модератором. Независимая экспертиза отключена; legacy-статус `expert_review` показывается как «На рассмотрении» и доступен для решения. Одна активная заявка на достижение; третья обычная оценка снимает временную запись.
 - **Report:** `pending → accepted` / `rejected`.
 - **Moderation review:** пишется при каждом решении (achievement/completion), только от имени текущего модератора (RLS 013), виден модераторам в `/moderation/history`.
 
@@ -135,7 +135,7 @@ gal/
 - Все ответы получают security-заголовки (`nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, CSP `frame-ancestors 'none'`, HSTS в проде); CSRF-токен обязателен для POST.
 - Внешние ссылки-доказательства допускаются только со схемой `http(s)://` (сервис + CHECK в БД).
 - Публичные списки прошедших (023/026/028): `achievement_completers` и `user_completed_achievements` — `security definer`, отдают только approved-заявки опубликованных достижений, публичные поля профиля и proofs с учётом `proofs_visible` (без email и moderation_reviews); скрытые proofs опускаются для всех, кроме владельца и модераторов.
-- Топ-5 (027): автор не может одобрить свою заявку; голос автора не даёт топ-5; экспертные голоса хранятся отдельно от `evaluations` и не меняют `evaluation_count`; один эксперт — один голос на заявку; каждое решение пишется в `top5_events`; временные силы пишет только `apply_temporary_ratings` (service role).
+- Топ-5 (027): автор не может одобрить свою заявку; ручное место модератора хранится отдельно от `evaluations` и не меняет `evaluation_count`; legacy-голоса экспертов игнорируются при пересчёте; каждое решение пишется в `top5_events`; временные силы пишет только `apply_temporary_ratings` (service role).
 - `SERVICE_ROLE_KEY` никогда не попадает во frontend.
 
 ### 6. Оценка достижения (Personal Scale)

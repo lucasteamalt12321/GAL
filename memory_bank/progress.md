@@ -28,6 +28,16 @@
 
 ## Changelog
 
+### 2026-11-17 — топ-5: экспертиза отключена, место выставляет модератор
+
+**Запрос.** «убери пока экспертную оценку топ-5. оставь только ручное выставление топ 5 модератором».
+
+**Что убрано.** Из `app/services/top5.py` удалены `list_expert_invitations`, `list_experts`, `invite_expert`, `decline_invitation`, `submit_evaluation`, селекты приглашений и экспертов. Из `app/routers/top5.py` — маршруты `/top5/{id}/evaluate`, `/top5/{id}/invite`, `/top5/requests/{id}/decline`; из `app/routers/moderation.py` — `/moderation/top5/{id}/invite`. Решения принимают только `approved`/`rejected`/`cancelled`. Шаблоны `top5/index.html`, `top5/detail.html`, `top5/apply.html`, `moderation/queue.html`, `achievements/detail.html`, `rankings/leaderboard.html` больше не упоминают экспертов; в карточке заявки осталась одна форма решения с ручным местом 1–6.
+
+**Поведение.** `approved` сохраняет выбранное модератором место в `top5_evaluations` (`evaluator_type='moderator'`); если место не выбрано, временная сила использует предложенное автором. `bt_recompute._temporary_payload` фильтрует оценки по `evaluator_type='moderator'`, legacy-голоса экспертов не влияют на рейтинг. Схема 027 не менялась: таблица `top5_expert_requests` и статус `expert_review` остаются для совместимости; старые заявки в `expert_review` отображаются как «На рассмотрении» и доступны модератору.
+
+**Проверка.** `pytest` — **298 passed** (тесты экспертных приглашений заменены проверкой ручного места и игнорирования legacy-голосов), ruff check/format чисты. Миграции не применялись, коммит не создавался.
+
 ### 2026-11-15 — D17: сквозной баг-хант по всему GAL
 
 **Запрос.** «сделай багхант по всему GAL. по мере нахождения багов сразу их фикси». Аудит четырьмя субагентами (auth/безопасность, ранкинг/топ-5, SQL/скрипты/фронтенд; контент/модерация — вручную после сбоя субагента B по лимиту кредитов), находки проверялись вручную и исправлялись сразу.
@@ -459,4 +469,4 @@
 
 ## last_checked_commit
 
-`c7d507e memory bank: record leaderboard fallback hotfix` (2026-11-13) — `main` содержит v1.8 и hotfix; к проду применены `022`/`024`, 2026-11-14 — `025_bt_uncertainty.sql`, `026_public_completion_proofs.sql`, `027_top5_temporary_rating.sql`, 2026-11-15 — `028_proof_visibility.sql`; не применены `021_oauth_provider.sql`, `029_submit_evaluation_position_clamp.sql`, `030_top5_apply_upsert.sql`. Локально в рабочем дереве (не закоммичено): предварительные позиции и доказательства в публичных прохождениях, v1.9 топ-5, v1.10 видимость доказательств, баг-хант D17 (auth/ранкинг/контент/SQL/фронтенд + миграции 029/030), документация и Memory Bank; `pytest` — 298 passed, ruff чист.
+`f3358a2 feat(top5): implement temporary rating, apply flow, and proof visibility` (2026-11-15) — `main` содержит v1.9 (топ-5), v1.10 (видимость доказательств) и D17; к проду применены `022`/`024`, 2026-11-14 — `025_bt_uncertainty.sql`, `026_public_completion_proofs.sql`, `027_top5_temporary_rating.sql`, 2026-11-15 — `028_proof_visibility.sql`; не применены `021_oauth_provider.sql`, `029_submit_evaluation_position_clamp.sql`, `030_top5_apply_upsert.sql`. Локально в рабочем дереве (не закоммичено): отключение экспертной оценки топ-5 (только ручное место модератора), тесты и Memory Bank; `pytest` — 298 passed, ruff чист.

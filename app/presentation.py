@@ -57,7 +57,8 @@ RANKING_STATUS_LABELS = {
 
 TOP5_STATUS_LABELS = {
     "pending": "На рассмотрении",
-    "expert_review": "У экспертов",
+    # Статус остался в enum миграции 027; новые заявки в него не попадают.
+    "expert_review": "На рассмотрении",
     "approved": "Временное место в топ-5",
     "rejected": "Отклонена",
     "converted": "Переведена в постоянный рейтинг",
@@ -67,12 +68,6 @@ TOP5_STATUS_LABELS = {
 TOP5_EVALUATOR_LABELS = {
     "moderator": "Модератор",
     "expert": "Эксперт",
-}
-
-TOP5_REQUEST_LABELS = {
-    "pending": "Ожидает ответа",
-    "submitted": "Оценка отправлена",
-    "declined": "Отказ",
 }
 
 TOP5_EVENT_LABELS = {
@@ -135,10 +130,6 @@ def top5_status(value: object) -> str:
 
 def top5_evaluator(value: object) -> str:
     return _label(TOP5_EVALUATOR_LABELS, value)
-
-
-def top5_request(value: object) -> str:
-    return _label(TOP5_REQUEST_LABELS, value)
 
 
 def top5_event(value: object) -> str:

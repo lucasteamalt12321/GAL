@@ -180,7 +180,7 @@ def test_temporary_payload_places_voted_candidate_above_top(monkeypatch) -> None
             {
                 "application_id": 5,
                 "evaluator_id": "u1",
-                "evaluator_type": "expert",
+                "evaluator_type": "moderator",
                 "estimated_position": 1,
             }
         ],
@@ -199,6 +199,35 @@ def test_temporary_payload_places_voted_candidate_above_top(monkeypatch) -> None
     # сила растёт на ln(1.2) относительно опоры 2.8, а не улетает в космос.
     assert 2.8 < row["strength"] < 3.2
     assert row["rating"] > bt_recompute.bradley_terry.rating_from_strength(2.8)
+
+
+def test_temporary_payload_ignores_legacy_expert_votes(monkeypatch) -> None:
+    _patch_temporary_tables(
+        monkeypatch,
+        applications=[
+            {
+                "id": 5,
+                "achievement_id": 100,
+                "status": "approved",
+                "proposed_position": 2,
+            }
+        ],
+        evaluations=[
+            {
+                "application_id": 5,
+                "evaluator_id": "u1",
+                "evaluator_type": "expert",
+                "estimated_position": 1,
+            }
+        ],
+        achievement=_temporary_achievement(),
+    )
+
+    payload = bt_recompute._temporary_payload(object())
+
+    assert len(payload) == 1
+    assert payload[0]["evaluator_count"] == 0
+    assert 2.4 < payload[0]["strength"] < 3.0
 
 
 def test_temporary_payload_uses_proposed_position_without_votes(monkeypatch) -> None:

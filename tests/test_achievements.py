@@ -109,7 +109,7 @@ def test_detail_marks_temporary_top5(monkeypatch) -> None:
     assert resp.status_code == 200
     assert "#3*" in resp.text
     assert "временное место в топ-5" in resp.text
-    assert "голоса модераторов" in resp.text
+    assert "место, выставленное" in resp.text
 
 
 def test_detail_hides_interval_without_enough_comparisons(monkeypatch) -> None:

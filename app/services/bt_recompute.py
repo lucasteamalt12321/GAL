@@ -144,8 +144,8 @@ def _reference_key(row: dict) -> tuple:
 def _temporary_payload(client) -> list[dict]:
     """Собирает временные силы для одобренных заявок топ-5.
 
-    Голоса модераторов и экспертов переводятся в сравнения кандидата с
-    текущим постоянным топом: estimated_position=p означает, что кандидат
+    Место, вручную выставленное модератором, переводится в сравнения кандидата
+    с текущим постоянным топом: estimated_position=p означает, что кандидат
     сложнее опор на местах p..5 и легче опор выше. Опорные силы фиксированы,
     поэтому результат сопоставим с bt_strength постоянного рейтинга.
     """
@@ -191,6 +191,8 @@ def _temporary_payload(client) -> list[dict]:
     )
     evaluations_by_application: dict[int, list[dict]] = defaultdict(list)
     for row in evaluations:
+        if row.get("evaluator_type") != "moderator":
+            continue
         evaluations_by_application[int(row["application_id"])].append(row)
 
     payload: list[dict] = []
@@ -216,14 +218,15 @@ def _temporary_payload(client) -> list[dict]:
         positions = [int(vote.get("estimated_position") or 6) for vote in votes]
 
         if not positions and bt_strength is not None:
-            # Голосов модераторов/экспертов нет — временная сила совпадает с
+            # Модератор не выбрал место — временная сила совпадает с
             # постоянной BT, которую уже дали обычные оценки.
             strength = bt_strength
         elif references and (
             positions or int(application.get("proposed_position") or 0)
         ):
-            # Без голосов одобрение всё равно даёт временное место: позицию
-            # автора используем как единственное (не независимое) основание.
+            # Без выбора модератора одобрение всё равно даёт временное место:
+            # позицию автора используем как единственное (не независимое)
+            # основание.
             used_positions = positions or [
                 int(application.get("proposed_position") or 6)
             ]
@@ -236,15 +239,15 @@ def _temporary_payload(client) -> list[dict]:
             anchor_strength = float(
                 reference_rows[anchor_index].get("bt_strength") or 0.0
             )
-            # При наличии голосов стартуем от опоры: обычная BT-сила учтётся
-            # один раз — в смешивании ниже, а не ещё и в априори.
+            # При наличии выбора модератора стартуем от опоры: обычная BT-сила
+            # учтётся один раз — в смешивании ниже, а не ещё и в априори.
             initial_strength = (
                 anchor_strength if positions or bt_strength is None else bt_strength
             )
             comparisons: list[bradley_terry.Comparison] = []
             for position in used_positions:
                 position = min(max(position, 1), TOP5_MAX_REFERENCES + 1)
-                # Голос — это место в упорядоченном списке, а не пять
+                # Позиция — это место в упорядоченном списке, а не пять
                 # независимых матчей: сравниваем кандидата только с соседними
                 # опорами, иначе победы над #2–#5 завышают силу.
                 if position > 1:
@@ -260,9 +263,8 @@ def _temporary_payload(client) -> list[dict]:
                 initial=initial_strength,
                 prior=TOP5_ANCHOR_PRIOR,
             )
-            # Обычные оценки уже дали постоянную силу; смешиваем её с голосами
-            # модераторов/экспертов, чтобы временный рейтинг учитывал оба
-            # источника и не зависел только от приглашённых.
+            # Обычные оценки уже дали постоянную силу; смешиваем её с ручным
+            # местом модератора, чтобы временный рейтинг учитывал оба источника.
             if positions and bt_strength is not None and ordinary_count > 0:
                 strength = (
                     strength * len(positions) + bt_strength * ordinary_count

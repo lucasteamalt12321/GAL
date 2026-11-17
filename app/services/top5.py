@@ -1,19 +1,18 @@
-"""Заявки на предварительный рейтинг топ-5 и независимые оценки.
+"""Заявки на предварительный рейтинг топ-5.
 
 Обычные пользовательские оценки живут в ``evaluations`` и не смешиваются с
-голосами модераторов/экспертов. Здесь — отдельный сценарий:
+решением модератора. Здесь — отдельный сценарий:
 
 1. автор опубликованного достижения подаёт заявку (позиция, доказательство,
    обоснование);
-2. модератор одобряет (временное место до третьей обычной оценки), отклоняет
-   или отправляет на экспертизу;
-3. приглашённые эксперты и модераторы выставляют оценку 1–6 относительно
-   текущего постоянного топа;
-4. ``bt_recompute`` пересчитывает временную силу, а вьюха
+2. модератор вручную одобряет временное место (до третьей обычной оценки) или
+   отклоняет заявку; место 1–6 он выбирает сам в форме решения;
+3. ``bt_recompute`` пересчитывает временную силу, а вьюха
    ``public.public_achievements`` показывает общий топ со звёздочкой.
 
-RLS и триггеры миграции 027 дополнительно запрещают самоодобрение, голос
-автора/создателя и повторный голос одного эксперта.
+Схема 027 всё ещё содержит таблицы экспертных приглашений, но приложение их не
+использует: независимая экспертиза временно отключена. Статус ``expert_review``
+распознаётся как legacy-состояние, чтобы ранее созданные заявки не зависли.
 """
 
 from __future__ import annotations
@@ -36,12 +35,9 @@ PERMANENT_EVALUATIONS = 3
 MAX_JUSTIFICATION = 4000
 MAX_EVIDENCE_URL = 2000
 MAX_NOTE = 2000
-# top5_expert_requests.note ограничен 1000 символами в миграции 027.
-MAX_DECLINE_NOTE = 1000
 
 ACTIVE_STATUSES = ("pending", "expert_review", "approved")
-CLOSED_STATUSES = ("converted", "cancelled", "rejected")
-DECISION_STATUSES = ("pending", "expert_review", "approved", "rejected", "cancelled")
+DECISION_STATUSES = ("approved", "rejected", "cancelled")
 # Отменить ошибочное решение можно для любого статуса, где заявка ещё живёт.
 REVOCABLE_STATUSES = ("pending", "expert_review", "approved", "rejected")
 
@@ -87,23 +83,9 @@ EVALUATION_SELECT = (
     "evaluator:profiles!top5_evaluations_evaluator_id_fkey("
     "id,username,display_name)"
 )
-EXPERT_SELECT = (
-    "id,application_id,expert_id,invited_by,status,note,created_at,responded_at,"
-    "expert:profiles!top5_expert_requests_expert_id_fkey("
-    "id,username,display_name)"
-)
 EVENT_SELECT = (
     "id,application_id,actor_id,event_type,payload,created_at,"
     "actor:profiles!top5_events_actor_id_fkey(id,username,display_name)"
-)
-INVITATION_SELECT = (
-    "id,application_id,status,note,created_at,responded_at,"
-    "application:top5_applications!top5_expert_requests_application_id_fkey("
-    "id,achievement_id,proposed_position,justification,status,applicant_id,"
-    "achievement:achievements!top5_applications_achievement_id_fkey("
-    "id,title,evaluation_count,rank)),"
-    "expert:profiles!top5_expert_requests_expert_id_fkey("
-    "id,username,display_name)"
 )
 
 DB_MESSAGES = {
@@ -114,20 +96,12 @@ DB_MESSAGES = {
     ),
     "ALREADY_IN_TOP5": "Достижение уже занимает постоянное место в топ-5.",
     "NOT_AUTHOR": "Заявку может подать только автор достижения.",
-    "NOT_INDEPENDENT": "Автор, заявитель и создатель не могут голосовать по заявке.",
     "SELF_DECISION": "Нельзя принимать решение по собственной заявке.",
     "REASON_REQUIRED": "Укажите причину.",
-    "APPLICATION_CLOSED": "Заявка уже закрыта.",
     "TERMINAL_APPLICATION": "Заявка уже закрыта и не может быть изменена.",
     "SYSTEM_ONLY": "Этот переход выполняет система.",
     "AUTHOR_CANNOT_DECIDE": "Автор может только отозвать заявку.",
     "NOT_ALLOWED": "Недостаточно прав.",
-    "NOT_MODERATOR": "Для этой оценки нужны права модератора.",
-    "NOT_INVITED": "Вы не приглашены экспертом по этой заявке.",
-    "NOT_SELF": "Оценку можно сохранить только от своего имени.",
-    "REQUEST_IMMUTABLE": "Приглашение нельзя переназначить.",
-    "INVALID_STATUS": "Недопустимый статус приглашения.",
-    "EVALUATION_IMMUTABLE": "Тип и автор оценки не меняются.",
 }
 
 
@@ -370,18 +344,6 @@ def list_my_applications(request: Request) -> list[dict]:
     )
 
 
-def list_expert_invitations(request: Request) -> list[dict]:
-    user, client = _client(request)
-    return _read_rows(
-        client.table("top5_expert_requests")
-        .select(INVITATION_SELECT)
-        .eq("expert_id", user.id)
-        .in_("status", ["pending", "submitted"])
-        .order("created_at")
-        .limit(100)
-    )
-
-
 def get_application(request: Request, application_id: int) -> dict | None:
     _user, client = _client(request)
     return _read_row(
@@ -397,16 +359,6 @@ def list_evaluations(request: Request, application_id: int) -> list[dict]:
     return _read_rows(
         client.table("top5_evaluations")
         .select(EVALUATION_SELECT)
-        .eq("application_id", application_id)
-        .order("created_at")
-    )
-
-
-def list_experts(request: Request, application_id: int) -> list[dict]:
-    _user, client = _client(request)
-    return _read_rows(
-        client.table("top5_expert_requests")
-        .select(EXPERT_SELECT)
         .eq("application_id", application_id)
         .order("created_at")
     )
@@ -429,27 +381,10 @@ def application_bundle(request: Request, application_id: int) -> dict | None:
     user = request.state.user
     is_moderator = user is not None and user.role in MODERATOR_ROLES
     evaluations = list_evaluations(request, application_id)
-    experts = list_experts(request, application_id)
     events = list_events(request, application_id)
     my_evaluation = next(
         (row for row in evaluations if str(row.get("evaluator_id")) == str(user.id)),
         None,
-    )
-    is_invited = any(
-        str(row.get("expert_id")) == str(user.id)
-        and row.get("status") in ("pending", "submitted")
-        for row in experts
-    )
-    achievement = application.get("achievement") or {}
-    is_independent = user is not None and str(user.id) not in {
-        str(application.get("applicant_id")),
-        str(achievement.get("creator_id")),
-    }
-    can_evaluate = bool(
-        user is not None
-        and application.get("status") not in CLOSED_STATUSES
-        and is_independent
-        and (is_moderator or is_invited)
     )
     is_applicant = user is not None and str(user.id) == str(
         application.get("applicant_id")
@@ -466,17 +401,12 @@ def application_bundle(request: Request, application_id: int) -> dict | None:
     return {
         "application": application,
         "evaluations": evaluations,
-        "experts": experts,
         "events": events,
         "my_evaluation": my_evaluation,
         "is_moderator": is_moderator,
-        "is_invited_expert": is_invited,
-        "can_evaluate": can_evaluate,
         "can_decide": can_decide,
         "can_cancel": bool(is_applicant and status in ("pending", "expert_review")),
-        "can_invite": bool(is_moderator and status in ("pending", "expert_review")),
         "evaluations_hidden": evaluations_hidden,
-        "evaluation_type": "moderator" if is_moderator else "expert",
         "is_applicant": is_applicant,
     }
 
@@ -503,33 +433,14 @@ def moderation_queue(request: Request) -> list[dict]:
         .in_("application_id", ids)
         .execute()
     )
-    requests = (
-        client.table("top5_expert_requests")
-        .select("application_id,expert_id,status")
-        .in_("application_id", ids)
-        .execute()
-    )
     eval_rows: dict[int, list[dict]] = {}
     for row in evals.data or []:
+        if row.get("evaluator_type") != "moderator":
+            continue
         eval_rows.setdefault(int(row["application_id"]), []).append(row)
-    request_rows: dict[int, list[dict]] = {}
-    for row in requests.data or []:
-        request_rows.setdefault(int(row["application_id"]), []).append(row)
     for application in applications:
-        application_id = int(application["id"])
-        votes = eval_rows.get(application_id, [])
-        invites = request_rows.get(application_id, [])
+        votes = eval_rows.get(int(application["id"]), [])
         application["evaluation_count"] = len(votes)
-        application["moderator_votes"] = sum(
-            1 for vote in votes if vote.get("evaluator_type") == "moderator"
-        )
-        application["expert_votes"] = sum(
-            1 for vote in votes if vote.get("evaluator_type") == "expert"
-        )
-        application["invited_count"] = len(invites)
-        application["submitted_count"] = sum(
-            1 for invite in invites if invite.get("status") == "submitted"
-        )
     return applications
 
 
@@ -597,14 +508,14 @@ def decide_application(
     if not res.data:
         raise Top5Error("Заявка не найдена.")
 
-    if position is not None and decision in ("pending", "expert_review", "approved"):
+    if position is not None and decision == "approved":
         try:
             _save_evaluation(
                 client,
                 user,
                 application,
                 position,
-                "Оценка при решении модератора",
+                "Место назначено модератором",
             )
         except TOP5_ERRORS:
             # Решение уже сохранено; голос модератора — дополнительный вклад.
@@ -617,74 +528,12 @@ def decide_application(
     bt_recompute.try_recompute_temporary_ratings()
 
 
-def invite_expert(request: Request, application_id: int, username: str) -> None:
-    user, client = _client(request)
-    if user.role not in MODERATOR_ROLES:
-        raise Top5Error("Недостаточно прав.")
-    username = (username or "").strip()
-    if not username:
-        raise Top5Error("Укажите username эксперта.")
-    try:
-        profile_res = (
-            client.table("profiles")
-            .select("id,username")
-            .ilike("username", auth_service.ilike_literal(username))
-            .limit(1)
-            .execute()
-        )
-    except TOP5_ERRORS as exc:
-        raise _db_error(exc) from exc
-    if not profile_res.data:
-        raise Top5Error("Пользователь не найден.")
-    expert = profile_res.data[0]
-    application = get_application(request, application_id)
-    if application is None:
-        raise Top5Error("Заявка не найдена.")
-    if str(expert["id"]) in {
-        str(application.get("applicant_id")),
-        str((application.get("achievement") or {}).get("creator_id")),
-    }:
-        raise Top5Error(DB_MESSAGES["NOT_INDEPENDENT"])
-    try:
-        client.table("top5_expert_requests").insert(
-            {
-                "application_id": application_id,
-                "expert_id": expert["id"],
-                "invited_by": user.id,
-            }
-        ).execute()
-    except TOP5_ERRORS as exc:
-        raise _db_error(exc) from exc
-
-
-def decline_invitation(request: Request, request_id: int, note: str) -> None:
-    user, client = _client(request)
-    note = (note or "").strip()
-    if not note:
-        raise Top5Error("Укажите причину отказа.")
-    if len(note) > MAX_DECLINE_NOTE:
-        raise Top5Error("Причина слишком длинная.")
-    try:
-        res = (
-            client.table("top5_expert_requests")
-            .update({"status": "declined", "note": note})
-            .eq("id", request_id)
-            .eq("expert_id", user.id)
-            .eq("status", "pending")
-            .execute()
-        )
-    except TOP5_ERRORS as exc:
-        raise _db_error(exc) from exc
-    if not res.data:
-        raise Top5Error("Приглашение не найдено.")
-
-
 def _evaluation_type(client, application_id: int, user_id) -> str:
     """Сохраняет тип уже записанной оценки.
 
-    Пользователь может быть приглашён экспертом, а позже получить роль
-    модератора. Триггер запрещает менять тип и автора оценки, поэтому при
-    повторной записи оставляем исходный тип и обновляем только место.
+    Триггер 027 запрещает менять тип и автора оценки. Если у модератора есть
+    историческая запись с типом ``expert``, при повторном сохранении места
+    оставляем исходный тип и обновляем только позицию.
     """
     res = (
         client.table("top5_evaluations")
@@ -707,9 +556,7 @@ def _save_evaluation(
     note: str,
 ) -> None:
     application_id = int(application["id"])
-    evaluator_type = _evaluation_type(client, application_id, user.id) or (
-        "moderator" if user.role in MODERATOR_ROLES else "expert"
-    )
+    evaluator_type = _evaluation_type(client, application_id, user.id) or "moderator"
     client.table("top5_evaluations").upsert(
         {
             "application_id": application_id,
@@ -720,46 +567,3 @@ def _save_evaluation(
         },
         on_conflict="application_id,evaluator_id",
     ).execute()
-
-
-def submit_evaluation(
-    request: Request,
-    application_id: int,
-    *,
-    estimated_position: object,
-    note: str = "",
-) -> None:
-    user, client = _client(request)
-    position = parse_position(estimated_position, maximum=MAX_POSITION + 1)
-    if position is None:
-        raise Top5Error("Оценка места — от 1 до 6.")
-    note = (note or "").strip()
-    if len(note) > MAX_NOTE:
-        raise Top5Error("Комментарий слишком длинный.")
-
-    application = get_application(request, application_id)
-    if application is None:
-        raise Top5Error("Заявка не найдена.")
-    if application.get("status") in CLOSED_STATUSES:
-        raise Top5Error(DB_MESSAGES["APPLICATION_CLOSED"])
-    if str(user.id) in {
-        str(application.get("applicant_id")),
-        str((application.get("achievement") or {}).get("creator_id")),
-    }:
-        raise Top5Error(DB_MESSAGES["NOT_INDEPENDENT"])
-
-    if user.role not in MODERATOR_ROLES:
-        invited = any(
-            str(row.get("expert_id")) == str(user.id)
-            and row.get("status") in ("pending", "submitted")
-            for row in list_experts(request, application_id)
-        )
-        if not invited:
-            raise Top5Error(DB_MESSAGES["NOT_INVITED"])
-
-    try:
-        _save_evaluation(client, user, application, position, note)
-    except TOP5_ERRORS as exc:
-        raise _db_error(exc) from exc
-
-    bt_recompute.try_recompute_temporary_ratings()

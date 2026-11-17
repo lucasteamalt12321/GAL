@@ -147,34 +147,6 @@ def decide_top5(
 
 
 @router.post(
-    "/top5/{application_id}/invite",
-    response_class=HTMLResponse,
-    include_in_schema=False,
-)
-def invite_top5_expert(
-    request: Request,
-    application_id: int,
-    username: str = Form(""),
-) -> HTMLResponse:
-    redirect = _guard(request)
-    if redirect is not None:
-        return redirect
-    try:
-        top5_service.invite_expert(request, application_id, username)
-    except top5_service.Top5Error as exc:
-        return RedirectResponse(
-            f"/top5/{application_id}?error={quote(str(exc))}", status_code=303
-        )
-    except top5_service.TOP5_ERRORS:
-        return RedirectResponse(
-            f"/top5/{application_id}"
-            f"?error={quote('Не удалось пригласить эксперта. Попробуйте ещё раз.')}",
-            status_code=303,
-        )
-    return RedirectResponse(f"/top5/{application_id}?info=invited", status_code=303)
-
-
-@router.post(
     "/completions/{completion_id}",
     response_class=HTMLResponse,
     include_in_schema=False,

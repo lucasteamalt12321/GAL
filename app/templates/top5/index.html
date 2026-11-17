@@ -53,43 +53,4 @@
     </p>
   {% endif %}
 </section>
-
-<section class="leaderboard-section">
-  <h2>Приглашения эксперта</h2>
-  {% if invitations %}
-    <div class="table-scroll" tabindex="0" role="region" aria-label="Приглашения эксперта">
-      <table class="leaderboard-table">
-        <thead>
-          <tr>
-            <th scope="col">Достижение</th>
-            <th scope="col">Запрошенное место</th>
-            <th scope="col">Статус</th>
-            <th scope="col">Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in invitations %}
-            <tr>
-              <td><a href="/top5/{{ r.application_id }}">{{ r.application.achievement.title if r.application and r.application.achievement else 'Заявка #' ~ r.application_id }}</a></td>
-              <td>#{{ r.application.proposed_position if r.application else '—' }}</td>
-              <td><span class="tag">{{ r.status|top5_request_label }}</span></td>
-              <td>
-                <a class="btn" href="/top5/{{ r.application_id }}">Открыть и оценить</a>
-                {% if r.status == 'pending' %}
-                  <form method="post" action="/top5/requests/{{ r.id }}/decline" class="inline-form">
-                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                    <input type="text" name="note" maxlength="1000" placeholder="Причина отказа" required>
-                    <button type="submit" class="btn btn-danger">Отказаться</button>
-                  </form>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% else %}
-    <p class="muted">Приглашений нет. Модератор может пригласить вас как эксперта по заявке.</p>
-  {% endif %}
-</section>
 {% endblock %}

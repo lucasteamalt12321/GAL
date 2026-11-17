@@ -30,12 +30,12 @@
     <span class="stat-sub">после третьей заявка закрывается</span>
   </div>
   <div class="stat">
-    <span class="stat-label">Голосов модераторов и экспертов</span>
+    <span class="stat-label">Оценок модераторов</span>
     <span class="stat-value">
       {% if evaluations_hidden %}скрыто{% else %}{{ evaluations|length }}{% endif %}
     </span>
     {% if evaluations_hidden %}
-      <span class="stat-sub">голоса откроются после решения</span>
+      <span class="stat-sub">оценки откроются после решения</span>
     {% endif %}
   </div>
 </div>
@@ -69,19 +69,31 @@
   </form>
 {% endif %}
 
-{% if can_evaluate %}
-  <section class="evaluation-box">
-    <h2>Оценка эксперта</h2>
-    <p>
-      Сравните заявленное достижение с текущим постоянным топом. 1 — сложнее
-      текущего #1, 5 — между #4 и #5, 6 — легче текущего #5. Голос независим и
-      не смешивается с обычными оценками достижения.
+{% if can_decide %}
+  <section>
+    <h2>Решение модератора</h2>
+    <p class="muted">
+      Место в топ-5 выставляется вручную: 1 — сложнее текущего #1, 6 — легче
+      текущего #5. Если место не выбрано, используется предложенное автором.
+      Самоодобрение запрещено. Отклонение требует причины; ошибочное решение
+      можно отменить — оно сохранится в журнале.
     </p>
-    <form method="post" action="/top5/{{ application.id }}/evaluate" class="stack">
+    <form method="post" action="/moderation/top5/{{ application.id }}" class="stack">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <label class="field">
-        <span class="field-label">Место относительно текущего топа</span>
-        <select name="estimated_position" required>
+        <span class="field-label">Решение</span>
+        <select name="decision" required>
+          <option value="approved">Одобрить временное место</option>
+          <option value="rejected">Отклонить</option>
+          {% if application.status in ('approved', 'rejected') %}
+            <option value="cancelled">Отменить решение</option>
+          {% endif %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">Место в топ-5 (вручную)</span>
+        <select name="estimated_position">
+          <option value="">По заявке (предложено автором)</option>
           {% for position in range(1, 7) %}
             <option value="{{ position }}"
               {% if my_evaluation and my_evaluation.estimated_position == position %}selected{% endif %}>
@@ -91,105 +103,11 @@
         </select>
       </label>
       <label class="field">
-        <span class="field-label">Комментарий (необязательно)</span>
-        <textarea name="note" rows="3" maxlength="2000">{{ my_evaluation.note if my_evaluation else '' }}</textarea>
-      </label>
-      <button type="submit" class="btn btn-primary">
-        {% if my_evaluation %}Обновить оценку{% else %}Сохранить оценку{% endif %}
-      </button>
-    </form>
-  </section>
-{% elif my_evaluation %}
-  <p class="muted">
-    Ваша оценка: {% if my_evaluation.estimated_position <= 5 %}#{{ my_evaluation.estimated_position }}{% else %}ниже #5{% endif %}{% if my_evaluation.note %} — {{ my_evaluation.note }}{% endif %}.
-  </p>
-{% endif %}
-
-{% if can_decide %}
-  <section>
-    <h2>Решение модератора</h2>
-    <p class="muted">
-      Самоодобрение запрещено. Отклонение требует причины; ошибочное решение
-      можно отменить — оно сохранится в журнале.
-    </p>
-    <form method="post" action="/moderation/top5/{{ application.id }}" class="stack">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <label class="field">
-        <span class="field-label">Решение</span>
-        <select name="decision" required>
-          <option value="expert_review">Отправить экспертам</option>
-          <option value="approved">Одобрить временное место</option>
-          <option value="rejected">Отклонить</option>
-          {% if application.status in ('approved', 'rejected') %}
-            <option value="cancelled">Отменить решение</option>
-          {% endif %}
-        </select>
-      </label>
-      <label class="field">
         <span class="field-label">Причина / комментарий</span>
         <textarea name="reason" rows="3" maxlength="2000"></textarea>
       </label>
-      <label class="field">
-        <span class="field-label">Ваша оценка места (необязательно)</span>
-        <select name="estimated_position">
-          <option value="">Не оценивать</option>
-          {% for position in range(1, 7) %}
-            <option value="{{ position }}">
-              {% if position <= 5 %}#{{ position }}{% else %}ниже #5{% endif %}
-            </option>
-          {% endfor %}
-        </select>
-      </label>
       <button type="submit" class="btn btn-primary">Сохранить решение</button>
     </form>
-  </section>
-{% endif %}
-
-{% if can_invite %}
-  <section>
-    <h2>Пригласить эксперта</h2>
-    <p class="muted">
-      Эксперт оценивает заявку независимо; автор достижения и заявитель
-      приглашены быть не могут. Достаточно username игрока.
-    </p>
-    <form method="post" action="/moderation/top5/{{ application.id }}/invite" class="inline-form">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="text" name="username" maxlength="60" placeholder="username" required
-             aria-label="Username эксперта">
-      <button type="submit" class="btn">Пригласить</button>
-    </form>
-  </section>
-{% endif %}
-
-{% if experts %}
-  <section class="leaderboard-section">
-    <h2>Приглашённые эксперты</h2>
-    <div class="table-scroll" tabindex="0" role="region" aria-label="Приглашённые эксперты">
-      <table class="leaderboard-table">
-        <thead>
-          <tr>
-            <th scope="col">Эксперт</th>
-            <th scope="col">Приглашение</th>
-            <th scope="col">Ответ</th>
-            <th scope="col">Комментарий</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in experts %}
-            <tr>
-              <td>
-                {% if r.expert %}
-                  <a href="/users/{{ r.expert.username }}">{{ r.expert.display_name or r.expert.username }}</a>
-                {% else %}{{ r.expert_id }}{% endif %}
-              </td>
-              <td><span class="tag">{{ r.status|top5_request_label }}</span></td>
-              <td>{% if r.responded_at %}{{ r.responded_at|datetime_local }}{% else %}—{% endif %}</td>
-              <td>{% if r.note %}{{ r.note }}{% else %}—{% endif %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
   </section>
 {% endif %}
 
@@ -242,6 +160,6 @@
 {% endif %}
 
 <p class="muted">
-  <a href="/top5">← Все мои заявки и приглашения</a>
+  <a href="/top5">← Все мои заявки</a>
 </p>
 {% endblock %}

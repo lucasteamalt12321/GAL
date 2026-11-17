@@ -64,9 +64,8 @@
             </p>
           {% endif %}
           <p class="muted">
-            Голосов: {{ a.evaluation_count }}
-            (модераторов {{ a.moderator_votes }}, экспертов {{ a.expert_votes }})
-            · приглашено {{ a.invited_count }}, ответили {{ a.submitted_count }}
+            Оценок модераторов: {{ a.evaluation_count }}
+            · место выставляется вручную при решении
           </p>
           <p><a class="btn" href="/top5/{{ a.id }}">Рассмотреть заявку</a></p>
         </li>

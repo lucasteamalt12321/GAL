@@ -151,7 +151,7 @@ def test_top5_page_requires_login() -> None:
     assert resp.headers["location"] == "/auth/login"
 
 
-def test_top5_page_renders_applications_and_invitations(monkeypatch) -> None:
+def test_top5_page_renders_applications(monkeypatch) -> None:
     _login(monkeypatch)
     monkeypatch.setattr(
         top5_service,
@@ -168,26 +168,11 @@ def test_top5_page_renders_applications_and_invitations(monkeypatch) -> None:
             }
         ],
     )
-    monkeypatch.setattr(
-        top5_service,
-        "list_expert_invitations",
-        lambda _r: [
-            {
-                "id": 4,
-                "application_id": 3,
-                "status": "pending",
-                "application": {
-                    "proposed_position": 2,
-                    "achievement": {"title": "Sample"},
-                },
-            }
-        ],
-    )
     resp = client.get("/top5")
     assert resp.status_code == 200
     assert "Временное место в топ-5" in resp.text
     assert "Sample" in resp.text
-    assert "Ожидает ответа" in resp.text
+    assert "Приглашения эксперта" not in resp.text
 
 
 def test_apply_page_only_for_author(monkeypatch) -> None:
@@ -253,16 +238,11 @@ def test_application_detail_renders_and_has_decision_form(monkeypatch) -> None:
             "applicant": {"username": "tester", "display_name": "Tester"},
         },
         "evaluations": [],
-        "experts": [],
         "events": [],
         "my_evaluation": None,
         "is_moderator": True,
-        "is_invited_expert": False,
-        "can_evaluate": True,
         "can_decide": True,
         "can_cancel": False,
-        "can_invite": True,
-        "evaluation_type": "moderator",
         "is_applicant": False,
     }
     monkeypatch.setattr(top5_service, "application_bundle", lambda *_: bundle)
@@ -270,8 +250,11 @@ def test_application_detail_renders_and_has_decision_form(monkeypatch) -> None:
     assert resp.status_code == 200
     assert "Harder than #2" in resp.text
     assert "Решение модератора" in resp.text
-    assert "Пригласить эксперта" in resp.text
-    assert "Оценка эксперта" in resp.text
+    assert 'name="estimated_position"' in resp.text
+    assert "По заявке (предложено автором)" in resp.text
+    assert "Пригласить эксперта" not in resp.text
+    assert "Оценка эксперта" not in resp.text
+    assert 'value="expert_review"' not in resp.text
 
 
 def test_moderation_decide_calls_service(monkeypatch) -> None:
@@ -290,6 +273,17 @@ def test_moderation_decide_calls_service(monkeypatch) -> None:
     assert resp.status_code == 303
     assert resp.headers["location"] == "/top5/5?info=decided"
     assert calls == [(5, "approved", "ok", "2")]
+
+
+def test_decide_rejects_expert_review(monkeypatch) -> None:
+    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _r: object())
+
+    with pytest.raises(top5_service.Top5Error) as exc:
+        top5_service.decide_application(
+            _request(_user("moderator")), 5, decision="expert_review"
+        )
+
+    assert "Недопустимое решение" in str(exc.value)
 
 
 def _api_error(code: str, message: str) -> Exception:
@@ -342,35 +336,9 @@ def test_missing_schema_degrades_lists_to_empty(monkeypatch) -> None:
     )
     request = _request(_user())
     assert top5_service.list_my_applications(request) == []
-    assert top5_service.list_expert_invitations(request) == []
     assert top5_service.list_evaluations(request, 5) == []
-    assert top5_service.list_experts(request, 5) == []
     assert top5_service.list_events(request, 5) == []
     assert top5_service.get_application(request, 5) is None
-
-
-def test_bundle_ignores_declined_invitation(monkeypatch) -> None:
-    user = _user()
-    application = {
-        "id": 5,
-        "status": "pending",
-        "applicant_id": "22222222-2222-2222-2222-222222222222",
-        "achievement": {"creator_id": "33333333-3333-3333-3333-333333333333"},
-        "proposed_position": 1,
-    }
-    monkeypatch.setattr(top5_service, "get_application", lambda *_: application)
-    monkeypatch.setattr(top5_service, "list_evaluations", lambda *_: [])
-    monkeypatch.setattr(
-        top5_service,
-        "list_experts",
-        lambda *_: [{"expert_id": user.id, "status": "declined"}],
-    )
-    monkeypatch.setattr(top5_service, "list_events", lambda *_: [])
-
-    bundle = top5_service.application_bundle(_request(user), 5)
-
-    assert bundle["is_invited_expert"] is False
-    assert bundle["can_evaluate"] is False
 
 
 def test_bundle_hides_vote_count_from_applicant(monkeypatch) -> None:
@@ -384,29 +352,11 @@ def test_bundle_hides_vote_count_from_applicant(monkeypatch) -> None:
     }
     monkeypatch.setattr(top5_service, "get_application", lambda *_: application)
     monkeypatch.setattr(top5_service, "list_evaluations", lambda *_: [])
-    monkeypatch.setattr(top5_service, "list_experts", lambda *_: [])
     monkeypatch.setattr(top5_service, "list_events", lambda *_: [])
 
     bundle = top5_service.application_bundle(_request(user), 5)
 
     assert bundle["evaluations_hidden"] is True
-
-
-def test_submit_evaluation_requires_invitation(monkeypatch) -> None:
-    application = {
-        "id": 5,
-        "status": "pending",
-        "applicant_id": "22222222-2222-2222-2222-222222222222",
-        "achievement": {"creator_id": "33333333-3333-3333-3333-333333333333"},
-    }
-    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _r: object())
-    monkeypatch.setattr(top5_service, "get_application", lambda *_: application)
-    monkeypatch.setattr(top5_service, "list_experts", lambda *_: [])
-
-    with pytest.raises(top5_service.Top5Error) as exc:
-        top5_service.submit_evaluation(_request(_user()), 5, estimated_position="2")
-
-    assert "приглашены" in str(exc.value)
 
 
 class _ExistingEvaluationQuery:
@@ -451,11 +401,14 @@ def test_save_evaluation_keeps_existing_type() -> None:
     assert client.query.payload["estimated_position"] == 2
 
 
-def test_decline_note_respects_db_limit(monkeypatch) -> None:
-    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _r: object())
-    with pytest.raises(top5_service.Top5Error) as exc:
-        top5_service.decline_invitation(_request(_user()), 5, "x" * 1001)
-    assert "длинная" in str(exc.value)
+def test_save_evaluation_defaults_to_moderator() -> None:
+    client = _ExistingEvaluationClient(None)
+    application = {"id": 5}
+
+    top5_service._save_evaluation(client, _user("moderator"), application, 3, "note")
+
+    assert client.query.payload["evaluator_type"] == "moderator"
+    assert client.query.payload["estimated_position"] == 3
 
 
 def test_submit_application_rejects_second_active(monkeypatch) -> None:
@@ -505,11 +458,7 @@ def test_moderation_queue_shows_top5(monkeypatch) -> None:
                 "created_at": "2026-11-01T10:00:00+00:00",
                 "achievement": {"title": "Sample"},
                 "applicant": {"username": "tester", "display_name": "Tester"},
-                "evaluation_count": 0,
-                "moderator_votes": 0,
-                "expert_votes": 0,
-                "invited_count": 0,
-                "submitted_count": 0,
+                "evaluation_count": 1,
             }
         ],
     )
@@ -517,3 +466,4 @@ def test_moderation_queue_shows_top5(monkeypatch) -> None:
     assert resp.status_code == 200
     assert "Заявки в топ-5" in resp.text
     assert 'href="/top5/5"' in resp.text
+    assert "место выставляется вручную при решении" in resp.text
