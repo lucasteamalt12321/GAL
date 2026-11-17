@@ -123,7 +123,8 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D15 | v1.9: предварительный топ-5       | completed | 4 |
 | D16 | v1.10: видимость доказательств    | completed | 4 |
 | D17 | Bugfix по итогам bug-hunt 11-15   | completed | 1 |
-| D18 | v1.11: заявка топ-5 при прохождении | in_progress | 4 |
+| D18 | v1.11: заявка топ-5 при прохождении | in_progress | 3 |
+| D19 | Контент-рефактор: категории и тексты под школьную аудиторию | completed | 1 |
 
 ## Success Criteria MVP
 
