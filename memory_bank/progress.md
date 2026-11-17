@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D17 completed; миграции 025/026/027 применены к проду 2026-11-14, 028 — 2026-11-15; 029/030 добавлены 2026-11-15, к проду не применены).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D17 completed; все миграции 001–030 применены к проду: 025/026/027 — 2026-11-14, 028 — 2026-11-15, 021/029/030 — 2026-11-17).
 
 ## Deliverables статус
 
@@ -28,6 +28,20 @@
 
 ## Changelog
 
+### 2026-11-17 — миграции 021/029/030 применены к проду
+
+**Запрос.** «примени все запланированные миграции к проду?» — подтверждение владельца на применение всех оставшихся миграций.
+
+**Preflight.** Management API подтвердил: `oauth_codes`/`oauth_tokens` отсутствуют, `submit_evaluation` без `v_other_count` (версия 022), `apply_temporary_ratings` без `on conflict` (версия 027).
+
+**Валидация.** Каждая миграция прогнана на проде в `BEGIN/ROLLBACK` (HTTP 201): 021 — обе таблицы создаются, RLS включён, `anon`/`authenticated` без грантов, `service_role` с select/insert/update/delete; 029 — определение содержит clamp `least(greatest(...), v_other_count)+1`, execute у `authenticated`/`service_role`, не у `anon`; 030 — upsert `on conflict` и адресное удаление `not exists`, execute только у `service_role`. Откат подтверждён отдельным запросом (`oauth_codes` не существует).
+
+**Применение.** `python -m scripts.apply_migrations 021 029 030` — все три HTTP 201.
+
+**Postflight.** Таблицы OAuth на месте, 5 индексов, RLS включён, гранты корректны (anon/authenticated — false, service_role — true); `submit_evaluation` содержит clamp, `apply_temporary_ratings` — upsert; вьюха `public_achievements` — 9 published-строк, `achievement_temporary_ratings` и `top5_applications` — 0 строк; живой `achievement_completers(33)` — 2 прошедших. `/leaderboard` — 200 (9 строк), `/.well-known/oauth-authorization-server` отдаёт metadata (issuer/authorization/token endpoints) — OAuth-провайдер GAL теперь полностью обеспечен БД для входа из LTHub.
+
+**Состояние.** Все миграции 001–030 применены к проду. Код не менялся, тесты не запускались (изменений кода нет; последняя проверка — 298 passed на `e7b3f7e`). Полный живой вход LTHub → GAL ещё не проверен.
+
 ### 2026-11-17 — топ-5: экспертиза отключена, место выставляет модератор
 
 **Запрос.** «убери пока экспертную оценку топ-5. оставь только ручное выставление топ 5 модератором».
@@ -36,7 +50,7 @@
 
 **Поведение.** `approved` сохраняет выбранное модератором место в `top5_evaluations` (`evaluator_type='moderator'`); если место не выбрано, временная сила использует предложенное автором. `bt_recompute._temporary_payload` фильтрует оценки по `evaluator_type='moderator'`, legacy-голоса экспертов не влияют на рейтинг. Схема 027 не менялась: таблица `top5_expert_requests` и статус `expert_review` остаются для совместимости; старые заявки в `expert_review` отображаются как «На рассмотрении» и доступны модератору.
 
-**Проверка.** `pytest` — **298 passed** (тесты экспертных приглашений заменены проверкой ручного места и игнорирования legacy-голосов), ruff check/format чисты. Миграции не применялись, коммит не создавался.
+**Проверка.** `pytest` — **298 passed** (тесты экспертных приглашений заменены проверкой ручного места и игнорирования legacy-голосов), ruff check/format чисты. Закоммичено как `e7b3f7e`; миграции 029/030 применены к проду 2026-11-17 (см. запись выше).
 
 ### 2026-11-15 — D17: сквозной баг-хант по всему GAL
 
@@ -469,4 +483,4 @@
 
 ## last_checked_commit
 
-`f3358a2 feat(top5): implement temporary rating, apply flow, and proof visibility` (2026-11-15) — `main` содержит v1.9 (топ-5), v1.10 (видимость доказательств) и D17; к проду применены `022`/`024`, 2026-11-14 — `025_bt_uncertainty.sql`, `026_public_completion_proofs.sql`, `027_top5_temporary_rating.sql`, 2026-11-15 — `028_proof_visibility.sql`; не применены `021_oauth_provider.sql`, `029_submit_evaluation_position_clamp.sql`, `030_top5_apply_upsert.sql`. Локально в рабочем дереве (не закоммичено): отключение экспертной оценки топ-5 (только ручное место модератора), тесты и Memory Bank; `pytest` — 298 passed, ruff чист.
+`e7b3f7e feat(top5): manual moderator placement, remove expert review` (2026-11-17) — `main` содержит v1.9 (топ-5), v1.10 (видимость доказательств), D17 и отключение экспертной оценки топ-5 (ручное место модератора). К проду применены все миграции 001–030: `022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021_oauth_provider.sql`/`029_submit_evaluation_position_clamp.sql`/`030_top5_apply_upsert.sql` — 2026-11-17 (валидация в `BEGIN/ROLLBACK`, HTTP 201, postflight чистый). `pytest` — 298 passed, ruff чист (на `e7b3f7e`).
