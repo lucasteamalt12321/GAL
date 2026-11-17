@@ -157,11 +157,23 @@
     });
   }
 
+  function initTop5ClaimToggle() {
+    document.querySelectorAll("[data-top5-claim-toggle]").forEach(function (box) {
+      var form = box.closest("form");
+      var fields = form && form.querySelector("[data-top5-claim-fields]");
+      if (!fields) return;
+      function sync() { fields.hidden = !box.checked; }
+      box.addEventListener("change", sync);
+      sync();
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     initNav();
     initFileSizeChecks();
     initConfirms();
     initReloadButtons();
     initScalePickers();
+    initTop5ClaimToggle();
   });
 })();

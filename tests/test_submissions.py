@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -200,3 +202,116 @@ def test_rejected_detail_shows_resubmit_form(monkeypatch) -> None:
     assert "Заявка отклонена" in resp.text
     assert "Плохое качество видео" in resp.text
     assert "Отправить снова" in resp.text
+
+
+class _NoRowsQuery:
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, *_args):
+        return self
+
+    def in_(self, *_args):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args):
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=[])
+
+
+class _NoRowsClient:
+    def table(self, _name: str) -> _NoRowsQuery:
+        return _NoRowsQuery()
+
+
+def _detail_item(**overrides) -> dict:
+    item = {
+        "id": 5,
+        "title": "Piano song",
+        "description": "",
+        "requirements": "",
+        "status": "published",
+        "rank": None,
+        "average_position": None,
+        "evaluation_count": 1,
+        "creator_id": "33333333-3333-3333-3333-333333333333",
+        "category": None,
+        "creator": None,
+    }
+    item.update(overrides)
+    return item
+
+
+def _detail_mocks(monkeypatch, item: dict) -> None:
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(completions_service, "get_user_completion", lambda *_: None)
+    monkeypatch.setattr(
+        evaluation_service, "evaluate_context", lambda *_a, **_k: (False, None, None)
+    )
+
+
+def test_detail_shows_top5_claim_checkbox(monkeypatch) -> None:
+    _login(monkeypatch)
+    _detail_mocks(monkeypatch, _detail_item())
+    monkeypatch.setattr(
+        auth_service, "user_client_from_request", lambda _r: _NoRowsClient()
+    )
+    resp = client.get("/achievements/5")
+    assert resp.status_code == 200
+    assert 'name="top5_claim"' in resp.text
+    assert "Заявка в топ-5" in resp.text
+    assert 'name="top5_position"' in resp.text
+    assert 'name="top5_justification"' in resp.text
+    assert "Запрашиваемое место" in resp.text
+    assert "Обоснование сложности" in resp.text
+
+
+def test_detail_hides_top5_claim_for_permanent_top5(monkeypatch) -> None:
+    _login(monkeypatch)
+    _detail_mocks(monkeypatch, _detail_item(rank=3))
+    resp = client.get("/achievements/5")
+    assert resp.status_code == 200
+    assert 'name="top5_claim"' not in resp.text
+
+
+def test_detail_hides_top5_claim_after_three_evaluations(monkeypatch) -> None:
+    _login(monkeypatch)
+    _detail_mocks(monkeypatch, _detail_item(evaluation_count=3))
+    resp = client.get("/achievements/5")
+    assert resp.status_code == 200
+    assert 'name="top5_claim"' not in resp.text
+
+
+def test_detail_hides_top5_claim_with_active_application(monkeypatch) -> None:
+    _login(monkeypatch)
+    _detail_mocks(monkeypatch, _detail_item())
+
+    class _ActiveClient(_NoRowsClient):
+        def table(self, name: str):
+            query = _NoRowsQuery()
+            if name == "top5_applications":
+                query.execute = lambda: SimpleNamespace(
+                    data=[
+                        {
+                            "id": 9,
+                            "status": "pending",
+                            "proposed_position": 2,
+                            "created_at": "2026-11-01T10:00:00+00:00",
+                            "decision_reason": "",
+                            "applicant_id": USER.id,
+                        }
+                    ]
+                )
+            return query
+
+    monkeypatch.setattr(
+        auth_service, "user_client_from_request", lambda _r: _ActiveClient()
+    )
+    resp = client.get("/achievements/5")
+    assert resp.status_code == 200
+    assert 'name="top5_claim"' not in resp.text

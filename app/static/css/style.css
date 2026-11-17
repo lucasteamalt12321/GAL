@@ -926,6 +926,15 @@ select {
   color: var(--vkui-positive);
 }
 
+.badge-top5 {
+  background: var(--vkui-accent-tint);
+  color: var(--vkui-accent);
+}
+
+.top5-claim-fields {
+  padding-left: 26px;
+}
+
 /* ---------- Фильтры, поиск, чипы ---------- */
 
 .search-form {

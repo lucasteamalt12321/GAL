@@ -45,7 +45,8 @@
     <p class="muted">Нет достижений на проверке.</p>
   {% endif %}
 
-  <h2>Заявки в топ-5</h2>
+  <h2>Заявки в топ-5 (старые)</h2>
+  <p class="muted">Новые заявки приходят вместе с прохождениями ниже.</p>
   {% if top5_applications %}
     <ul class="mod-list">
       {% for a in top5_applications %}
@@ -72,7 +73,7 @@
       {% endfor %}
     </ul>
   {% else %}
-    <p class="muted">Нет активных заявок в топ-5.</p>
+    <p class="muted">Нет старых заявок в топ-5.</p>
   {% endif %}
 
   <h2>Заявки о выполнении</h2>
@@ -85,6 +86,9 @@
               {{ c.achievement.title if c.achievement else c.achievement_id }}
             </a>
             <span class="badge badge-pending">{{ c.status|completion_status_label }}</span>
+            {% if c.top5_claim %}
+              <span class="badge badge-top5">Топ-5: просит #{{ c.top5_claim.proposed_position }}</span>
+            {% endif %}
           </div>
           {% if c.user %}
             <p class="muted">Заявитель: {{ c.user.display_name or c.user.username }}
@@ -103,6 +107,10 @@
           {% else %}
             <p class="muted">Без доказательств.</p>
           {% endif %}
+          {% if c.top5_claim %}
+            <p class="muted">Обоснование сложности:</p>
+            <p class="prose">{{ c.top5_claim.justification }}</p>
+          {% endif %}
           <form method="post" action="/moderation/completions/{{ c.id }}" class="stack">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <label class="field">
@@ -110,13 +118,33 @@
               <textarea name="reason" rows="2" maxlength="500"
                         placeholder="Только для отклонения"></textarea>
             </label>
-            <div class="row">
-              <button type="submit" class="btn btn-primary" name="decision" value="approved"
-                      data-confirm="Подтвердить выполнение? Заявка будет одобрена.">Одобрить</button>
-              <button type="submit" class="btn btn-danger" name="decision" value="rejected"
-                      data-confirm="Отклонить заявку? Это действие нельзя отменить."
-                      formnovalidate>Отклонить</button>
-            </div>
+            {% if c.top5_claim %}
+              <label class="field">
+                <span class="field-label">Место в топ-5 (ваш выбор)</span>
+                <select name="top5_position">
+                  {% for n in range(1, 7) %}
+                    <option value="{{ n }}"{% if n == c.top5_claim.proposed_position %} selected{% endif %}>#{{ n }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <div class="row">
+                <button type="submit" class="btn btn-primary" name="decision" value="approved_top5"
+                        data-confirm="Одобрить прохождение и выставить временное место в топ-5?">Принять как сложное</button>
+                <button type="submit" class="btn" name="decision" value="approved"
+                        data-confirm="Одобрить прохождение без места в топ-5? Заявка в топ-5 будет отклонена.">Принять</button>
+                <button type="submit" class="btn btn-danger" name="decision" value="rejected"
+                        data-confirm="Отклонить прохождение и заявку в топ-5? Это действие нельзя отменить."
+                        formnovalidate>Отказать</button>
+              </div>
+            {% else %}
+              <div class="row">
+                <button type="submit" class="btn btn-primary" name="decision" value="approved"
+                        data-confirm="Подтвердить выполнение? Заявка будет одобрена.">Одобрить</button>
+                <button type="submit" class="btn btn-danger" name="decision" value="rejected"
+                        data-confirm="Отклонить заявку? Это действие нельзя отменить."
+                        formnovalidate>Отклонить</button>
+              </div>
+            {% endif %}
           </form>
         </li>
       {% endfor %}

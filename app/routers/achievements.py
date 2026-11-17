@@ -389,6 +389,9 @@ def complete(
     external_url: str = Form(""),
     harder_count: str = Form(""),
     hide_proofs: str = Form(""),
+    top5_claim: str = Form(""),
+    top5_position: str = Form(""),
+    top5_justification: str = Form(""),
     file: Annotated[UploadFile | None, File()] = None,
 ) -> HTMLResponse:
     if request.state.user is None:
@@ -411,8 +414,25 @@ def complete(
             f"?error={quote('Выберите, сложнее или легче ваших достижений новое.')}",
             status_code=303,
         )
+    claim_position = None
+    claim_justification = ""
+    if top5_claim == "on":
+        claim_position = top5_service.parse_position(top5_position)
+        claim_justification = (top5_justification or "").strip()
+        claim_error = None
+        if claim_position is None:
+            claim_error = "Укажите запрашиваемое место в топ-5 от 1 до 5."
+        elif not claim_justification:
+            claim_error = "Обоснование сложности обязательно для заявки в топ-5."
+        elif len(claim_justification) > top5_service.MAX_JUSTIFICATION:
+            claim_error = "Обоснование сложности слишком длинное."
+        if claim_error is not None:
+            return RedirectResponse(
+                f"/achievements/{achievement_id}?error={quote(claim_error)}",
+                status_code=303,
+            )
     try:
-        completions_service.submit_completion(
+        completion = completions_service.submit_completion(
             request,
             achievement_id=achievement_id,
             description=description,
@@ -426,6 +446,30 @@ def complete(
     except completions_service.CompletionError as exc:
         return RedirectResponse(
             f"/achievements/{achievement_id}?error={quote(str(exc))}", status_code=303
+        )
+    if claim_position is not None:
+        try:
+            top5_service.submit_application(
+                request,
+                achievement_id,
+                proposed_position=claim_position,
+                justification=claim_justification,
+                completion_id=int(completion["id"]),
+            )
+        except top5_service.Top5Error as exc:
+            return RedirectResponse(
+                f"/achievements/{achievement_id}?info=submitted"
+                f"&error={quote(f'Заявка в топ-5 не создана: {exc}')}",
+                status_code=303,
+            )
+        except top5_service.TOP5_ERRORS:
+            return RedirectResponse(
+                f"/achievements/{achievement_id}?info=submitted"
+                f"&error={quote('Заявка в топ-5 не создана. Попробуйте ещё раз.')}",
+                status_code=303,
+            )
+        return RedirectResponse(
+            f"/achievements/{achievement_id}?info=submitted_top5", status_code=303
         )
     return RedirectResponse(
         f"/achievements/{achievement_id}?info=submitted", status_code=303
@@ -505,6 +549,7 @@ def detail(
     )
     info_messages = {
         "submitted": "Доказательство отправлено на модерацию.",
+        "submitted_top5": "Доказательство и заявка в топ-5 отправлены на модерацию.",
         "evaluated": "Оценка сохранена.",
         "updated": "Изменения сохранены и отправлены на модерацию.",
         "report-submitted": "Жалоба отправлена. Модератор её рассмотрит.",
@@ -539,6 +584,7 @@ def detail(
         if item["status"] == "published"
         else []
     )
+    top5_context = top5_service.application_context(request, item)
     return templates.TemplateResponse(
         request=request,
         name="achievements/detail.html",
@@ -560,7 +606,8 @@ def detail(
             "can_evaluate": can_evaluate,
             "eval_reason": eval_reason,
             "max_proof_bytes": completions_service.MAX_REQUEST_PROOF_BYTES,
-            "top5_context": top5_service.application_context(request, item),
+            "top5_context": top5_context,
+            "top5_claim_allowed": can_submit and top5_context["can_claim"],
             "error": error,
             "info": info_messages.get(info, info),
         },

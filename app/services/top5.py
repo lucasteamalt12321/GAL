@@ -3,12 +3,14 @@
 Обычные пользовательские оценки живут в ``evaluations`` и не смешиваются с
 решением модератора. Здесь — отдельный сценарий:
 
-1. автор опубликованного достижения подаёт заявку (позиция, доказательство,
-   обоснование);
-2. модератор вручную одобряет временное место (до третьей обычной оценки) или
-   отклоняет заявку; место 1–6 он выбирает сам в форме решения;
-3. ``bt_recompute`` пересчитывает временную силу, а вьюха
-   ``public.public_achievements`` показывает общий топ со звёздочкой.
+1. пользователь отправляет прохождение достижения и отмечает «заявка в топ-5»
+   (запрашиваемое место + обоснование сложности); доказательство — proof
+   самого прохождения, заявка привязана к нему через ``completion_id``;
+2. модератор в общей очереди либо принимает прохождение «как сложное» (место
+   1–6 выбирает сам, по умолчанию — запрошенное), либо принимает обычным
+   образом, либо отказывает; связанные заявки закрываются тем же решением;
+3. ``bt_recompute`` ставит временную силу посередине между соседями выбранного
+   места, а вьюха ``public.public_achievements`` показывает топ со звёздочкой.
 
 Схема 027 всё ещё содержит таблицы экспертных приглашений, но приложение их не
 использует: независимая экспертиза временно отключена. Статус ``expert_review``
@@ -18,7 +20,6 @@
 from __future__ import annotations
 
 import logging
-from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Request
@@ -33,7 +34,6 @@ MODERATOR_ROLES = ("moderator", "admin")
 MAX_POSITION = 5
 PERMANENT_EVALUATIONS = 3
 MAX_JUSTIFICATION = 4000
-MAX_EVIDENCE_URL = 2000
 MAX_NOTE = 2000
 
 ACTIVE_STATUSES = ("pending", "expert_review", "approved")
@@ -95,7 +95,7 @@ DB_MESSAGES = {
         "У достижения уже три обычные оценки — оно в постоянном рейтинге."
     ),
     "ALREADY_IN_TOP5": "Достижение уже занимает постоянное место в топ-5.",
-    "NOT_AUTHOR": "Заявку может подать только автор достижения.",
+    "NOT_AUTHOR": "Заявку подаёт автор достижения или пользователь, отправивший прохождение.",
     "SELF_DECISION": "Нельзя принимать решение по собственной заявке.",
     "REASON_REQUIRED": "Укажите причину.",
     "TERMINAL_APPLICATION": "Заявка уже закрыта и не может быть изменена.",
@@ -137,12 +137,11 @@ def parse_position(raw: object, *, maximum: int = MAX_POSITION) -> int | None:
     return number
 
 
-def valid_evidence_url(raw: str) -> bool:
-    value = (raw or "").strip()
-    if not value or len(value) > MAX_EVIDENCE_URL:
-        return False
-    parsed = urlsplit(value)
-    return parsed.scheme.lower() in ("http", "https") and bool(parsed.netloc)
+def _is_missing_completion_column(exc: APIError) -> bool:
+    """Колонки completion_id ещё нет (деплой раньше миграции 031)."""
+    code = str(getattr(exc, "code", "") or "").upper()
+    text = f"{getattr(exc, 'message', '')} {getattr(exc, 'details', '')}".lower()
+    return code == "PGRST204" or ("completion_id" in text and "column" in text)
 
 
 def _achievement_row(client, achievement_id: int) -> dict | None:
@@ -162,34 +161,27 @@ def _achievement_row(client, achievement_id: int) -> dict | None:
 
 
 def application_context(request: Request, achievement: dict) -> dict:
-    """Что показывать на карточке достижения: заявка и доступность формы."""
+    """Карточка достижения: активная заявка и доступность чекбокса в форме.
+
+    Заявку подаёт любой пользователь вместе с прохождением, поэтому проверка
+    автора не нужна; видимость чужой заявки ограничивает RLS.
+    """
     user = request.state.user
     context = {
-        "can_apply": False,
-        "apply_blocked_reason": None,
+        "can_claim": False,
         "my_application": None,
+        "is_applicant": False,
     }
     if user is None:
         return context
-    is_creator = str(user.id) == str(achievement.get("creator_id"))
-    if not is_creator:
-        context["apply_blocked_reason"] = "Заявку подаёт автор достижения."
-        return context
     if achievement.get("status") != "published":
-        context["apply_blocked_reason"] = "Достижение ещё не опубликовано."
         return context
     if int(achievement.get("evaluation_count") or 0) >= PERMANENT_EVALUATIONS:
-        context["apply_blocked_reason"] = (
-            "У достижения уже три оценки — оно в постоянном рейтинге."
-        )
         return context
     # Эффективное место могло сдвинуться временной заявкой; ограничение
     # «уже в топ-5» относится только к постоянному месту.
     rank = achievement.get("permanent_rank", achievement.get("rank"))
     if rank is not None and int(rank) <= MAX_POSITION:
-        context["apply_blocked_reason"] = (
-            "Достижение уже занимает постоянное место в топ-5."
-        )
         return context
 
     client = auth_service.user_client_from_request(request)
@@ -198,7 +190,9 @@ def application_context(request: Request, achievement: dict) -> dict:
     try:
         res = (
             client.table("top5_applications")
-            .select("id,status,proposed_position,created_at,decision_reason")
+            .select(
+                "id,status,proposed_position,created_at,decision_reason,applicant_id"
+            )
             .eq("achievement_id", achievement["id"])
             .in_("status", list(ACTIVE_STATUSES))
             .limit(1)
@@ -211,9 +205,10 @@ def application_context(request: Request, achievement: dict) -> dict:
         raise
     active = (res.data or [None])[0]
     context["my_application"] = active
-    context["can_apply"] = active is None
-    if active is not None:
-        context["apply_blocked_reason"] = "Заявка уже рассматривается."
+    context["can_claim"] = active is None
+    context["is_applicant"] = bool(
+        active and str(active.get("applicant_id")) == str(user.id)
+    )
     return context
 
 
@@ -223,30 +218,26 @@ def submit_application(
     *,
     proposed_position: object,
     justification: str,
-    evidence_url: str,
-    evidence_note: str = "",
+    completion_id: int,
 ) -> dict:
+    """Заявка в топ-5, привязанная к прохождению пользователя.
+
+    Доказательство — proof самого прохождения; отдельная ссылка не нужна
+    (миграция 031 сделала evidence_url необязательным).
+    """
     user, client = _client(request)
     position = parse_position(proposed_position)
     if position is None:
         raise Top5Error("Укажите место в топ-5 от 1 до 5.")
     justification = (justification or "").strip()
-    evidence_url = (evidence_url or "").strip()
-    evidence_note = (evidence_note or "").strip()
     if not justification:
         raise Top5Error("Обоснование обязательно.")
     if len(justification) > MAX_JUSTIFICATION:
         raise Top5Error("Обоснование слишком длинное.")
-    if not valid_evidence_url(evidence_url):
-        raise Top5Error("Приложите ссылку на доказательство (http или https).")
-    if len(evidence_note) > MAX_NOTE:
-        raise Top5Error("Комментарий к доказательству слишком длинный.")
 
     achievement = _achievement_row(client, achievement_id)
     if achievement is None:
         raise Top5Error("Достижение не найдено.")
-    if str(achievement.get("creator_id")) != str(user.id):
-        raise Top5Error(DB_MESSAGES["NOT_AUTHOR"])
     if achievement.get("status") != "published":
         raise Top5Error(DB_MESSAGES["ACHIEVEMENT_NOT_PUBLISHED"])
     if int(achievement.get("evaluation_count") or 0) >= PERMANENT_EVALUATIONS:
@@ -254,6 +245,21 @@ def submit_application(
     rank = achievement.get("rank")
     if rank is not None and int(rank) <= MAX_POSITION:
         raise Top5Error(DB_MESSAGES["ALREADY_IN_TOP5"])
+
+    completion = (
+        client.table("achievement_completions")
+        .select("id,user_id,achievement_id")
+        .eq("id", completion_id)
+        .maybe_single()
+        .execute()
+    )
+    row = completion.data if completion is not None else None
+    if (
+        row is None
+        or str(row.get("user_id")) != str(user.id)
+        or int(row.get("achievement_id")) != int(achievement_id)
+    ):
+        raise Top5Error("Заявка подаётся вместе с вашим прохождением достижения.")
 
     try:
         active = (
@@ -279,15 +285,84 @@ def submit_application(
                     "applicant_id": user.id,
                     "proposed_position": position,
                     "justification": justification,
-                    "evidence_url": evidence_url,
-                    "evidence_note": evidence_note,
+                    "completion_id": completion_id,
                 }
             )
             .execute()
         )
     except TOP5_ERRORS as exc:
+        # RLS скрывает чужую активную заявку: страховка — уникальный индекс.
+        if "23505" in str(exc) or "duplicate" in str(exc).lower():
+            raise Top5Error("Заявка уже рассматривается.") from exc
         raise _db_error(exc) from exc
     return (res.data or [{}])[0]
+
+
+def claims_for_completions(client, completion_ids: list[int]) -> dict[int, dict]:
+    """Активные заявки топ-5 по id прохождений (для общей очереди модерации).
+
+    До миграции 031 колонки completion_id нет — заявки не привязаны и блок
+    очереди работает по-старому, поэтому ошибка колонки даёт пустой словарь.
+    """
+    if not completion_ids:
+        return {}
+    try:
+        res = (
+            client.table("top5_applications")
+            .select(
+                "id,completion_id,achievement_id,applicant_id,"
+                "proposed_position,justification,status"
+            )
+            .in_("completion_id", completion_ids)
+            .in_("status", list(ACTIVE_STATUSES))
+            .execute()
+        )
+    except APIError as exc:
+        if _is_missing_schema(exc) or _is_missing_completion_column(exc):
+            return {}
+        raise
+    return {
+        int(row["completion_id"]): row
+        for row in res.data or []
+        if row.get("completion_id") is not None
+    }
+
+
+def active_claim_for_completion(client, completion_id: int) -> dict | None:
+    try:
+        res = (
+            client.table("top5_applications")
+            .select("id,applicant_id,proposed_position,status,achievement_id")
+            .eq("completion_id", completion_id)
+            .in_("status", list(ACTIVE_STATUSES))
+            .limit(1)
+            .execute()
+        )
+    except APIError as exc:
+        if _is_missing_schema(exc) or _is_missing_completion_column(exc):
+            return None
+        raise
+    return (res.data or [None])[0]
+
+
+def close_claims_for_achievement(client, achievement_id: int, reason: str) -> None:
+    """Закрывает незавершённые заявки скрытого достижения.
+
+    Одобренные заявки не трогаем: их временные записи убирает
+    apply_temporary_ratings (достижение больше не published).
+    """
+    try:
+        (
+            client.table("top5_applications")
+            .update({"status": "cancelled", "decision_reason": reason})
+            .eq("achievement_id", achievement_id)
+            .in_("status", ["pending", "expert_review"])
+            .execute()
+        )
+    except APIError as exc:
+        if _is_missing_schema(exc):
+            return
+        raise
 
 
 def cancel_application(request: Request, application_id: int) -> None:
@@ -441,7 +516,49 @@ def moderation_queue(request: Request) -> list[dict]:
     for application in applications:
         votes = eval_rows.get(int(application["id"]), [])
         application["evaluation_count"] = len(votes)
-    return applications
+    return _legacy_applications(client, applications)
+
+
+def _legacy_applications(client, applications: list[dict]) -> list[dict]:
+    """Заявки для отдельного блока очереди: только без pending-прохождения.
+
+    Новые заявки привязаны к прохождению (completion_id) и рассматриваются в
+    общем списке; здесь остаются старые и заявки уже одобренных прохождений.
+    До миграции 031 привязки нет — все заявки считаются legacy.
+    """
+    ids = [int(row["id"]) for row in applications]
+    try:
+        links = (
+            client.table("top5_applications")
+            .select("id,completion_id")
+            .in_("id", ids)
+            .execute()
+        )
+    except APIError as exc:
+        if _is_missing_schema(exc) or _is_missing_completion_column(exc):
+            return applications
+        raise
+    completion_by_id = {
+        int(row["id"]): row.get("completion_id") for row in links.data or []
+    }
+    completion_ids = [
+        int(value) for value in completion_by_id.values() if value is not None
+    ]
+    statuses: dict[int, str] = {}
+    if completion_ids:
+        cres = (
+            client.table("achievement_completions")
+            .select("id,status")
+            .in_("id", completion_ids)
+            .execute()
+        )
+        statuses = {int(row["id"]): row["status"] for row in cres.data or []}
+    legacy = []
+    for application in applications:
+        completion_id = completion_by_id.get(int(application["id"]))
+        if completion_id is None or statuses.get(int(completion_id)) != "pending":
+            legacy.append(application)
+    return legacy
 
 
 def try_moderation_queue(request: Request) -> list[dict]:

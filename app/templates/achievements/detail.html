@@ -58,31 +58,19 @@
         чем больше попарных сравнений, тем он уже.
       {% endif %}
       {% if achievement.is_temporary %}
-        Временная сила учитывает обычные оценки и место, выставленное
-        модератором вручную относительно текущего постоянного топа.
+        Временное место выставлено модератором: сила — среднее между
+        рейтингами достижений выше и ниже.
       {% endif %}
     </p>
   {% endif %}
 
-  {% if top5_context and is_creator and achievement.status == 'published' %}
-    {% if top5_context.my_application %}
-      <div class="evaluation-box">
-        <p>
-          Заявка в топ-5: <strong>{{ top5_context.my_application.status|top5_status_label }}</strong>.
-        </p>
+  {% if top5_context and top5_context.my_application and achievement.status == 'published' %}
+    <div class="evaluation-box">
+      <p>Заявка в топ-5: <strong>{{ top5_context.my_application.status|top5_status_label }}</strong>.</p>
+      {% if is_creator or is_moderator or top5_context.is_applicant %}
         <a class="btn" href="/top5/{{ top5_context.my_application.id }}">Открыть заявку</a>
-      </div>
-    {% elif top5_context.can_apply %}
-      <div class="evaluation-box">
-        <p>
-          Достижение можно выдвинуть на временное место в топ-5: заявку
-          рассмотрит модератор и вручную выставит место.
-        </p>
-        <a class="btn" href="/top5/apply/{{ achievement.id }}">Подать заявку в топ-5</a>
-      </div>
-    {% elif top5_context.apply_blocked_reason %}
-      <p class="muted evaluation-hint">{{ top5_context.apply_blocked_reason }}</p>
-    {% endif %}
+      {% endif %}
+    </div>
   {% endif %}
 
   {% if is_creator and achievement.status == 'pending' %}

@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D17 completed; все миграции 001–030 применены к проду: 025/026/027 — 2026-11-14, 028 — 2026-11-15, 021/029/030 — 2026-11-17).
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **96%** (D1–D17 completed; D18 «v1.11: заявка топ-5 при прохождении» — in_progress: код и тесты готовы, миграция 031 ждёт подтверждения владельца и применения к проду, коммит не создан). Все миграции 001–030 применены к проду: 025/026/027 — 2026-11-14, 028 — 2026-11-15, 021/029/030 — 2026-11-17.
 
 ## Deliverables статус
 
@@ -25,8 +25,27 @@
 | D15 | v1.9: предварительный топ-5       | completed |
 | D16 | v1.10: видимость доказательств    | completed |
 | D17 | Bugfix по итогам bug-hunt 11-15   | completed |
+| D18 | v1.11: заявка топ-5 при прохождении | in_progress |
 
 ## Changelog
+
+### 2026-11-17 — D18 (v1.11): заявка в топ-5 при прохождении, 3 решения модератора, midpoint
+
+**Запрос.** «Ты неправильно понял систему заявок в топ-5. При прохождении достижения должна быть кнопка/чекбокс "заявка в топ-5"… поля "запрашиваемое место" и "обоснование сложности"… заявки в основном списке заявок у модераторов… 3 кнопки: принять как сложное, принять, отказать… при "принять как сложное" модератору показывается запрошенное место и свой выбор… временный рейтинг посередине между рейтингами достижений над ним и под ним… экспертную оценку пока не добавляй». План одобрен («приступай»), реализован с 3 субагентами (миграция+инварианты, midpoint, шаблоны/JS/CSS) и ручной интеграцией сервисов/роутеров/тестов.
+
+**Форма прохождения.** `_proof_form.html`: чекбокс «Заявка в топ-5» (`top5_claim`) раскрывает поля `top5_position` (1–5) и `top5_justification` (≤4000) через `initTop5ClaimToggle` в `main.js`. Доступность (`top5_claim_allowed`): пользователь вошёл, нет своего completion, достижение published (или pending-своё), <3 оценок, не в постоянном топ-5 (`permanent_rank`), нет активной заявки (`top5.application_context` → `can_claim`). `POST /achievements/{id}/complete` валидирует поля заявки до submit; после успешного прохождения создаёт заявку с `completion_id`; успех → `?info=submitted_top5`, сбой заявки → `?info=submitted&error=…` (прохождение сохраняется). Маршруты `/top5/apply` (GET/POST) и шаблон удалены.
+
+**Модерация.** `moderation.list_pending_completions` прикрепляет `top5_claim` (`top5.claims_for_completions`); очередь показывает бейдж «Топ-5: просит #N», обоснование, селект места 1–6 (default = запрошенное) и кнопки `approved_top5`/`approved`/`rejected`. `decide_completion(..., top5_position)` закрывает прохождение и заявку одним решением: `approved_top5` → `decide_application(approved, estimated_position)`; `approved`/`rejected` → заявка `rejected` (своя — `cancelled`) с причиной по умолчанию. Защита: нет заявки → ошибка; своя заявка + `approved_top5` → ошибка; место вне 1–6 → ошибка; повторный fetch заявки после approve (3-я оценка могла конвертировать) → пропуск закрытия; сбой закрытия → предупреждение в редиректе, решение сохраняется. `hide_achievement` закрывает активные заявки (`close_claims_for_achievement`). Старая секция очереди («Заявки в топ-5 (старые)») фильтрует заявки с pending-прохождением (`_legacy_applications`).
+
+**Midpoint.** `bt_recompute._temporary_payload`: рабочий список = полный ranked-топ (published, ranked, ≥2 оценок, без кандидатов) + ранее одобренные временные, вставленные в порядке решений (`decided_at`, id). Место = round(среднее голосов модераторов) иначе `proposed_position`, clamp [1, len+1]. Оба соседа → среднее `bt_strength`; только нижний/верхний → экстраполяция по разрыву соседней пары (min `TOP5_MIN_GAP=0.05`, при <2 опорах `TOP5_EDGE_GAP=0.5`); пустой список → `bt_strength` кандидата иначе 0. Кандидат вставляется в список для последующих заявок. `anchored_strength` удалён из `bradley_terry.py`, `TOP5_ANCHOR_PRIOR` и смешивание удалены.
+
+**Миграция 031** (`031_top5_completion_claims.sql`, **к проду не применена**): `completion_id bigint references achievement_completions on delete set null` + partial index; `evidence_url` nullable (CHECK допускает null/пусто/http(s)); guard INSERT разрешает автора ИЛИ владельца прохождения (код NOT_AUTHOR сохранён), TARGET_IMMUTABLE включает `completion_id`; RLS-insert обновлён; backfill активных старых заявок по approved-прохождению автора; `notify pgrst, 'reload schema'`. До применения код деградирует мягко: `_is_missing_completion_column` (PGRST204) → `claims_for_completions`={}, `active_claim_for_completion`=None, legacy-очередь без фильтра; `APPLICATION_SELECT` не тронут (без completion_id), чтобы не ловить PGRST204 на карточках.
+
+**Тесты.** Переработаны `test_top5.py` (контекст `can_claim`, submit с completion_id, деградация без 031, legacy-фильтр, 404 на `/top5/apply`), `test_submissions.py` (чекбокс и его отсутствие), `test_difficulty.py` (заявка при прохождении, валидация, сбой заявки), `test_moderation.py` (3 решения, передача места, предупреждение, сервисное закрытие заявки во всех ветках), `test_bt_recompute.py` (midpoint, края, несколько временных), `test_migration_invariants.py` (+5 инвариантов 031), `test_achievements.py` (новый текст временного места). **334 passed**, ruff check/format чисты.
+
+**Документация.** README.md (фича, топ-5, миграции 029–031, статус 021), docs/README.md (раздел топ-5, модули, миграции, жизненный цикл, качество, статус), docs/bradley_terry.md (midpoint вместо anchored_strength), Memory Bank синхронизированы.
+
+**Осталось.** Подтверждение владельца → применение 031 к проду (валидация BEGIN/ROLLBACK, postflight guard/RLS) → коммит и деплой → live-проверка полного цикла (чекбокс → очередь → «принять как сложное» → `#N*` → конверсия). Параллельная сессия закоммитила несвязанный OAuth-CSP фикс (`bfd4edb`); D18 проверен поверх него.
 
 ### 2026-11-17 — миграции 021/029/030 применены к проду
 
@@ -483,4 +502,4 @@
 
 ## last_checked_commit
 
-`e7b3f7e feat(top5): manual moderator placement, remove expert review` (2026-11-17) — `main` содержит v1.9 (топ-5), v1.10 (видимость доказательств), D17 и отключение экспертной оценки топ-5 (ручное место модератора). К проду применены все миграции 001–030: `022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021_oauth_provider.sql`/`029_submit_evaluation_position_clamp.sql`/`030_top5_apply_upsert.sql` — 2026-11-17 (валидация в `BEGIN/ROLLBACK`, HTTP 201, postflight чистый). `pytest` — 298 passed, ruff чист (на `e7b3f7e`).
+`bfd4edb fix(oauth): allow client redirect origins in CSP form-action on authorize` (2026-11-17, коммит параллельной сессии — CSP form-action для `/oauth/authorize`, к D18 не относится). База D18 — `22571e3 memory bank: record applying migrations 021/029/030 to prod`; `main` содержит v1.9 (топ-5), v1.10 (видимость доказательств), D17 и отключение экспертной оценки топ-5. К проду применены все миграции 001–030: `022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021`/`029`/`030` — 2026-11-17. **Не закоммичено (D18, v1.11):** переработка заявок топ-5 (чекбокс при прохождении, 3 решения модератора в общей очереди, midpoint-сила, миграция `031_top5_completion_claims.sql` — к проду не применена, ждёт подтверждения владельца). Рабочая копия: `pytest` — **334 passed**, ruff check/format чисты (проверено поверх `bfd4edb`).

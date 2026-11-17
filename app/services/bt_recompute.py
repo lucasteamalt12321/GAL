@@ -122,9 +122,10 @@ def recompute_global_ratings() -> dict | None:
 
 TOP5_MAX_REFERENCES = 5
 TOP5_PERMANENT_EVALUATIONS = 3
-# Псевдосравнения вокруг соседней опоры: один голос не должен уводить
-# временную силу на сотни рейтинговых очков.
-TOP5_ANCHOR_PRIOR = 10.0
+# Крайние места экстраполируются: разрыв берётся из соседней пары рабочего
+# списка (не меньше TOP5_MIN_GAP), а если пары нет — TOP5_EDGE_GAP.
+TOP5_EDGE_GAP = 0.5
+TOP5_MIN_GAP = 0.05
 
 
 def _reference_key(row: dict) -> tuple:
@@ -144,20 +145,23 @@ def _reference_key(row: dict) -> tuple:
 def _temporary_payload(client) -> list[dict]:
     """Собирает временные силы для одобренных заявок топ-5.
 
-    Место, вручную выставленное модератором, переводится в сравнения кандидата
-    с текущим постоянным топом: estimated_position=p означает, что кандидат
-    сложнее опор на местах p..5 и легче опор выше. Опорные силы фиксированы,
-    поэтому результат сопоставим с bt_strength постоянного рейтинга.
+    Место модератора переводится в середину между силами достижений прямо
+    выше и ниже него в рабочем списке (постоянный ранжированный топ плюс уже
+    размещённые временные кандидаты). Крайние места экстраполируются по
+    разрыву соседней пары.
     """
     applications = _fetch_all(
         client,
         "top5_applications",
-        "id,achievement_id,status,proposed_position",
+        "id,achievement_id,status,proposed_position,decided_at",
         "id",
     )
     active = [row for row in applications if row.get("status") == "approved"]
     if not active:
         return []
+    # Раньше одобренные заявки размещаются первыми: их места становятся
+    # соседями для последующих кандидатов.
+    active.sort(key=lambda row: (row.get("decided_at") or "", int(row["id"])))
 
     achievements = _fetch_all(
         client,
@@ -178,10 +182,12 @@ def _temporary_payload(client) -> list[dict]:
         and int(row["id"]) not in candidate_ids
     ]
     reference_rows.sort(key=_reference_key)
-    reference_rows = reference_rows[:TOP5_MAX_REFERENCES]
-    references = {
-        int(row["id"]): float(row.get("bt_strength") or 0.0) for row in reference_rows
-    }
+    # Полный ранжированный список — рабочий список: местам 6+ тоже нужны
+    # реальные соседи, поэтому без обрезки до топ-5.
+    working: list[dict] = [
+        {"id": int(row["id"]), "strength": float(row.get("bt_strength") or 0.0)}
+        for row in reference_rows
+    ]
 
     evaluations = _fetch_all(
         client,
@@ -212,68 +218,36 @@ def _temporary_payload(client) -> list[dict]:
             continue
 
         votes = evaluations_by_application.get(application_id, [])
-        bt_strength = achievement.get("bt_strength")
-        bt_strength = float(bt_strength) if bt_strength is not None else None
-
         positions = [int(vote.get("estimated_position") or 6) for vote in votes]
-
-        if not positions and bt_strength is not None:
-            # Модератор не выбрал место — временная сила совпадает с
-            # постоянной BT, которую уже дали обычные оценки.
-            strength = bt_strength
-        elif references and (
-            positions or int(application.get("proposed_position") or 0)
-        ):
-            # Без выбора модератора одобрение всё равно даёт временное место:
-            # позицию автора используем как единственное (не независимое)
-            # основание.
-            used_positions = positions or [
-                int(application.get("proposed_position") or 6)
-            ]
-            reference_ids = [int(row["id"]) for row in reference_rows]
-            mean_position = sum(used_positions) / len(used_positions)
-            anchor_index = min(
-                max(round(mean_position) - 1, 0),
-                len(reference_rows) - 1,
-            )
-            anchor_strength = float(
-                reference_rows[anchor_index].get("bt_strength") or 0.0
-            )
-            # При наличии выбора модератора стартуем от опоры: обычная BT-сила
-            # учтётся один раз — в смешивании ниже, а не ещё и в априори.
-            initial_strength = (
-                anchor_strength if positions or bt_strength is None else bt_strength
-            )
-            comparisons: list[bradley_terry.Comparison] = []
-            for position in used_positions:
-                position = min(max(position, 1), TOP5_MAX_REFERENCES + 1)
-                # Позиция — это место в упорядоченном списке, а не пять
-                # независимых матчей: сравниваем кандидата только с соседними
-                # опорами, иначе победы над #2–#5 завышают силу.
-                if position > 1:
-                    above = reference_ids[min(position - 2, len(reference_ids) - 1)]
-                    comparisons.append(bradley_terry.Comparison(above, achievement_id))
-                if position - 1 < len(reference_ids):
-                    below = reference_ids[position - 1]
-                    comparisons.append(bradley_terry.Comparison(achievement_id, below))
-            strength = bradley_terry.anchored_strength(
-                achievement_id,
-                comparisons,
-                references,
-                initial=initial_strength,
-                prior=TOP5_ANCHOR_PRIOR,
-            )
-            # Обычные оценки уже дали постоянную силу; смешиваем её с ручным
-            # местом модератора, чтобы временный рейтинг учитывал оба источника.
-            if positions and bt_strength is not None and ordinary_count > 0:
-                strength = (
-                    strength * len(positions) + bt_strength * ordinary_count
-                ) / (len(positions) + ordinary_count)
-        elif bt_strength is not None:
-            strength = bt_strength
+        if positions:
+            place = round(sum(positions) / len(positions))
         else:
-            strength = 0.0
+            place = int(application.get("proposed_position") or 6)
+        place = min(max(place, 1), len(working) + 1)
 
+        above = working[place - 2] if place >= 2 else None
+        below = working[place - 1] if place - 1 < len(working) else None
+        if above is not None and below is not None:
+            strength = (above["strength"] + below["strength"]) / 2
+        elif below is not None:
+            gap = (
+                below["strength"] - working[1]["strength"]
+                if len(working) >= 2
+                else TOP5_EDGE_GAP
+            )
+            strength = below["strength"] + max(gap, TOP5_MIN_GAP)
+        elif above is not None:
+            gap = (
+                working[-2]["strength"] - above["strength"]
+                if len(working) >= 2
+                else TOP5_EDGE_GAP
+            )
+            strength = above["strength"] - max(gap, TOP5_MIN_GAP)
+        else:
+            bt_strength = achievement.get("bt_strength")
+            strength = float(bt_strength) if bt_strength is not None else 0.0
+
+        working.insert(place - 1, {"id": achievement_id, "strength": strength})
         payload.append(
             {
                 "achievement_id": achievement_id,

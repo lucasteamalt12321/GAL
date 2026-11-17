@@ -92,7 +92,7 @@ gal/
 - **Achievement:** `pending → published` (после модерации), либо `rejected`; `deleted` — автором (только `pending`) или модератором (hide/принятие жалобы).
 - **Completion:** `pending → approved` / `rejected` (модерация proof). `UNIQUE(achievement, user)`. При reject/hide достижения его pending-заявки отклоняются; автор может переотправить rejected-заявку (reset RPC + замена proof) из карточки или `/submissions`. Флаг `proofs_visible` (028) скрывает доказательство от остальных; верификация создателя всегда видима.
 - **Evaluation:** `UNIQUE(achievement, user)`. Новые оценки принимаются в любой момент, включая `ranked`; после каждой оценки пересчитываются среднее, ранги и BT. `locked` оставлен в схеме для совместимости, но всегда false.
-- **Top-5 application:** `pending → approved` (временная позиция, место 1–6 выставляет модератор вручную) / `rejected` (с причиной); `cancelled` — автором или модератором. Независимая экспертиза отключена; legacy-статус `expert_review` показывается как «На рассмотрении» и доступен для решения. Одна активная заявка на достижение; третья обычная оценка снимает временную запись.
+- **Top-5 application:** создаётся чекбоксом вместе с прохождением (`pending`, `completion_id` — 031) → `approved` (временная позиция; «Принять как сложное», место 1–6 выбирает модератор, по умолчанию запрошенное) / `rejected` (с причиной; в т.ч. при обычном принятии/отказе прохождения) / `cancelled` — автором или модератором. Независимая экспертиза отключена; legacy-статус `expert_review` показывается как «На рассмотрении» и доступен для решения. Одна активная заявка на достижение; третья обычная оценка снимает временную запись (`converted`).
 - **Report:** `pending → accepted` / `rejected`.
 - **Moderation review:** пишется при каждом решении (achievement/completion), только от имени текущего модератора (RLS 013), виден модераторам в `/moderation/history`.
 
@@ -108,9 +108,10 @@ gal/
 5. Кластерный бутстрэп по пользователям: SE и 95% percentile CI (≥3 шкал, ≥5 реплик)
 6. RPC apply_bt_ratings(jsonb): пишет bt_* (включая se/ci) и вызывает recompute_ranks_internal()
 7. Ранги: bt_strength desc, fallback average_position/rank_order/id; UI показывает «± SE · 95% ДИ» при ≥2 сравнениях
-8. recompute_temporary_ratings: anchored_strength против постоянного топ-5
-   (голос-место → сравнение с соседними опорами по avg/rank_order; prior α=10
-   вокруг опоры, BT-сила смешивается один раз), RPC apply_temporary_ratings
+8. recompute_temporary_ratings: midpoint между bt_strength соседей места
+   модератора в рабочем списке (ranked-топ + ранее одобренные временные
+   в порядке решений; края — экстраполяция по разрыву соседней пары,
+   TOP5_MIN_GAP=0.05 / TOP5_EDGE_GAP=0.5), RPC apply_temporary_ratings
    (030: адресное удаление не-eligible строк + upsert по achievement_id,
    а не очистка всего кэша — stale payload не стирает свежие строки)
 9. Общий display_rank = ranked + временные; permanent_rank не меняется
@@ -135,7 +136,7 @@ gal/
 - Все ответы получают security-заголовки (`nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, CSP `frame-ancestors 'none'`, HSTS в проде); CSRF-токен обязателен для POST.
 - Внешние ссылки-доказательства допускаются только со схемой `http(s)://` (сервис + CHECK в БД).
 - Публичные списки прошедших (023/026/028): `achievement_completers` и `user_completed_achievements` — `security definer`, отдают только approved-заявки опубликованных достижений, публичные поля профиля и proofs с учётом `proofs_visible` (без email и moderation_reviews); скрытые proofs опускаются для всех, кроме владельца и модераторов.
-- Топ-5 (027): автор не может одобрить свою заявку; ручное место модератора хранится отдельно от `evaluations` и не меняет `evaluation_count`; legacy-голоса экспертов игнорируются при пересчёте; каждое решение пишется в `top5_events`; временные силы пишет только `apply_temporary_ratings` (service role).
+- Топ-5 (027/031): заявку подаёт автор достижения или владелец прохождения (guard INSERT + RLS); модератор не может выставить место собственной заявке; ручное место модератора хранится отдельно от `evaluations` и не меняет `evaluation_count`; legacy-голоса экспертов игнорируются при пересчёте; каждое решение пишется в `top5_events`; временные силы пишет только `apply_temporary_ratings` (service role).
 - `SERVICE_ROLE_KEY` никогда не попадает во frontend.
 
 ### 6. Оценка достижения (Personal Scale)

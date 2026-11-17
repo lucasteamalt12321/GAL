@@ -227,3 +227,84 @@ def test_completion_evaluation_uses_two_evaluations() -> None:
     ) in body
     assert "perform public.recompute_ranks_internal()" in body
     assert "e.locked = false" not in body
+
+
+def test_top5_completion_claim_column_and_index() -> None:
+    # 031: заявка связывается с выполнением через completion_id.
+    migration = _collapse(
+        (MIGRATIONS / "031_top5_completion_claims.sql").read_text(encoding="utf-8")
+    )
+
+    assert (
+        "add column if not exists completion_id bigint "
+        "references public.achievement_completions (id) on delete set null"
+    ) in migration
+    assert (
+        "create index if not exists top5_applications_completion_idx "
+        "on public.top5_applications (completion_id) where completion_id is not null"
+    ) in migration
+
+
+def test_top5_evidence_url_is_optional() -> None:
+    # 031: доказательство заявки — proof выполнения, evidence_url необязателен.
+    migration = _collapse(
+        (MIGRATIONS / "031_top5_completion_claims.sql").read_text(encoding="utf-8")
+    )
+
+    assert "alter column evidence_url drop not null" in migration
+    assert "drop constraint if exists top5_applications_evidence_scheme" in migration
+    assert (
+        "check (evidence_url is null or evidence_url = '' "
+        "or evidence_url ~* '^https?://[^[:space:]]+$')"
+    ) in migration
+
+
+def test_top5_application_guard_allows_completion_owner() -> None:
+    guard = _latest_function("top5_application_guard")
+
+    # INSERT: автор достижения ИЛИ владелец выполнения из completion_id.
+    assert "public.achievement_completions" in guard
+    assert "c.id = new.completion_id" in guard
+    assert "c.user_id = v_actor" in guard
+    assert "c.achievement_id = new.achievement_id" in guard
+    assert "raise exception 'not_author'" in guard
+    assert "raise exception 'already_permanent'" in guard
+    assert "raise exception 'already_in_top5'" in guard
+    assert "raise exception 'self_decision'" in guard
+    assert "raise exception 'reason_required'" in guard
+    # UPDATE: completion_id неизменяем, как achievement_id/applicant_id.
+    assert "new.completion_id is distinct from old.completion_id" in guard
+
+
+def test_top5_insert_policy_allows_completion_owner() -> None:
+    sql = _collapse(
+        (MIGRATIONS / "031_top5_completion_claims.sql").read_text(encoding="utf-8")
+    )
+
+    start = sql.find("create policy top5_applications_insert")
+    assert start != -1
+    policy = sql[start:]
+    policy = policy[: policy.find(";")]
+    assert "drop policy if exists top5_applications_insert" in sql
+    assert "applicant_id = auth.uid()" in policy
+    assert "a.creator_id = auth.uid()" in policy
+    assert "achievement_completions" in policy
+    assert "c.id = completion_id" in policy
+    assert "c.user_id = auth.uid()" in policy
+    assert "c.achievement_id = a.id" in policy
+
+
+def test_top5_legacy_claims_backfilled() -> None:
+    migration = _collapse(
+        (MIGRATIONS / "031_top5_completion_claims.sql").read_text(encoding="utf-8")
+    )
+
+    assert (
+        "update public.top5_applications a set completion_id = c.id "
+        "from public.achievement_completions c"
+    ) in migration
+    assert "a.completion_id is null" in migration
+    assert "a.status in ('pending', 'expert_review')" in migration
+    assert "c.achievement_id = a.achievement_id" in migration
+    assert "c.user_id = a.applicant_id" in migration
+    assert "c.status = 'approved'" in migration

@@ -1,3 +1,5 @@
+from urllib.parse import unquote
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -5,6 +7,7 @@ from app.services import achievements as achievements_service
 from app.services import auth as auth_service
 from app.services import completions as completions_service
 from app.services import evaluation as evaluation_service
+from app.services import top5 as top5_service
 
 client = TestClient(app)
 
@@ -182,3 +185,119 @@ def test_completion_without_difficulty_is_rejected(monkeypatch) -> None:
     )
     assert resp.status_code == 303
     assert "error=" in resp.headers["location"]
+
+
+def _top5_completion_post(monkeypatch, data: dict, *, claim_exc=None):
+    _login(monkeypatch)
+    item = {
+        "id": 5,
+        "title": "Existing",
+        "status": "published",
+        "creator_id": "33333333-3333-3333-3333-333333333333",
+    }
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(
+        evaluation_service, "list_user_scale", lambda _r: [_scale_item(2, "Old")]
+    )
+    completions: list[dict] = []
+
+    def _submit(*_args, **kwargs):
+        completions.append(kwargs)
+        return {"id": 7}
+
+    monkeypatch.setattr(completions_service, "submit_completion", _submit)
+    claims: list[tuple] = []
+
+    def _claim(_request, achievement_id, **kwargs):
+        claims.append((achievement_id, kwargs))
+        if claim_exc is not None:
+            raise claim_exc
+        return {"id": 10}
+
+    monkeypatch.setattr(top5_service, "submit_application", _claim)
+    resp = client.post(
+        "/achievements/5/complete",
+        data={"external_url": "https://example.org/proof", "harder_count": "0", **data},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    return resp.headers["location"], completions, claims
+
+
+def test_completion_with_top5_claim_submits_application(monkeypatch) -> None:
+    location, completions, claims = _top5_completion_post(
+        monkeypatch,
+        {
+            "top5_claim": "on",
+            "top5_position": "2",
+            "top5_justification": "Сложнее, чем #2",
+        },
+    )
+    assert location == "/achievements/5?info=submitted_top5"
+    assert len(completions) == 1
+    assert claims == [
+        (
+            5,
+            {
+                "proposed_position": 2,
+                "justification": "Сложнее, чем #2",
+                "completion_id": 7,
+            },
+        )
+    ]
+
+
+def test_completion_without_claim_skips_application(monkeypatch) -> None:
+    location, completions, claims = _top5_completion_post(monkeypatch, {})
+    assert location == "/achievements/5?info=submitted"
+    assert len(completions) == 1
+    assert claims == []
+
+
+def test_top5_claim_requires_position(monkeypatch) -> None:
+    location, completions, claims = _top5_completion_post(
+        monkeypatch,
+        {"top5_claim": "on", "top5_position": "9", "top5_justification": "Сложно"},
+    )
+    assert "error=" in location
+    assert "место" in unquote(location)
+    assert completions == []
+    assert claims == []
+
+
+def test_top5_claim_requires_justification(monkeypatch) -> None:
+    location, completions, claims = _top5_completion_post(
+        monkeypatch,
+        {"top5_claim": "on", "top5_position": "2", "top5_justification": "  "},
+    )
+    assert "error=" in location
+    assert "Обоснование сложности обязательно" in unquote(location)
+    assert completions == []
+    assert claims == []
+
+
+def test_top5_claim_rejects_long_justification(monkeypatch) -> None:
+    location, completions, claims = _top5_completion_post(
+        monkeypatch,
+        {
+            "top5_claim": "on",
+            "top5_position": "2",
+            "top5_justification": "x" * (top5_service.MAX_JUSTIFICATION + 1),
+        },
+    )
+    assert "error=" in location
+    assert "слишком длинное" in unquote(location)
+    assert completions == []
+    assert claims == []
+
+
+def test_top5_claim_failure_keeps_completion(monkeypatch) -> None:
+    location, completions, claims = _top5_completion_post(
+        monkeypatch,
+        {"top5_claim": "on", "top5_position": "2", "top5_justification": "Сложно"},
+        claim_exc=top5_service.Top5Error("Заявка уже рассматривается."),
+    )
+    assert location.startswith("/achievements/5?info=submitted&error=")
+    assert "Заявка в топ-5 не создана: Заявка уже рассматривается." in unquote(location)
+    assert len(completions) == 1
+    assert len(claims) == 1

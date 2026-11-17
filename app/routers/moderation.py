@@ -156,12 +156,15 @@ def decide_completion(
     completion_id: int,
     decision: str = Form(...),
     reason: str = Form(""),
+    top5_position: str = Form(""),
 ) -> HTMLResponse:
     redirect = _guard(request)
     if redirect is not None:
         return redirect
     try:
-        moderation_service.decide_completion(request, completion_id, decision, reason)
+        warning = moderation_service.decide_completion(
+            request, completion_id, decision, reason, top5_position
+        )
     except moderation_service.ModerationError as exc:
         return RedirectResponse(f"{QUEUE_URL}?error={exc}", status_code=303)
     except moderation_service.MODERATION_ERRORS:
@@ -169,4 +172,6 @@ def decide_completion(
             f"{QUEUE_URL}?error=Не удалось сохранить решение. Попробуйте ещё раз.",
             status_code=303,
         )
+    if warning:
+        return RedirectResponse(f"{QUEUE_URL}?error={quote(warning)}", status_code=303)
     return RedirectResponse(QUEUE_URL, status_code=303)

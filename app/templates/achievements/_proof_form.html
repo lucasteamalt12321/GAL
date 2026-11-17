@@ -25,6 +25,26 @@
       </label>
       <p class="muted">Модераторы увидят доказательство при проверке в любом случае.</p>
     {% endif %}
+    {% if top5_claim_allowed %}
+      <label class="checkbox-field">
+        <input type="checkbox" name="top5_claim" value="on" data-top5-claim-toggle>
+        <span>Заявка в топ-5</span>
+      </label>
+      <div class="stack top5-claim-fields" data-top5-claim-fields hidden>
+        <label class="field">
+          <span class="field-label">Запрашиваемое место</span>
+          <select name="top5_position">
+            {% for n in range(1, 6) %}<option value="{{ n }}">#{{ n }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Обоснование сложности</span>
+          <textarea name="top5_justification" rows="3" maxlength="4000"
+                    placeholder="Почему это достижение тянет на топ-5"></textarea>
+        </label>
+        <p class="muted">Модератор рассмотрит заявку вместе с прохождением и может выставить своё место.</p>
+      </div>
+    {% endif %}
     <label class="field">
       <span class="field-label">Комментарий</span>
       <textarea name="description" rows="3" maxlength="2000"></textarea>

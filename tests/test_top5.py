@@ -4,7 +4,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services import achievements as achievements_service
 from app.services import auth as auth_service
 from app.services import top5 as top5_service
 
@@ -90,28 +89,12 @@ def test_parse_position_six_for_votes() -> None:
     assert top5_service.parse_position("6", maximum=6) == 6
 
 
-@pytest.mark.parametrize(
-    ("url", "ok"),
-    [
-        ("https://example.org/run", True),
-        ("HTTP://example.org", True),
-        ("ftp://example.org", False),
-        ("javascript:alert(1)", False),
-        ("https://", False),
-        ("", False),
-    ],
-)
-def test_valid_evidence_url(url: str, ok: bool) -> None:
-    assert top5_service.valid_evidence_url(url) is ok
-
-
 def test_application_context_blocks_already_permanent() -> None:
     request = _request(_user())
     context = top5_service.application_context(
         request, _achievement(evaluation_count=3)
     )
-    assert context["can_apply"] is False
-    assert "постоянном рейтинге" in context["apply_blocked_reason"]
+    assert context["can_claim"] is False
 
 
 def test_application_context_uses_permanent_rank_not_display_rank(monkeypatch) -> None:
@@ -122,27 +105,31 @@ def test_application_context_uses_permanent_rank_not_display_rank(monkeypatch) -
     context = top5_service.application_context(
         request, _achievement(rank=4, permanent_rank=8, is_temporary=True)
     )
-    assert context["can_apply"] is True
+    assert context["can_claim"] is True
 
 
-def test_application_context_allows_author_without_active(monkeypatch) -> None:
+def test_application_context_allows_any_user_without_active(monkeypatch) -> None:
     monkeypatch.setattr(
         auth_service, "user_client_from_request", lambda _r: _Client([])
     )
-    context = top5_service.application_context(_request(_user()), _achievement())
-    assert context["can_apply"] is True
+    # Не автор достижения: заявку подаёт любой пользователь с прохождением.
+    other = _user(uid="22222222-2222-2222-2222-222222222222")
+    context = top5_service.application_context(_request(other), _achievement())
+    assert context["can_claim"] is True
     assert context["my_application"] is None
 
 
 def test_application_context_blocks_when_active(monkeypatch) -> None:
+    user = _user()
     monkeypatch.setattr(
         auth_service,
         "user_client_from_request",
-        lambda _r: _Client([{"id": 9, "status": "approved"}]),
+        lambda _r: _Client([{"id": 9, "status": "approved", "applicant_id": user.id}]),
     )
-    context = top5_service.application_context(_request(_user()), _achievement())
-    assert context["can_apply"] is False
+    context = top5_service.application_context(_request(user), _achievement())
+    assert context["can_claim"] is False
     assert context["my_application"]["id"] == 9
+    assert context["is_applicant"] is True
 
 
 def test_top5_page_requires_login() -> None:
@@ -175,45 +162,12 @@ def test_top5_page_renders_applications(monkeypatch) -> None:
     assert "Приглашения эксперта" not in resp.text
 
 
-def test_apply_page_only_for_author(monkeypatch) -> None:
+def test_separate_apply_route_removed(monkeypatch) -> None:
     _login(monkeypatch)
-    monkeypatch.setattr(
-        achievements_service, "get_achievement", lambda *_: _achievement()
-    )
-    monkeypatch.setattr(
-        top5_service,
-        "application_context",
-        lambda *_: {
-            "can_apply": False,
-            "apply_blocked_reason": "Заявку подаёт автор достижения.",
-            "my_application": None,
-        },
-    )
     resp = client.get("/top5/apply/1", follow_redirects=False)
-    assert resp.status_code == 303
-    assert resp.headers["location"].startswith("/achievements/1?error=")
-
-
-def test_apply_page_renders_form(monkeypatch) -> None:
-    _login(monkeypatch)
-    monkeypatch.setattr(
-        achievements_service, "get_achievement", lambda *_: _achievement()
-    )
-    monkeypatch.setattr(
-        top5_service,
-        "application_context",
-        lambda *_: {
-            "can_apply": True,
-            "apply_blocked_reason": None,
-            "my_application": None,
-        },
-    )
-    resp = client.get("/top5/apply/1")
-    assert resp.status_code == 200
-    assert 'name="proposed_position"' in resp.text
-    assert 'name="justification"' in resp.text
-    assert 'name="evidence_url"' in resp.text
-    assert 'action="/top5/apply/1"' in resp.text
+    assert resp.status_code == 404
+    resp = client.post("/top5/apply/1", data={}, follow_redirects=False)
+    assert resp.status_code == 404
 
 
 def test_application_detail_renders_and_has_decision_form(monkeypatch) -> None:
@@ -411,22 +365,90 @@ def test_save_evaluation_defaults_to_moderator() -> None:
     assert client.query.payload["estimated_position"] == 3
 
 
-def test_submit_application_rejects_second_active(monkeypatch) -> None:
-    class _ActiveQuery(_Query):
-        def maybe_single(self):
-            return self
+class _CompletionQuery:
+    def __init__(self, row: dict | None) -> None:
+        self.row = row
 
-    class _ActiveClient:
-        def table(self, _name: str):
-            return _ActiveQuery([{"id": 9}])
+    def select(self, *_args, **_kwargs):
+        return self
 
-    monkeypatch.setattr(
-        auth_service, "user_client_from_request", lambda _r: _ActiveClient()
-    )
+    def eq(self, *_args):
+        return self
+
+    def maybe_single(self):
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=self.row)
+
+
+class _ApplicationsQuery(_Query):
+    def __init__(self, rows: list[dict]) -> None:
+        super().__init__(rows)
+        self.inserted: dict | None = None
+
+    def insert(self, payload):
+        self.inserted = payload
+        return self
+
+    def execute(self):
+        if self.inserted is not None:
+            return SimpleNamespace(data=[{"id": 10, **self.inserted}])
+        return SimpleNamespace(data=self.rows)
+
+
+class _SubmitClient:
+    def __init__(self, completion_row: dict | None, active: list[dict]) -> None:
+        self.applications_query = _ApplicationsQuery(active)
+        self.completion_query = _CompletionQuery(completion_row)
+
+    def table(self, name: str):
+        if name == "achievement_completions":
+            return self.completion_query
+        return self.applications_query
+
+
+def _submit_client(monkeypatch, completion_row, active=None) -> _SubmitClient:
+    fake = _SubmitClient(completion_row, active or [])
+    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _r: fake)
     monkeypatch.setattr(
         top5_service,
         "_achievement_row",
         lambda *_: _achievement(evaluation_count=1),
+    )
+    return fake
+
+
+def test_submit_application_links_completion(monkeypatch) -> None:
+    user = _user()
+    fake = _submit_client(
+        monkeypatch, {"id": 7, "user_id": user.id, "achievement_id": 1}
+    )
+
+    result = top5_service.submit_application(
+        _request(user),
+        1,
+        proposed_position="2",
+        justification="Harder",
+        completion_id=7,
+    )
+
+    assert result["id"] == 10
+    payload = fake.applications_query.inserted
+    assert payload["completion_id"] == 7
+    assert payload["applicant_id"] == user.id
+    assert payload["proposed_position"] == 2
+    assert "evidence_url" not in payload
+
+
+def test_submit_application_rejects_foreign_completion(monkeypatch) -> None:
+    _submit_client(
+        monkeypatch,
+        {
+            "id": 7,
+            "user_id": "22222222-2222-2222-2222-222222222222",
+            "achievement_id": 1,
+        },
     )
 
     with pytest.raises(top5_service.Top5Error) as exc:
@@ -435,10 +457,105 @@ def test_submit_application_rejects_second_active(monkeypatch) -> None:
             1,
             proposed_position="2",
             justification="Harder",
-            evidence_url="https://example.org/run",
+            completion_id=7,
+        )
+
+    assert "вместе с вашим прохождением" in str(exc.value)
+
+
+def test_submit_application_rejects_second_active(monkeypatch) -> None:
+    user = _user()
+    _submit_client(
+        monkeypatch,
+        {"id": 7, "user_id": user.id, "achievement_id": 1},
+        active=[{"id": 9}],
+    )
+
+    with pytest.raises(top5_service.Top5Error) as exc:
+        top5_service.submit_application(
+            _request(user),
+            1,
+            proposed_position="2",
+            justification="Harder",
+            completion_id=7,
         )
 
     assert "уже рассматривается" in str(exc.value)
+
+
+def test_submit_application_requires_justification(monkeypatch) -> None:
+    user = _user()
+    _submit_client(monkeypatch, {"id": 7, "user_id": user.id, "achievement_id": 1})
+
+    with pytest.raises(top5_service.Top5Error) as exc:
+        top5_service.submit_application(
+            _request(user),
+            1,
+            proposed_position="2",
+            justification="  ",
+            completion_id=7,
+        )
+
+    assert "Обоснование" in str(exc.value)
+
+
+def test_submit_application_validates_position(monkeypatch) -> None:
+    user = _user()
+    _submit_client(monkeypatch, {"id": 7, "user_id": user.id, "achievement_id": 1})
+
+    with pytest.raises(top5_service.Top5Error) as exc:
+        top5_service.submit_application(
+            _request(user),
+            1,
+            proposed_position="6",
+            justification="Harder",
+            completion_id=7,
+        )
+
+    assert "от 1 до 5" in str(exc.value)
+
+
+def test_claims_for_completions_degrades_without_migration() -> None:
+    missing_column = _api_error("PGRST204", "column completion_id does not exist")
+    fake = _FailingClient(missing_column)
+    assert top5_service.claims_for_completions(fake, [1, 2]) == {}
+    assert top5_service.active_claim_for_completion(fake, 1) is None
+    missing_table = _api_error(
+        "PGRST205",
+        "Could not find the table 'public.top5_applications' in the schema cache",
+    )
+    fake = _FailingClient(missing_table)
+    assert top5_service.claims_for_completions(fake, [1]) == {}
+    assert top5_service.active_claim_for_completion(fake, 1) is None
+
+
+def test_legacy_queue_filters_pending_completion_claims() -> None:
+    class _LegacyClient:
+        def table(self, name: str):
+            if name == "top5_applications":
+                return _Query(
+                    [
+                        {"id": 1, "completion_id": 7},
+                        {"id": 2, "completion_id": 8},
+                        {"id": 3, "completion_id": None},
+                    ]
+                )
+            return _Query(
+                [{"id": 7, "status": "pending"}, {"id": 8, "status": "approved"}]
+            )
+
+    applications = [{"id": 1}, {"id": 2}, {"id": 3}]
+    legacy = top5_service._legacy_applications(_LegacyClient(), applications)
+    assert [row["id"] for row in legacy] == [2, 3]
+
+
+def test_legacy_queue_keeps_all_before_migration() -> None:
+    missing_column = _api_error("PGRST204", "column completion_id does not exist")
+    applications = [{"id": 1}, {"id": 2}]
+    legacy = top5_service._legacy_applications(
+        _FailingClient(missing_column), applications
+    )
+    assert legacy == applications
 
 
 def test_moderation_queue_shows_top5(monkeypatch) -> None:
@@ -464,6 +581,6 @@ def test_moderation_queue_shows_top5(monkeypatch) -> None:
     )
     resp = client.get("/moderation")
     assert resp.status_code == 200
-    assert "Заявки в топ-5" in resp.text
+    assert "Заявки в топ-5 (старые)" in resp.text
     assert 'href="/top5/5"' in resp.text
     assert "место выставляется вручную при решении" in resp.text

@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from app.services import bt_recompute
 
 
@@ -103,9 +105,9 @@ def _published_references() -> list[dict]:
     ]
 
 
-def _temporary_achievement() -> dict:
+def _temporary_achievement(achievement_id: int = 100) -> dict:
     return {
-        "id": 100,
+        "id": achievement_id,
         "status": "published",
         "ranking_status": "unknown",
         "evaluation_count": 0,
@@ -121,10 +123,14 @@ def _patch_temporary_tables(
     applications: list[dict],
     evaluations: list[dict],
     achievement: dict | None = None,
+    extra_achievements: list[dict] | None = None,
+    references: list[dict] | None = None,
 ) -> None:
-    achievements = _published_references()
+    achievements = _published_references() if references is None else list(references)
     if achievement is not None:
         achievements = [*achievements, achievement]
+    if extra_achievements:
+        achievements = [*achievements, *extra_achievements]
     tables = {
         "top5_applications": applications,
         "achievements": achievements,
@@ -135,6 +141,17 @@ def _patch_temporary_tables(
         return tables[table]
 
     monkeypatch.setattr(bt_recompute, "_fetch_all", _fetch)
+
+
+def _moderator_vote(
+    application_id: int, position: int, evaluator_id: str = "u1"
+) -> dict:
+    return {
+        "application_id": application_id,
+        "evaluator_id": evaluator_id,
+        "evaluator_type": "moderator",
+        "estimated_position": position,
+    }
 
 
 def test_reference_key_uses_rank_order_before_id() -> None:
@@ -165,7 +182,8 @@ def test_reference_key_keeps_strength_first() -> None:
     assert [row["id"] for row in rows] == [2, 1]
 
 
-def test_temporary_payload_places_voted_candidate_above_top(monkeypatch) -> None:
+def test_temporary_payload_midpoint_between_neighbors(monkeypatch) -> None:
+    refs = _published_references()
     _patch_temporary_tables(
         monkeypatch,
         applications=[
@@ -176,14 +194,7 @@ def test_temporary_payload_places_voted_candidate_above_top(monkeypatch) -> None
                 "proposed_position": 1,
             }
         ],
-        evaluations=[
-            {
-                "application_id": 5,
-                "evaluator_id": "u1",
-                "evaluator_type": "moderator",
-                "estimated_position": 1,
-            }
-        ],
+        evaluations=[_moderator_vote(5, 3)],
         achievement=_temporary_achievement(),
     )
 
@@ -195,13 +206,197 @@ def test_temporary_payload_places_voted_candidate_above_top(monkeypatch) -> None
     assert row["application_id"] == 5
     assert row["evaluator_count"] == 1
     assert row["ordinary_evaluation_count"] == 0
-    # Одна победа над #1 при сильном априори чуть поднимает кандидата:
-    # сила растёт на ln(1.2) относительно опоры 2.8, а не улетает в космос.
-    assert 2.8 < row["strength"] < 3.2
-    assert row["rating"] > bt_recompute.bradley_terry.rating_from_strength(2.8)
+    # Место 3 — середина между силами #2 и #3 рабочего списка.
+    expected = (refs[1]["bt_strength"] + refs[2]["bt_strength"]) / 2
+    assert row["strength"] == pytest.approx(expected)
+    assert row["rating"] == pytest.approx(
+        bt_recompute.bradley_terry.rating_from_strength(expected), abs=1e-4
+    )
+
+
+def test_temporary_payload_first_place_extrapolates_gap(monkeypatch) -> None:
+    refs = _published_references()
+    _patch_temporary_tables(
+        monkeypatch,
+        applications=[
+            {
+                "id": 5,
+                "achievement_id": 100,
+                "status": "approved",
+                "proposed_position": 1,
+            }
+        ],
+        evaluations=[_moderator_vote(5, 1)],
+        achievement=_temporary_achievement(),
+    )
+
+    payload = bt_recompute._temporary_payload(object())
+
+    leader, second = refs[0]["bt_strength"], refs[1]["bt_strength"]
+    expected = leader + max(leader - second, bt_recompute.TOP5_MIN_GAP)
+    assert payload[0]["strength"] == pytest.approx(expected)
+    assert payload[0]["strength"] > leader
+
+
+def test_temporary_payload_first_place_single_reference_uses_edge_gap(
+    monkeypatch,
+) -> None:
+    _patch_temporary_tables(
+        monkeypatch,
+        applications=[
+            {
+                "id": 5,
+                "achievement_id": 100,
+                "status": "approved",
+                "proposed_position": 1,
+            }
+        ],
+        evaluations=[_moderator_vote(5, 1)],
+        achievement=_temporary_achievement(),
+        references=_published_references()[:1],
+    )
+
+    payload = bt_recompute._temporary_payload(object())
+
+    expected = 2.8 + bt_recompute.TOP5_EDGE_GAP
+    assert payload[0]["strength"] == pytest.approx(expected)
+
+
+def test_temporary_payload_last_place_below_bottom(monkeypatch) -> None:
+    refs = _published_references()
+    _patch_temporary_tables(
+        monkeypatch,
+        applications=[
+            {
+                "id": 5,
+                "achievement_id": 100,
+                "status": "approved",
+                "proposed_position": 1,
+            }
+        ],
+        # Место 99 клампится в len(working)+1 = 7.
+        evaluations=[_moderator_vote(5, 99)],
+        achievement=_temporary_achievement(),
+    )
+
+    payload = bt_recompute._temporary_payload(object())
+
+    bottom, before_bottom = refs[-1]["bt_strength"], refs[-2]["bt_strength"]
+    expected = bottom - max(before_bottom - bottom, bt_recompute.TOP5_MIN_GAP)
+    assert payload[0]["strength"] == pytest.approx(expected)
+    assert payload[0]["strength"] < bottom
+
+
+def test_temporary_payload_uses_full_ranked_list(monkeypatch) -> None:
+    # Обрезки до топ-5 нет: место 6 видит реальных соседей #5 и #6.
+    refs = _published_references()
+    _patch_temporary_tables(
+        monkeypatch,
+        applications=[
+            {
+                "id": 5,
+                "achievement_id": 100,
+                "status": "approved",
+                "proposed_position": 6,
+            }
+        ],
+        evaluations=[_moderator_vote(5, 6)],
+        achievement=_temporary_achievement(),
+    )
+
+    payload = bt_recompute._temporary_payload(object())
+
+    expected = (refs[4]["bt_strength"] + refs[5]["bt_strength"]) / 2
+    assert payload[0]["strength"] == pytest.approx(expected)
+
+
+def test_temporary_payload_empty_references_falls_back_to_bt_strength(
+    monkeypatch,
+) -> None:
+    achievement = {**_temporary_achievement(), "bt_strength": 1.25}
+    _patch_temporary_tables(
+        monkeypatch,
+        applications=[
+            {
+                "id": 5,
+                "achievement_id": 100,
+                "status": "approved",
+                "proposed_position": 1,
+            }
+        ],
+        evaluations=[],
+        achievement=achievement,
+        references=[],
+    )
+
+    payload = bt_recompute._temporary_payload(object())
+
+    assert len(payload) == 1
+    assert payload[0]["strength"] == pytest.approx(1.25)
+
+
+def test_temporary_payload_empty_references_without_bt_strength(monkeypatch) -> None:
+    _patch_temporary_tables(
+        monkeypatch,
+        applications=[
+            {
+                "id": 5,
+                "achievement_id": 100,
+                "status": "approved",
+                "proposed_position": 1,
+            }
+        ],
+        evaluations=[],
+        achievement=_temporary_achievement(),
+        references=[],
+    )
+
+    payload = bt_recompute._temporary_payload(object())
+
+    assert len(payload) == 1
+    assert payload[0]["strength"] == 0.0
+
+
+def test_temporary_payload_second_candidate_sees_first_placement(monkeypatch) -> None:
+    refs = _published_references()
+    leader, second = refs[0]["bt_strength"], refs[1]["bt_strength"]
+    _patch_temporary_tables(
+        monkeypatch,
+        applications=[
+            # id=5 одобрен позже, id=6 раньше: порядок размещения — по
+            # decided_at, а не по id заявки.
+            {
+                "id": 5,
+                "achievement_id": 100,
+                "status": "approved",
+                "proposed_position": 1,
+                "decided_at": "2026-01-02T00:00:00Z",
+            },
+            {
+                "id": 6,
+                "achievement_id": 101,
+                "status": "approved",
+                "proposed_position": 1,
+                "decided_at": "2026-01-01T00:00:00Z",
+            },
+        ],
+        evaluations=[_moderator_vote(5, 1), _moderator_vote(6, 1)],
+        extra_achievements=[_temporary_achievement(), _temporary_achievement(101)],
+    )
+
+    payload = bt_recompute._temporary_payload(object())
+
+    assert [row["application_id"] for row in payload] == [6, 5]
+    first_strength = leader + max(leader - second, bt_recompute.TOP5_MIN_GAP)
+    assert payload[0]["strength"] == pytest.approx(first_strength)
+    # Второй кандидат на месте 1 стоит над первым временным: его соседи —
+    # первый временный (снизу) и постоянный #1 (второй в списке).
+    expected = first_strength + max(first_strength - leader, bt_recompute.TOP5_MIN_GAP)
+    assert payload[1]["strength"] == pytest.approx(expected)
 
 
 def test_temporary_payload_ignores_legacy_expert_votes(monkeypatch) -> None:
+    refs = _published_references()
     _patch_temporary_tables(
         monkeypatch,
         applications=[
@@ -227,10 +422,13 @@ def test_temporary_payload_ignores_legacy_expert_votes(monkeypatch) -> None:
 
     assert len(payload) == 1
     assert payload[0]["evaluator_count"] == 0
-    assert 2.4 < payload[0]["strength"] < 3.0
+    # Голос эксперта игнорируется: место берётся из proposed_position=2.
+    expected = (refs[0]["bt_strength"] + refs[1]["bt_strength"]) / 2
+    assert payload[0]["strength"] == pytest.approx(expected)
 
 
 def test_temporary_payload_uses_proposed_position_without_votes(monkeypatch) -> None:
+    refs = _published_references()
     _patch_temporary_tables(
         monkeypatch,
         applications=[
@@ -248,8 +446,8 @@ def test_temporary_payload_uses_proposed_position_without_votes(monkeypatch) -> 
     payload = bt_recompute._temporary_payload(object())
 
     assert len(payload) == 1
-    strength = payload[0]["strength"]
-    assert 2.4 < strength < 3.0
+    expected = (refs[0]["bt_strength"] + refs[1]["bt_strength"]) / 2
+    assert payload[0]["strength"] == pytest.approx(expected)
     assert payload[0]["evaluator_count"] == 0
 
 
@@ -294,14 +492,3 @@ def test_temporary_payload_skips_permanent_top5(monkeypatch) -> None:
     )
 
     assert bt_recompute._temporary_payload(object()) == []
-
-
-def test_anchored_strength_matches_reference_on_split() -> None:
-    comparisons = [
-        bt_recompute.bradley_terry.Comparison(1, 100),
-        bt_recompute.bradley_terry.Comparison(100, 1),
-    ]
-    strength = bt_recompute.bradley_terry.anchored_strength(
-        100, comparisons, {1: 1.5}, initial=1.5
-    )
-    assert abs(strength - 1.5) < 0.2

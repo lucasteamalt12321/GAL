@@ -9,6 +9,7 @@ from storage3.exceptions import StorageException
 from app.services import auth as auth_service
 from app.services import bt_recompute
 from app.services import completions as completions_service
+from app.services import top5 as top5_service
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,11 @@ def list_pending_completions(request: Request) -> list[dict]:
         item["proof_views"] = [
             completions_service.proof_view(client, proof) for proof in proofs
         ]
+    claims = top5_service.claims_for_completions(
+        client, [int(item["id"]) for item in items]
+    )
+    for item in items:
+        item["top5_claim"] = claims.get(int(item["id"]))
     return items
 
 
@@ -336,6 +342,16 @@ def hide_achievement(request: Request, achievement_id: int, reason: str) -> None
     client.table("achievement_completions").update({"status": "rejected"}).eq(
         "achievement_id", achievement_id
     ).eq("status", "pending").execute()
+    try:
+        top5_service.close_claims_for_achievement(
+            client, achievement_id, reason or "Достижение скрыто модератором"
+        )
+    except MODERATION_ERRORS:
+        logger.warning(
+            "closing top5 claims failed for achievement %s",
+            achievement_id,
+            exc_info=True,
+        )
 
     client.table("moderation_reviews").insert(
         {
@@ -358,18 +374,46 @@ def hide_achievement(request: Request, achievement_id: int, reason: str) -> None
 
 
 def decide_completion(
-    request: Request, completion_id: int, decision: str, reason: str
-) -> None:
+    request: Request,
+    completion_id: int,
+    decision: str,
+    reason: str,
+    top5_position: object = "",
+) -> str | None:
+    """Решение по прохождению; связанная заявка в топ-5 закрывается тем же ходом.
+
+    ``approved_top5`` — принять как сложное (место модератора или запрошенное),
+    ``approved`` — принять обычным образом (заявка отклоняется), ``rejected`` —
+    отказать. Возвращает предупреждение, если прохождение рассмотрено, но
+    заявку обновить не удалось.
+    """
     user = request.state.user
     client = auth_service.user_client_from_request(request)
     if user is None or client is None:
         raise ModerationError("Требуется вход модератора.")
-    if decision not in ("approved", "rejected"):
+    if decision not in ("approved", "rejected", "approved_top5"):
         raise ModerationError("Недопустимое решение.")
     reason = (reason or "").strip()
 
-    payload: dict = {"status": decision}
-    if decision == "approved":
+    claim = top5_service.active_claim_for_completion(client, completion_id)
+    position = None
+    if decision == "approved_top5":
+        if claim is None:
+            raise ModerationError("Заявка в топ-5 не найдена или уже рассмотрена.")
+        if str(claim.get("applicant_id")) == str(user.id):
+            raise ModerationError("Нельзя выставить место собственной заявке.")
+        raw = str(top5_position or "").strip()
+        position = (
+            top5_service.parse_position(raw, maximum=top5_service.MAX_POSITION + 1)
+            if raw
+            else int(claim["proposed_position"])
+        )
+        if position is None:
+            raise ModerationError("Место в топ-5 — от 1 до 6.")
+
+    completion_decision = "rejected" if decision == "rejected" else "approved"
+    payload: dict = {"status": completion_decision}
+    if completion_decision == "approved":
         payload["approved_at"] = _now_iso()
     updated = (
         client.table("achievement_completions")
@@ -385,11 +429,70 @@ def decide_completion(
         {
             "completion_id": completion_id,
             "moderator_id": user.id,
-            "decision": decision,
+            "decision": completion_decision,
             "reason": reason,
         }
     ).execute()
 
-    if decision == "approved":
+    if completion_decision == "approved":
         _apply_completion_evaluation(client, completion_id)
+
+    warning = None
+    if claim is not None:
+        warning = _close_completion_claim(
+            request, client, user, completion_id, decision, reason, position
+        )
+
+    if completion_decision == "approved":
         bt_recompute.try_recompute_global_ratings()
+    return warning
+
+
+def _close_completion_claim(
+    request: Request,
+    client,
+    user,
+    completion_id: int,
+    decision: str,
+    reason: str,
+    position: int | None,
+) -> str | None:
+    # Третья обычная оценка при approve могла уже конвертировать заявку.
+    current = top5_service.active_claim_for_completion(client, completion_id)
+    if current is None:
+        return None
+    application_id = int(current["id"])
+    own = str(current.get("applicant_id")) == str(user.id)
+    try:
+        if decision == "approved_top5":
+            top5_service.decide_application(
+                request,
+                application_id,
+                decision="approved",
+                reason=reason,
+                estimated_position=str(position),
+            )
+        elif decision == "approved":
+            top5_service.decide_application(
+                request,
+                application_id,
+                decision="cancelled" if own else "rejected",
+                reason=reason or "Прохождение принято без места в топ-5.",
+            )
+        else:
+            top5_service.decide_application(
+                request,
+                application_id,
+                decision="cancelled" if own else "rejected",
+                reason=reason or "Прохождение отклонено.",
+            )
+    except top5_service.Top5Error as exc:
+        logger.warning(
+            "top5 claim %s not closed with completion %s: %s",
+            application_id,
+            completion_id,
+            exc,
+            exc_info=True,
+        )
+        return f"Прохождение рассмотрено, но заявка в топ-5 не обновлена: {exc}"
+    return None
