@@ -62,6 +62,24 @@ def test_security_headers_present() -> None:
     assert "frame-ancestors 'none'" in resp.headers["content-security-policy"]
 
 
+def test_form_action_self_on_normal_pages() -> None:
+    csp = client.get("/").headers["content-security-policy"]
+    assert "form-action 'self'" in csp
+    assert "lthub.vercel.app" not in csp
+
+
+def test_form_action_allows_oauth_client_redirect() -> None:
+    # Форма согласия OAuth редиректит на cross-origin redirect_uri клиента;
+    # form-action 'self' блокировал вход через GAL. На /oauth/authorize
+    # разрешаем origin'ы зарегистрированных клиентов.
+    resp = client.get("/oauth/authorize", follow_redirects=False)
+    csp = resp.headers["content-security-policy"]
+    form_action = csp.split("form-action ", 1)[1]
+    assert "'self'" in form_action
+    assert "https://lthub.vercel.app" in form_action
+    assert "frame-ancestors 'none'" in csp
+
+
 # --- Ошибки валидации как HTML ---------------------------------------------
 
 

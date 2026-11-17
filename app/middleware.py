@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -15,7 +17,31 @@ from app.csrf import (
 from app.services import auth as auth_service
 
 
-def _add_security_headers(response) -> None:
+def _form_action(path: str) -> str:
+    """`form-action` для CSP: 'self' плюс origin'ы OAuth-клиентов на authorize.
+
+    Форма согласия OAuth POST'ится на /oauth/authorize и получает 303 на
+    cross-origin redirect_uri клиента. CSP form-action проверяет всю цепочку
+    редиректов формы, поэтому 'self' блокирует вход через GAL. Разрешаем только
+    origin'ы зарегистрированных redirect URI (они и так валидируются провайдером)
+    и только на маршруте authorize; остальные страницы остаются с 'self'.
+    """
+    if path != "/oauth/authorize":
+        return "'self'"
+    from app.services import oauth_provider as provider
+
+    origins: set[str] = set()
+    for client in provider._clients().values():
+        for uri in client["redirect_uris"]:
+            parts = urlsplit(uri)
+            if parts.scheme in ("http", "https") and parts.netloc:
+                origins.add(f"{parts.scheme}://{parts.netloc}")
+    if not origins:
+        return "'self'"
+    return "'self' " + " ".join(sorted(origins))
+
+
+def _add_security_headers(response, path: str) -> None:
     """Базовые защитные заголовки для всех ответов.
 
     CSP ограничен директивами, не ломающими inline-скрипты (nonce для них
@@ -26,7 +52,7 @@ def _add_security_headers(response) -> None:
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault(
         "Content-Security-Policy",
-        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        f"frame-ancestors 'none'; base-uri 'self'; form-action {_form_action(path)}",
     )
     if get_settings().is_production:
         response.headers.setdefault(
@@ -51,7 +77,7 @@ class UserContextMiddleware(BaseHTTPMiddleware):
                 auth_service.resolve_user, request
             )
         response = await call_next(request)
-        _add_security_headers(response)
+        _add_security_headers(response, request.url.path)
         for name, value, kwargs in getattr(request.state, "pending_cookies", []):
             # kwargs важны для удаления cookie (max_age=0): раньше они
             # игнорировались, и «удалённая» битая сессия жила ещё 30 дней.
