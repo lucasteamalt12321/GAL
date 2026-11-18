@@ -1,0 +1,246 @@
+{
+  "users": 5,
+  "scale_lengths": {
+    "U1": 7,
+    "U2": 1,
+    "U3": 4,
+    "U4": 2,
+    "U5": 3
+  },
+  "items": [
+    31,
+    33,
+    35,
+    36,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51
+  ],
+  "comparisons": 31,
+  "components": 1,
+  "method_strengths": {
+    "bt_weighted": {
+      "31": 1.388798,
+      "33": -0.567055,
+      "35": -1.431063,
+      "36": -0.069474,
+      "46": 0.060442,
+      "47": -0.14391,
+      "48": -0.197572,
+      "49": 1.101996,
+      "50": 0.928909,
+      "51": -1.071071
+    },
+    "bt_unweighted": {
+      "31": 2.680906,
+      "33": -0.287523,
+      "35": -1.912573,
+      "36": -0.907781,
+      "46": 0.163076,
+      "47": -0.666317,
+      "48": -0.693187,
+      "49": 2.228252,
+      "50": 1.537155,
+      "51": -2.142008
+    },
+    "plackett_luce": {
+      "31": 3.623193,
+      "33": 1.476389,
+      "35": -0.447038,
+      "36": 0.288627,
+      "46": 2.062043,
+      "47": -0.545092,
+      "48": 1.151016,
+      "49": 2.666902,
+      "50": 2.937087,
+      "51": -13.213126
+    },
+    "mean_position": {
+      "31": -1.0,
+      "33": -3.5,
+      "35": -3.25,
+      "36": -3.5,
+      "46": -3.0,
+      "47": -1.5,
+      "48": -5.0,
+      "49": -1.0,
+      "50": -2.0,
+      "51": -3.0
+    }
+  },
+  "spearman_matrix": {
+    "bt_weighted": {
+      "bt_weighted": 1.0,
+      "bt_unweighted": 0.8788,
+      "plackett_luce": 0.8182,
+      "mean_position": 0.6606
+    },
+    "bt_unweighted": {
+      "bt_weighted": 0.8788,
+      "bt_unweighted": 1.0,
+      "plackett_luce": 0.9152,
+      "mean_position": 0.6422
+    },
+    "plackett_luce": {
+      "bt_weighted": 0.8182,
+      "bt_unweighted": 0.9152,
+      "plackett_luce": 1.0,
+      "mean_position": 0.4098
+    },
+    "mean_position": {
+      "bt_weighted": 0.6606,
+      "bt_unweighted": 0.6422,
+      "plackett_luce": 0.4098,
+      "mean_position": 1.0
+    }
+  },
+  "kendall_bt_vs_pl": 0.6444,
+  "bt_vs_prod_max_abs_diff": 0.0,
+  "bt_vs_prod_per_item": {
+    "31": 0.0,
+    "33": 0.0,
+    "35": 0.0,
+    "36": 0.0,
+    "46": 0.0,
+    "47": 0.0,
+    "48": 0.0,
+    "49": 0.0,
+    "50": 0.0,
+    "51": 0.0
+  },
+  "loso_folds": [
+    {
+      "user": "U1",
+      "scale_len": 7,
+      "pairs": 21,
+      "bt_weighted": {
+        "accuracy": 0.4524,
+        "brier": 0.3128,
+        "coverage": 0.2857,
+        "accuracy_covered": 0.3333,
+        "brier_covered": 0.3857
+      },
+      "bt_unweighted": {
+        "accuracy": 0.4524,
+        "brier": 0.3816,
+        "coverage": 0.2857,
+        "accuracy_covered": 0.3333,
+        "brier_covered": 0.5251
+      },
+      "plackett_luce": {
+        "accuracy": 0.4524,
+        "brier": 0.3389,
+        "coverage": 0.2857,
+        "accuracy_covered": 0.3333,
+        "brier_covered": 0.4262
+      }
+    },
+    {
+      "user": "U3",
+      "scale_len": 4,
+      "pairs": 6,
+      "bt_weighted": {
+        "accuracy": 0.3333,
+        "brier": 0.3268,
+        "coverage": 0.5,
+        "accuracy_covered": 0.3333,
+        "brier_covered": 0.3964
+      },
+      "bt_unweighted": {
+        "accuracy": 0.3333,
+        "brier": 0.3934,
+        "coverage": 0.5,
+        "accuracy_covered": 0.3333,
+        "brier_covered": 0.4753
+      },
+      "plackett_luce": {
+        "accuracy": 0.3333,
+        "brier": 0.5831,
+        "coverage": 0.5,
+        "accuracy_covered": 0.3333,
+        "brier_covered": 0.528
+      }
+    },
+    {
+      "user": "U4",
+      "scale_len": 2,
+      "pairs": 1,
+      "bt_weighted": {
+        "accuracy": 1.0,
+        "brier": 0.1246,
+        "coverage": 1.0,
+        "accuracy_covered": 1.0,
+        "brier_covered": 0.1246
+      },
+      "bt_unweighted": {
+        "accuracy": 1.0,
+        "brier": 0.1213,
+        "coverage": 1.0,
+        "accuracy_covered": 1.0,
+        "brier_covered": 0.1213
+      },
+      "plackett_luce": {
+        "accuracy": 0.0,
+        "brier": 0.9992,
+        "coverage": 1.0,
+        "accuracy_covered": 0.0,
+        "brier_covered": 0.9992
+      }
+    },
+    {
+      "user": "U5",
+      "scale_len": 3,
+      "pairs": 3,
+      "bt_weighted": {
+        "accuracy": 0.3333,
+        "brier": 0.4049,
+        "coverage": 0.3333,
+        "accuracy_covered": 0.0,
+        "brier_covered": 0.6202
+      },
+      "bt_unweighted": {
+        "accuracy": 0.3333,
+        "brier": 0.5859,
+        "coverage": 0.3333,
+        "accuracy_covered": 0.0,
+        "brier_covered": 0.9484
+      },
+      "plackett_luce": {
+        "accuracy": 0.0,
+        "brier": 0.4732,
+        "coverage": 0.3333,
+        "accuracy_covered": 0.0,
+        "brier_covered": 0.25
+      }
+    }
+  ],
+  "loso_summary": {
+    "bt_weighted": {
+      "pairs": 31,
+      "accuracy": 0.4355,
+      "brier": 0.3184,
+      "coverage": 0.3548,
+      "accuracy_covered": 0.3636,
+      "brier_covered": 0.3862
+    },
+    "bt_unweighted": {
+      "pairs": 31,
+      "accuracy": 0.4355,
+      "brier": 0.3953,
+      "coverage": 0.3548,
+      "accuracy_covered": 0.3636,
+      "brier_covered": 0.5133
+    },
+    "plackett_luce": {
+      "pairs": 31,
+      "accuracy": 0.371,
+      "brier": 0.4205,
+      "coverage": 0.3548,
+      "accuracy_covered": 0.2727,
+      "brier_covered": 0.49
+    }
+  }
+}
