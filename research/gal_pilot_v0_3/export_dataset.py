@@ -802,6 +802,42 @@ def main() -> None:
     (OUT / "dataset_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+    # --- единый самодостаточный файл ---
+    def read_csv(name: str) -> list[dict]:
+        with (OUT / name).open(encoding="utf-8") as fh:
+            return list(csv.DictReader(fh))
+
+    bundle = {
+        "dataset": "GAL Pilot v0.3",
+        "generated_at": summary["generated_at"],
+        "source": summary["source"],
+        "conventions": {
+            "position": "1 = hardest (lower position = harder)",
+            "pair": "first = harder = winner; second = easier = loser",
+            "weight": "1/(k-1), k = published scale length of the user",
+            "users": (
+                "pseudonyms U1..Un, deterministic by (first evaluation date, uuid); "
+                "mapping not stored"
+            ),
+        },
+        "tables": {
+            "achievements": read_csv("achievements.csv"),
+            "users": read_csv("users.csv"),
+            "user_scales": read_csv("user_scales.csv"),
+            "pairwise_comparisons": read_csv("pairwise_comparisons.csv"),
+            "ranking": read_csv("ranking.csv"),
+        },
+        "graph_analysis": graph,
+        "dataset_summary": summary,
+        "methodology_md": (OUT / "methodology.md").read_text(encoding="utf-8"),
+        "data_quality_report_md": (OUT / "data_quality_report.md").read_text(
+            encoding="utf-8"
+        ),
+    }
+    (OUT / "gal_pilot_v0_3_full.json").write_text(
+        json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(
         json.dumps(
             {k: v for k, v in summary.items() if k != "data_quality"},

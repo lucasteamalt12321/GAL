@@ -1,0 +1,2007 @@
+{
+  "dataset": "GAL Pilot v0.3",
+  "generated_at": "2026-11-18T15:03:54.397398+00:00",
+  "source": "Supabase prod project wiwyitafoprxmlyndkwe, read-only PostgREST GET (service role)",
+  "conventions": {
+    "position": "1 = hardest (lower position = harder)",
+    "pair": "first = harder = winner; second = easier = loser",
+    "weight": "1/(k-1), k = published scale length of the user",
+    "users": "pseudonyms U1..Un, deterministic by (first evaluation date, uuid); mapping not stored"
+  },
+  "tables": {
+    "achievements": [
+      {
+        "achievement_id": "31",
+        "title": "Пройти уровень Supersonic в Geometry Dash на 100% и собрать 3 монеты",
+        "category_slug": "geometry-dash",
+        "category_name": "Geometry Dash",
+        "description": "",
+        "status": "published",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "approved",
+        "latest_moderation_at": "2026-11-06T16:43:09.38403+00:00",
+        "created_at": "2026-11-06T16:36:59.690575+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "1",
+        "users_in_scales": "1",
+        "users_in_scales_published_model": "1",
+        "bt_comparisons_db": "6",
+        "comparisons_reconstructed": "6"
+      },
+      {
+        "achievement_id": "32",
+        "title": "Сыграть Linkin Park — In the End на фортепиано",
+        "category_slug": "music",
+        "category_name": "Музыка",
+        "description": "",
+        "status": "rejected",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "rejected",
+        "latest_moderation_at": "2026-11-06T16:54:09.32933+00:00",
+        "created_at": "2026-11-06T16:50:50.803345+00:00",
+        "updated_at": "2026-11-17T17:35:38.06374+00:00",
+        "evaluation_count_db": "0",
+        "users_in_scales": "0",
+        "users_in_scales_published_model": "0",
+        "bt_comparisons_db": "0",
+        "comparisons_reconstructed": "0"
+      },
+      {
+        "achievement_id": "33",
+        "title": "Снять короткое видео о математике",
+        "category_slug": "education",
+        "category_name": "Образование",
+        "description": "",
+        "status": "published",
+        "ranking_status": "ranked",
+        "latest_moderation_decision": "approved",
+        "latest_moderation_at": "2026-11-06T18:39:17.976112+00:00",
+        "created_at": "2026-11-06T18:38:21.588721+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "2",
+        "users_in_scales": "2",
+        "users_in_scales_published_model": "2",
+        "bt_comparisons_db": "9",
+        "comparisons_reconstructed": "9"
+      },
+      {
+        "achievement_id": "35",
+        "title": "Выпить стакан воды",
+        "category_slug": "sport-health",
+        "category_name": "Спорт и здоровье",
+        "description": "Выпить стакан воды за один раз.",
+        "status": "published",
+        "ranking_status": "ranked",
+        "latest_moderation_decision": "",
+        "latest_moderation_at": "",
+        "created_at": "2026-11-07T11:44:09.64935+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "4",
+        "users_in_scales": "4",
+        "users_in_scales_published_model": "4",
+        "bt_comparisons_db": "10",
+        "comparisons_reconstructed": "10"
+      },
+      {
+        "achievement_id": "36",
+        "title": "Заснуть раньше полночи",
+        "category_slug": "sport-health",
+        "category_name": "Спорт и здоровье",
+        "description": "Лечь спать и заснуть до 00:00.",
+        "status": "published",
+        "ranking_status": "ranked",
+        "latest_moderation_decision": "",
+        "latest_moderation_at": "",
+        "created_at": "2026-11-07T11:44:09.64935+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "2",
+        "users_in_scales": "2",
+        "users_in_scales_published_model": "2",
+        "bt_comparisons_db": "8",
+        "comparisons_reconstructed": "8"
+      },
+      {
+        "achievement_id": "46",
+        "title": "Пройти ежедневный уровень в Geometry Dash",
+        "category_slug": "geometry-dash",
+        "category_name": "Geometry Dash",
+        "description": "",
+        "status": "published",
+        "ranking_status": "ranked",
+        "latest_moderation_decision": "approved",
+        "latest_moderation_at": "2026-11-11T05:38:09.519774+00:00",
+        "created_at": "2026-11-11T05:37:41.168811+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "2",
+        "users_in_scales": "2",
+        "users_in_scales_published_model": "2",
+        "bt_comparisons_db": "9",
+        "comparisons_reconstructed": "9"
+      },
+      {
+        "achievement_id": "47",
+        "title": "Приготовить вкусный завтрак",
+        "category_slug": "household",
+        "category_name": "Дом и быт",
+        "description": "",
+        "status": "published",
+        "ranking_status": "ranked",
+        "latest_moderation_decision": "approved",
+        "latest_moderation_at": "2026-11-15T06:54:44.694209+00:00",
+        "created_at": "2026-11-15T06:38:18.017957+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "2",
+        "users_in_scales": "2",
+        "users_in_scales_published_model": "2",
+        "bt_comparisons_db": "3",
+        "comparisons_reconstructed": "3"
+      },
+      {
+        "achievement_id": "48",
+        "title": "Вернуться в Duolingo спустя месяц",
+        "category_slug": "education",
+        "category_name": "Образование",
+        "description": "",
+        "status": "published",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "approved",
+        "latest_moderation_at": "2026-11-16T18:30:02.406992+00:00",
+        "created_at": "2026-11-16T18:29:11.270375+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "1",
+        "users_in_scales": "1",
+        "users_in_scales_published_model": "1",
+        "bt_comparisons_db": "6",
+        "comparisons_reconstructed": "6"
+      },
+      {
+        "achievement_id": "49",
+        "title": "Сгенерировать изображение по описанию",
+        "category_slug": "creativity",
+        "category_name": "Творчество",
+        "description": "",
+        "status": "published",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "approved",
+        "latest_moderation_at": "2026-11-17T07:01:31.181447+00:00",
+        "created_at": "2026-11-17T06:55:13.92094+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "1",
+        "users_in_scales": "1",
+        "users_in_scales_published_model": "1",
+        "bt_comparisons_db": "3",
+        "comparisons_reconstructed": "3"
+      },
+      {
+        "achievement_id": "50",
+        "title": "Объявление в чате",
+        "category_slug": "other",
+        "category_name": "Другое",
+        "description": "Сообщить участникам чата о своём временном отсутствии по личной надобности.",
+        "status": "published",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "approved",
+        "latest_moderation_at": "2026-11-17T16:18:47.591004+00:00",
+        "created_at": "2026-11-17T16:18:24.584511+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "1",
+        "users_in_scales": "1",
+        "users_in_scales_published_model": "1",
+        "bt_comparisons_db": "6",
+        "comparisons_reconstructed": "6"
+      },
+      {
+        "achievement_id": "51",
+        "title": "Защитник ночного народа",
+        "category_slug": "other",
+        "category_name": "Другое",
+        "description": "Нежить,вампиры,ночные духи ведут ночной образ жизни и достижения по типу:\"Заснуть раньше полночи\" дискриминирует ночных существ",
+        "status": "published",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "approved",
+        "latest_moderation_at": "2026-11-17T19:10:22.185037+00:00",
+        "created_at": "2026-11-17T18:10:51.507286+00:00",
+        "updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count_db": "1",
+        "users_in_scales": "1",
+        "users_in_scales_published_model": "1",
+        "bt_comparisons_db": "2",
+        "comparisons_reconstructed": "2"
+      },
+      {
+        "achievement_id": "52",
+        "title": "Никогда не ставь школуна паузу",
+        "category_slug": "creativity",
+        "category_name": "Творчество",
+        "description": "Выложить смешное фото из школьной жизни",
+        "status": "pending",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "",
+        "latest_moderation_at": "",
+        "created_at": "2026-11-18T06:25:08.827357+00:00",
+        "updated_at": "2026-11-18T06:25:08.827357+00:00",
+        "evaluation_count_db": "0",
+        "users_in_scales": "0",
+        "users_in_scales_published_model": "0",
+        "bt_comparisons_db": "0",
+        "comparisons_reconstructed": "0"
+      },
+      {
+        "achievement_id": "53",
+        "title": "Никогда не ставь школуна паузу",
+        "category_slug": "creativity",
+        "category_name": "Творчество",
+        "description": "Выложить смешное фото из школьной жизни",
+        "status": "pending",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "",
+        "latest_moderation_at": "",
+        "created_at": "2026-11-18T06:25:09.568525+00:00",
+        "updated_at": "2026-11-18T06:25:09.568525+00:00",
+        "evaluation_count_db": "0",
+        "users_in_scales": "0",
+        "users_in_scales_published_model": "0",
+        "bt_comparisons_db": "0",
+        "comparisons_reconstructed": "0"
+      },
+      {
+        "achievement_id": "54",
+        "title": "Никогда не ставь школуна паузу",
+        "category_slug": "creativity",
+        "category_name": "Творчество",
+        "description": "Выложить смешное фото из школьной жизни",
+        "status": "pending",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "",
+        "latest_moderation_at": "",
+        "created_at": "2026-11-18T06:25:23.076196+00:00",
+        "updated_at": "2026-11-18T06:25:23.076196+00:00",
+        "evaluation_count_db": "0",
+        "users_in_scales": "0",
+        "users_in_scales_published_model": "0",
+        "bt_comparisons_db": "0",
+        "comparisons_reconstructed": "0"
+      },
+      {
+        "achievement_id": "55",
+        "title": "Никогда не ставь школуна паузу",
+        "category_slug": "creativity",
+        "category_name": "Творчество",
+        "description": "Выложить смешное фото из школьной жизни",
+        "status": "pending",
+        "ranking_status": "unknown",
+        "latest_moderation_decision": "",
+        "latest_moderation_at": "",
+        "created_at": "2026-11-18T06:25:26.156994+00:00",
+        "updated_at": "2026-11-18T06:25:26.156994+00:00",
+        "evaluation_count_db": "0",
+        "users_in_scales": "0",
+        "users_in_scales_published_model": "0",
+        "bt_comparisons_db": "0",
+        "comparisons_reconstructed": "0"
+      }
+    ],
+    "users": [
+      {
+        "user_id": "U1",
+        "scale_length_total": "7",
+        "scale_length_published": "7",
+        "comparisons_count": "21",
+        "expected_pairs_k_k_minus_1_over_2": "21",
+        "total_weight": "3.5",
+        "first_added_at": "2026-11-07T09:46:50.406769+00:00",
+        "last_position_update_at": "2026-11-17T16:18:47.902206+00:00"
+      },
+      {
+        "user_id": "U2",
+        "scale_length_total": "1",
+        "scale_length_published": "1",
+        "comparisons_count": "0",
+        "expected_pairs_k_k_minus_1_over_2": "0",
+        "total_weight": "0.0",
+        "first_added_at": "2026-11-09T15:19:04.200027+00:00",
+        "last_position_update_at": "2026-11-09T15:19:04.200027+00:00"
+      },
+      {
+        "user_id": "U3",
+        "scale_length_total": "4",
+        "scale_length_published": "4",
+        "comparisons_count": "6",
+        "expected_pairs_k_k_minus_1_over_2": "6",
+        "total_weight": "2.0",
+        "first_added_at": "2026-11-11T05:41:55.842245+00:00",
+        "last_position_update_at": "2026-11-17T07:01:31.499196+00:00"
+      },
+      {
+        "user_id": "U4",
+        "scale_length_total": "2",
+        "scale_length_published": "2",
+        "comparisons_count": "1",
+        "expected_pairs_k_k_minus_1_over_2": "1",
+        "total_weight": "1.0",
+        "first_added_at": "2026-11-15T06:32:59.124162+00:00",
+        "last_position_update_at": "2026-11-15T06:54:45.015473+00:00"
+      },
+      {
+        "user_id": "U5",
+        "scale_length_total": "3",
+        "scale_length_published": "3",
+        "comparisons_count": "3",
+        "expected_pairs_k_k_minus_1_over_2": "3",
+        "total_weight": "1.5",
+        "first_added_at": "2026-11-17T06:58:02.631302+00:00",
+        "last_position_update_at": "2026-11-17T19:10:22.328792+00:00"
+      }
+    ],
+    "user_scales": [
+      {
+        "user_id": "U1",
+        "achievement_id": "31",
+        "position": "1",
+        "added_at": "2026-11-07T09:46:50.406769+00:00",
+        "position_updated_at": "2026-11-07T09:46:50.406769+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U1",
+        "achievement_id": "50",
+        "position": "2",
+        "added_at": "2026-11-17T16:18:47.902206+00:00",
+        "position_updated_at": "2026-11-17T16:18:47.902206+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U1",
+        "achievement_id": "33",
+        "position": "3",
+        "added_at": "2026-11-07T09:59:59.370113+00:00",
+        "position_updated_at": "2026-11-17T16:18:47.902206+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U1",
+        "achievement_id": "46",
+        "position": "4",
+        "added_at": "2026-11-11T05:38:09.849886+00:00",
+        "position_updated_at": "2026-11-17T16:18:47.902206+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U1",
+        "achievement_id": "48",
+        "position": "5",
+        "added_at": "2026-11-16T18:30:02.728488+00:00",
+        "position_updated_at": "2026-11-17T16:18:47.902206+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U1",
+        "achievement_id": "36",
+        "position": "6",
+        "added_at": "2026-11-07T13:28:18.750446+00:00",
+        "position_updated_at": "2026-11-17T16:18:47.902206+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U1",
+        "achievement_id": "35",
+        "position": "7",
+        "added_at": "2026-11-08T18:25:22.966403+00:00",
+        "position_updated_at": "2026-11-17T16:18:47.902206+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U2",
+        "achievement_id": "35",
+        "position": "1",
+        "added_at": "2026-11-09T15:19:04.200027+00:00",
+        "position_updated_at": "2026-11-09T15:19:04.200027+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U3",
+        "achievement_id": "49",
+        "position": "1",
+        "added_at": "2026-11-17T07:01:31.499196+00:00",
+        "position_updated_at": "2026-11-17T07:01:31.499196+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U3",
+        "achievement_id": "46",
+        "position": "2",
+        "added_at": "2026-11-11T05:41:55.842245+00:00",
+        "position_updated_at": "2026-11-17T07:01:31.499196+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U3",
+        "achievement_id": "35",
+        "position": "3",
+        "added_at": "2026-11-11T05:45:12.796886+00:00",
+        "position_updated_at": "2026-11-17T07:01:31.499196+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U3",
+        "achievement_id": "33",
+        "position": "4",
+        "added_at": "2026-11-11T06:22:56.033116+00:00",
+        "position_updated_at": "2026-11-17T07:01:31.499196+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U4",
+        "achievement_id": "47",
+        "position": "1",
+        "added_at": "2026-11-15T06:54:45.015473+00:00",
+        "position_updated_at": "2026-11-15T06:54:45.015473+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U4",
+        "achievement_id": "35",
+        "position": "2",
+        "added_at": "2026-11-15T06:32:59.124162+00:00",
+        "position_updated_at": "2026-11-15T06:54:45.015473+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U5",
+        "achievement_id": "36",
+        "position": "1",
+        "added_at": "2026-11-17T07:00:02.593727+00:00",
+        "position_updated_at": "2026-11-17T17:57:53.387957+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U5",
+        "achievement_id": "47",
+        "position": "2",
+        "added_at": "2026-11-17T06:58:02.631302+00:00",
+        "position_updated_at": "2026-11-17T17:57:53.387957+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      },
+      {
+        "user_id": "U5",
+        "achievement_id": "51",
+        "position": "3",
+        "added_at": "2026-11-17T19:10:22.328792+00:00",
+        "position_updated_at": "2026-11-17T19:10:22.328792+00:00",
+        "locked": "False",
+        "record_status": "current",
+        "achievement_status": "published",
+        "in_bt_model": "True"
+      }
+    ],
+    "pairwise_comparisons": [
+      {
+        "user_id": "U1",
+        "first_achievement_id": "31",
+        "second_achievement_id": "33",
+        "first_position": "1.0",
+        "second_position": "3.0",
+        "harder_achievement_id": "31",
+        "easier_achievement_id": "33",
+        "winner_achievement_id": "31",
+        "loser_achievement_id": "33",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "31",
+        "second_achievement_id": "35",
+        "first_position": "1.0",
+        "second_position": "7.0",
+        "harder_achievement_id": "31",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "31",
+        "loser_achievement_id": "35",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "31",
+        "second_achievement_id": "36",
+        "first_position": "1.0",
+        "second_position": "6.0",
+        "harder_achievement_id": "31",
+        "easier_achievement_id": "36",
+        "winner_achievement_id": "31",
+        "loser_achievement_id": "36",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "31",
+        "second_achievement_id": "46",
+        "first_position": "1.0",
+        "second_position": "4.0",
+        "harder_achievement_id": "31",
+        "easier_achievement_id": "46",
+        "winner_achievement_id": "31",
+        "loser_achievement_id": "46",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "31",
+        "second_achievement_id": "48",
+        "first_position": "1.0",
+        "second_position": "5.0",
+        "harder_achievement_id": "31",
+        "easier_achievement_id": "48",
+        "winner_achievement_id": "31",
+        "loser_achievement_id": "48",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "31",
+        "second_achievement_id": "50",
+        "first_position": "1.0",
+        "second_position": "2.0",
+        "harder_achievement_id": "31",
+        "easier_achievement_id": "50",
+        "winner_achievement_id": "31",
+        "loser_achievement_id": "50",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "50",
+        "second_achievement_id": "33",
+        "first_position": "2.0",
+        "second_position": "3.0",
+        "harder_achievement_id": "50",
+        "easier_achievement_id": "33",
+        "winner_achievement_id": "50",
+        "loser_achievement_id": "33",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "50",
+        "second_achievement_id": "35",
+        "first_position": "2.0",
+        "second_position": "7.0",
+        "harder_achievement_id": "50",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "50",
+        "loser_achievement_id": "35",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "50",
+        "second_achievement_id": "36",
+        "first_position": "2.0",
+        "second_position": "6.0",
+        "harder_achievement_id": "50",
+        "easier_achievement_id": "36",
+        "winner_achievement_id": "50",
+        "loser_achievement_id": "36",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "50",
+        "second_achievement_id": "46",
+        "first_position": "2.0",
+        "second_position": "4.0",
+        "harder_achievement_id": "50",
+        "easier_achievement_id": "46",
+        "winner_achievement_id": "50",
+        "loser_achievement_id": "46",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "50",
+        "second_achievement_id": "48",
+        "first_position": "2.0",
+        "second_position": "5.0",
+        "harder_achievement_id": "50",
+        "easier_achievement_id": "48",
+        "winner_achievement_id": "50",
+        "loser_achievement_id": "48",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "33",
+        "second_achievement_id": "35",
+        "first_position": "3.0",
+        "second_position": "7.0",
+        "harder_achievement_id": "33",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "33",
+        "loser_achievement_id": "35",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "33",
+        "second_achievement_id": "36",
+        "first_position": "3.0",
+        "second_position": "6.0",
+        "harder_achievement_id": "33",
+        "easier_achievement_id": "36",
+        "winner_achievement_id": "33",
+        "loser_achievement_id": "36",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "33",
+        "second_achievement_id": "46",
+        "first_position": "3.0",
+        "second_position": "4.0",
+        "harder_achievement_id": "33",
+        "easier_achievement_id": "46",
+        "winner_achievement_id": "33",
+        "loser_achievement_id": "46",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "33",
+        "second_achievement_id": "48",
+        "first_position": "3.0",
+        "second_position": "5.0",
+        "harder_achievement_id": "33",
+        "easier_achievement_id": "48",
+        "winner_achievement_id": "33",
+        "loser_achievement_id": "48",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "46",
+        "second_achievement_id": "35",
+        "first_position": "4.0",
+        "second_position": "7.0",
+        "harder_achievement_id": "46",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "46",
+        "loser_achievement_id": "35",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "46",
+        "second_achievement_id": "36",
+        "first_position": "4.0",
+        "second_position": "6.0",
+        "harder_achievement_id": "46",
+        "easier_achievement_id": "36",
+        "winner_achievement_id": "46",
+        "loser_achievement_id": "36",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "46",
+        "second_achievement_id": "48",
+        "first_position": "4.0",
+        "second_position": "5.0",
+        "harder_achievement_id": "46",
+        "easier_achievement_id": "48",
+        "winner_achievement_id": "46",
+        "loser_achievement_id": "48",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "48",
+        "second_achievement_id": "35",
+        "first_position": "5.0",
+        "second_position": "7.0",
+        "harder_achievement_id": "48",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "48",
+        "loser_achievement_id": "35",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "48",
+        "second_achievement_id": "36",
+        "first_position": "5.0",
+        "second_position": "6.0",
+        "harder_achievement_id": "48",
+        "easier_achievement_id": "36",
+        "winner_achievement_id": "48",
+        "loser_achievement_id": "36",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U1",
+        "first_achievement_id": "36",
+        "second_achievement_id": "35",
+        "first_position": "6.0",
+        "second_position": "7.0",
+        "harder_achievement_id": "36",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "36",
+        "loser_achievement_id": "35",
+        "weight": "0.1666666667"
+      },
+      {
+        "user_id": "U3",
+        "first_achievement_id": "49",
+        "second_achievement_id": "33",
+        "first_position": "1.0",
+        "second_position": "4.0",
+        "harder_achievement_id": "49",
+        "easier_achievement_id": "33",
+        "winner_achievement_id": "49",
+        "loser_achievement_id": "33",
+        "weight": "0.3333333333"
+      },
+      {
+        "user_id": "U3",
+        "first_achievement_id": "49",
+        "second_achievement_id": "35",
+        "first_position": "1.0",
+        "second_position": "3.0",
+        "harder_achievement_id": "49",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "49",
+        "loser_achievement_id": "35",
+        "weight": "0.3333333333"
+      },
+      {
+        "user_id": "U3",
+        "first_achievement_id": "49",
+        "second_achievement_id": "46",
+        "first_position": "1.0",
+        "second_position": "2.0",
+        "harder_achievement_id": "49",
+        "easier_achievement_id": "46",
+        "winner_achievement_id": "49",
+        "loser_achievement_id": "46",
+        "weight": "0.3333333333"
+      },
+      {
+        "user_id": "U3",
+        "first_achievement_id": "46",
+        "second_achievement_id": "33",
+        "first_position": "2.0",
+        "second_position": "4.0",
+        "harder_achievement_id": "46",
+        "easier_achievement_id": "33",
+        "winner_achievement_id": "46",
+        "loser_achievement_id": "33",
+        "weight": "0.3333333333"
+      },
+      {
+        "user_id": "U3",
+        "first_achievement_id": "46",
+        "second_achievement_id": "35",
+        "first_position": "2.0",
+        "second_position": "3.0",
+        "harder_achievement_id": "46",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "46",
+        "loser_achievement_id": "35",
+        "weight": "0.3333333333"
+      },
+      {
+        "user_id": "U3",
+        "first_achievement_id": "35",
+        "second_achievement_id": "33",
+        "first_position": "3.0",
+        "second_position": "4.0",
+        "harder_achievement_id": "35",
+        "easier_achievement_id": "33",
+        "winner_achievement_id": "35",
+        "loser_achievement_id": "33",
+        "weight": "0.3333333333"
+      },
+      {
+        "user_id": "U4",
+        "first_achievement_id": "47",
+        "second_achievement_id": "35",
+        "first_position": "1.0",
+        "second_position": "2.0",
+        "harder_achievement_id": "47",
+        "easier_achievement_id": "35",
+        "winner_achievement_id": "47",
+        "loser_achievement_id": "35",
+        "weight": "1.0"
+      },
+      {
+        "user_id": "U5",
+        "first_achievement_id": "36",
+        "second_achievement_id": "47",
+        "first_position": "1.0",
+        "second_position": "2.0",
+        "harder_achievement_id": "36",
+        "easier_achievement_id": "47",
+        "winner_achievement_id": "36",
+        "loser_achievement_id": "47",
+        "weight": "0.5"
+      },
+      {
+        "user_id": "U5",
+        "first_achievement_id": "36",
+        "second_achievement_id": "51",
+        "first_position": "1.0",
+        "second_position": "3.0",
+        "harder_achievement_id": "36",
+        "easier_achievement_id": "51",
+        "winner_achievement_id": "36",
+        "loser_achievement_id": "51",
+        "weight": "0.5"
+      },
+      {
+        "user_id": "U5",
+        "first_achievement_id": "47",
+        "second_achievement_id": "51",
+        "first_position": "2.0",
+        "second_position": "3.0",
+        "harder_achievement_id": "47",
+        "easier_achievement_id": "51",
+        "winner_achievement_id": "47",
+        "loser_achievement_id": "51",
+        "weight": "0.5"
+      }
+    ],
+    "ranking": [
+      {
+        "achievement_id": "31",
+        "status": "published",
+        "ranking_status": "unknown",
+        "bt_score": "1241.259",
+        "bt_strength": "1.3887982723",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "6",
+        "bt_rating_se": "35.8631",
+        "bt_rating_ci_low": "1225.7005",
+        "bt_rating_ci_high": "1350.0686",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "1",
+        "average_position": "1",
+        "temporary_strength": "",
+        "rating_availability": "preliminary_1_evaluation"
+      },
+      {
+        "achievement_id": "32",
+        "status": "rejected",
+        "ranking_status": "unknown",
+        "bt_score": "",
+        "bt_strength": "",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "",
+        "in_leaderboard": "",
+        "bt_comparisons": "0",
+        "bt_rating_se": "",
+        "bt_rating_ci_low": "",
+        "bt_rating_ci_high": "",
+        "bt_updated_at": "",
+        "evaluation_count": "0",
+        "average_position": "",
+        "temporary_strength": "",
+        "rating_availability": "excluded_not_published"
+      },
+      {
+        "achievement_id": "33",
+        "status": "published",
+        "ranking_status": "ranked",
+        "bt_score": "901.4924",
+        "bt_strength": "-0.567055406",
+        "permanent_rank": "4",
+        "display_rank": "4",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "9",
+        "bt_rating_se": "150.4814",
+        "bt_rating_ci_low": "653.9422",
+        "bt_rating_ci_high": "1158.1307",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "2",
+        "average_position": "2.5",
+        "temporary_strength": "",
+        "rating_availability": "ranked"
+      },
+      {
+        "achievement_id": "35",
+        "status": "published",
+        "ranking_status": "ranked",
+        "bt_score": "751.3989",
+        "bt_strength": "-1.4310631462",
+        "permanent_rank": "5",
+        "display_rank": "5",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "10",
+        "bt_rating_se": "88.0898",
+        "bt_rating_ci_low": "610.865",
+        "bt_rating_ci_high": "907.9412",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "4",
+        "average_position": "2.25",
+        "temporary_strength": "",
+        "rating_availability": "ranked"
+      },
+      {
+        "achievement_id": "36",
+        "status": "published",
+        "ranking_status": "ranked",
+        "bt_score": "987.9312",
+        "bt_strength": "-0.0694737174",
+        "permanent_rank": "2",
+        "display_rank": "2",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "8",
+        "bt_rating_se": "148.2543",
+        "bt_rating_ci_low": "768.225",
+        "bt_rating_ci_high": "1296.8466",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "2",
+        "average_position": "3.5",
+        "temporary_strength": "",
+        "rating_availability": "ranked"
+      },
+      {
+        "achievement_id": "46",
+        "status": "published",
+        "ranking_status": "ranked",
+        "bt_score": "1010.4998",
+        "bt_strength": "0.0604419673",
+        "permanent_rank": "1",
+        "display_rank": "1",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "9",
+        "bt_rating_se": "43.2774",
+        "bt_rating_ci_low": "969.1621",
+        "bt_rating_ci_high": "1110.1305",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "2",
+        "average_position": "2",
+        "temporary_strength": "",
+        "rating_availability": "ranked"
+      },
+      {
+        "achievement_id": "47",
+        "status": "published",
+        "ranking_status": "ranked",
+        "bt_score": "975.0003",
+        "bt_strength": "-0.1439099497",
+        "permanent_rank": "3",
+        "display_rank": "3",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "3",
+        "bt_rating_se": "107.1426",
+        "bt_rating_ci_low": "789.8288",
+        "bt_rating_ci_high": "1177.0868",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "2",
+        "average_position": "1",
+        "temporary_strength": "",
+        "rating_availability": "ranked"
+      },
+      {
+        "achievement_id": "48",
+        "status": "published",
+        "ranking_status": "unknown",
+        "bt_score": "965.6782",
+        "bt_strength": "-0.19757235",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "6",
+        "bt_rating_se": "44.1687",
+        "bt_rating_ci_low": "874.0318",
+        "bt_rating_ci_high": "1044.6941",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "1",
+        "average_position": "4",
+        "temporary_strength": "",
+        "rating_availability": "preliminary_1_evaluation"
+      },
+      {
+        "achievement_id": "49",
+        "status": "published",
+        "ranking_status": "unknown",
+        "bt_score": "1191.4363",
+        "bt_strength": "1.1019957646",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "3",
+        "bt_rating_se": "35.584",
+        "bt_rating_ci_low": "1162.077",
+        "bt_rating_ci_high": "1285.2359",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "1",
+        "average_position": "1",
+        "temporary_strength": "",
+        "rating_availability": "preliminary_1_evaluation"
+      },
+      {
+        "achievement_id": "50",
+        "status": "published",
+        "ranking_status": "unknown",
+        "bt_score": "1161.3681",
+        "bt_strength": "0.9289092034",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "6",
+        "bt_rating_se": "31.051",
+        "bt_rating_ci_low": "1134.9559",
+        "bt_rating_ci_high": "1252.5534",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "1",
+        "average_position": "2",
+        "temporary_strength": "",
+        "rating_availability": "preliminary_1_evaluation"
+      },
+      {
+        "achievement_id": "51",
+        "status": "published",
+        "ranking_status": "unknown",
+        "bt_score": "813.936",
+        "bt_strength": "-1.0710706383",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "False",
+        "in_leaderboard": "True",
+        "bt_comparisons": "2",
+        "bt_rating_se": "101.5484",
+        "bt_rating_ci_low": "486.7068",
+        "bt_rating_ci_high": "945.6024",
+        "bt_updated_at": "2026-11-18T06:30:53.224924+00:00",
+        "evaluation_count": "1",
+        "average_position": "3",
+        "temporary_strength": "",
+        "rating_availability": "preliminary_1_evaluation"
+      },
+      {
+        "achievement_id": "52",
+        "status": "pending",
+        "ranking_status": "unknown",
+        "bt_score": "",
+        "bt_strength": "",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "",
+        "in_leaderboard": "",
+        "bt_comparisons": "0",
+        "bt_rating_se": "",
+        "bt_rating_ci_low": "",
+        "bt_rating_ci_high": "",
+        "bt_updated_at": "",
+        "evaluation_count": "0",
+        "average_position": "",
+        "temporary_strength": "",
+        "rating_availability": "excluded_not_published"
+      },
+      {
+        "achievement_id": "53",
+        "status": "pending",
+        "ranking_status": "unknown",
+        "bt_score": "",
+        "bt_strength": "",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "",
+        "in_leaderboard": "",
+        "bt_comparisons": "0",
+        "bt_rating_se": "",
+        "bt_rating_ci_low": "",
+        "bt_rating_ci_high": "",
+        "bt_updated_at": "",
+        "evaluation_count": "0",
+        "average_position": "",
+        "temporary_strength": "",
+        "rating_availability": "excluded_not_published"
+      },
+      {
+        "achievement_id": "54",
+        "status": "pending",
+        "ranking_status": "unknown",
+        "bt_score": "",
+        "bt_strength": "",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "",
+        "in_leaderboard": "",
+        "bt_comparisons": "0",
+        "bt_rating_se": "",
+        "bt_rating_ci_low": "",
+        "bt_rating_ci_high": "",
+        "bt_updated_at": "",
+        "evaluation_count": "0",
+        "average_position": "",
+        "temporary_strength": "",
+        "rating_availability": "excluded_not_published"
+      },
+      {
+        "achievement_id": "55",
+        "status": "pending",
+        "ranking_status": "unknown",
+        "bt_score": "",
+        "bt_strength": "",
+        "permanent_rank": "",
+        "display_rank": "",
+        "is_temporary": "",
+        "in_leaderboard": "",
+        "bt_comparisons": "0",
+        "bt_rating_se": "",
+        "bt_rating_ci_low": "",
+        "bt_rating_ci_high": "",
+        "bt_updated_at": "",
+        "evaluation_count": "0",
+        "average_position": "",
+        "temporary_strength": "",
+        "rating_availability": "excluded_not_published"
+      }
+    ]
+  },
+  "graph_analysis": {
+    "vertex_set": "all published achievements",
+    "vertices": 10,
+    "vertices_with_comparisons": 10,
+    "edges": 28,
+    "connected_components": 1,
+    "component_sizes": [
+      10
+    ],
+    "components": [
+      {
+        "achievements": [
+          31,
+          33,
+          35,
+          36,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51
+        ],
+        "titles": [
+          "Пройти уровень Supersonic в Geometry Dash на 100% и собрать 3 монеты",
+          "Снять короткое видео о математике",
+          "Выпить стакан воды",
+          "Заснуть раньше полночи",
+          "Пройти ежедневный уровень в Geometry Dash",
+          "Приготовить вкусный завтрак",
+          "Вернуться в Duolingo спустя месяц",
+          "Сгенерировать изображение по описанию",
+          "Объявление в чате",
+          "Защитник ночного народа"
+        ]
+      }
+    ],
+    "isolated_vertices": [],
+    "outside_main_component": [],
+    "single_global_ranking_identifiable": true,
+    "comparisons_per_achievement": {
+      "31": 6,
+      "33": 9,
+      "35": 10,
+      "36": 8,
+      "46": 9,
+      "47": 3,
+      "48": 6,
+      "49": 3,
+      "50": 6,
+      "51": 2
+    },
+    "edges_detail": [
+      {
+        "a": 31,
+        "b": 33,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 31,
+        "b": 35,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 31,
+        "b": 36,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 31,
+        "b": 46,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 31,
+        "b": 48,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 31,
+        "b": 50,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 33,
+        "b": 35,
+        "comparisons": 2,
+        "users": [
+          "U1",
+          "U3"
+        ],
+        "user_count": 2,
+        "total_weight": 0.5
+      },
+      {
+        "a": 33,
+        "b": 36,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 33,
+        "b": 46,
+        "comparisons": 2,
+        "users": [
+          "U1",
+          "U3"
+        ],
+        "user_count": 2,
+        "total_weight": 0.5
+      },
+      {
+        "a": 33,
+        "b": 48,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 33,
+        "b": 49,
+        "comparisons": 1,
+        "users": [
+          "U3"
+        ],
+        "user_count": 1,
+        "total_weight": 0.3333333333
+      },
+      {
+        "a": 33,
+        "b": 50,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 35,
+        "b": 36,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 35,
+        "b": 46,
+        "comparisons": 2,
+        "users": [
+          "U1",
+          "U3"
+        ],
+        "user_count": 2,
+        "total_weight": 0.5
+      },
+      {
+        "a": 35,
+        "b": 47,
+        "comparisons": 1,
+        "users": [
+          "U4"
+        ],
+        "user_count": 1,
+        "total_weight": 1.0
+      },
+      {
+        "a": 35,
+        "b": 48,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 35,
+        "b": 49,
+        "comparisons": 1,
+        "users": [
+          "U3"
+        ],
+        "user_count": 1,
+        "total_weight": 0.3333333333
+      },
+      {
+        "a": 35,
+        "b": 50,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 36,
+        "b": 46,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 36,
+        "b": 47,
+        "comparisons": 1,
+        "users": [
+          "U5"
+        ],
+        "user_count": 1,
+        "total_weight": 0.5
+      },
+      {
+        "a": 36,
+        "b": 48,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 36,
+        "b": 50,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 36,
+        "b": 51,
+        "comparisons": 1,
+        "users": [
+          "U5"
+        ],
+        "user_count": 1,
+        "total_weight": 0.5
+      },
+      {
+        "a": 46,
+        "b": 48,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 46,
+        "b": 49,
+        "comparisons": 1,
+        "users": [
+          "U3"
+        ],
+        "user_count": 1,
+        "total_weight": 0.3333333333
+      },
+      {
+        "a": 46,
+        "b": 50,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      },
+      {
+        "a": 47,
+        "b": 51,
+        "comparisons": 1,
+        "users": [
+          "U5"
+        ],
+        "user_count": 1,
+        "total_weight": 0.5
+      },
+      {
+        "a": 48,
+        "b": 50,
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ],
+        "user_count": 1,
+        "total_weight": 0.1666666667
+      }
+    ],
+    "cross_category_edges_count": 25,
+    "cross_category_edges": [
+      {
+        "a": 31,
+        "b": 33,
+        "category_a": "geometry-dash",
+        "category_b": "education",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 31,
+        "b": 35,
+        "category_a": "geometry-dash",
+        "category_b": "sport-health",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 31,
+        "b": 36,
+        "category_a": "geometry-dash",
+        "category_b": "sport-health",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 31,
+        "b": 48,
+        "category_a": "geometry-dash",
+        "category_b": "education",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 31,
+        "b": 50,
+        "category_a": "geometry-dash",
+        "category_b": "other",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 33,
+        "b": 35,
+        "category_a": "education",
+        "category_b": "sport-health",
+        "comparisons": 2,
+        "users": [
+          "U1",
+          "U3"
+        ]
+      },
+      {
+        "a": 33,
+        "b": 36,
+        "category_a": "education",
+        "category_b": "sport-health",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 33,
+        "b": 46,
+        "category_a": "education",
+        "category_b": "geometry-dash",
+        "comparisons": 2,
+        "users": [
+          "U1",
+          "U3"
+        ]
+      },
+      {
+        "a": 33,
+        "b": 49,
+        "category_a": "education",
+        "category_b": "creativity",
+        "comparisons": 1,
+        "users": [
+          "U3"
+        ]
+      },
+      {
+        "a": 33,
+        "b": 50,
+        "category_a": "education",
+        "category_b": "other",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 35,
+        "b": 46,
+        "category_a": "sport-health",
+        "category_b": "geometry-dash",
+        "comparisons": 2,
+        "users": [
+          "U1",
+          "U3"
+        ]
+      },
+      {
+        "a": 35,
+        "b": 47,
+        "category_a": "sport-health",
+        "category_b": "household",
+        "comparisons": 1,
+        "users": [
+          "U4"
+        ]
+      },
+      {
+        "a": 35,
+        "b": 48,
+        "category_a": "sport-health",
+        "category_b": "education",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 35,
+        "b": 49,
+        "category_a": "sport-health",
+        "category_b": "creativity",
+        "comparisons": 1,
+        "users": [
+          "U3"
+        ]
+      },
+      {
+        "a": 35,
+        "b": 50,
+        "category_a": "sport-health",
+        "category_b": "other",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 36,
+        "b": 46,
+        "category_a": "sport-health",
+        "category_b": "geometry-dash",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 36,
+        "b": 47,
+        "category_a": "sport-health",
+        "category_b": "household",
+        "comparisons": 1,
+        "users": [
+          "U5"
+        ]
+      },
+      {
+        "a": 36,
+        "b": 48,
+        "category_a": "sport-health",
+        "category_b": "education",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 36,
+        "b": 50,
+        "category_a": "sport-health",
+        "category_b": "other",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 36,
+        "b": 51,
+        "category_a": "sport-health",
+        "category_b": "other",
+        "comparisons": 1,
+        "users": [
+          "U5"
+        ]
+      },
+      {
+        "a": 46,
+        "b": 48,
+        "category_a": "geometry-dash",
+        "category_b": "education",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 46,
+        "b": 49,
+        "category_a": "geometry-dash",
+        "category_b": "creativity",
+        "comparisons": 1,
+        "users": [
+          "U3"
+        ]
+      },
+      {
+        "a": 46,
+        "b": 50,
+        "category_a": "geometry-dash",
+        "category_b": "other",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      },
+      {
+        "a": 47,
+        "b": 51,
+        "category_a": "household",
+        "category_b": "other",
+        "comparisons": 1,
+        "users": [
+          "U5"
+        ]
+      },
+      {
+        "a": 48,
+        "b": 50,
+        "category_a": "education",
+        "category_b": "other",
+        "comparisons": 1,
+        "users": [
+          "U1"
+        ]
+      }
+    ],
+    "leave_one_out": {
+      "U1": {
+        "remaining_comparisons": 10,
+        "remaining_edges": 10,
+        "connected_components": 4,
+        "component_sizes": [
+          7,
+          1,
+          1,
+          1
+        ],
+        "isolated_vertices": [
+          31,
+          48,
+          50
+        ]
+      },
+      "U2": {
+        "remaining_comparisons": 31,
+        "remaining_edges": 28,
+        "connected_components": 1,
+        "component_sizes": [
+          10
+        ],
+        "isolated_vertices": []
+      },
+      "U3": {
+        "remaining_comparisons": 25,
+        "remaining_edges": 25,
+        "connected_components": 2,
+        "component_sizes": [
+          9,
+          1
+        ],
+        "isolated_vertices": [
+          49
+        ]
+      },
+      "U4": {
+        "remaining_comparisons": 30,
+        "remaining_edges": 27,
+        "connected_components": 1,
+        "component_sizes": [
+          10
+        ],
+        "isolated_vertices": []
+      },
+      "U5": {
+        "remaining_comparisons": 28,
+        "remaining_edges": 25,
+        "connected_components": 2,
+        "component_sizes": [
+          9,
+          1
+        ],
+        "isolated_vertices": [
+          51
+        ]
+      }
+    }
+  },
+  "dataset_summary": {
+    "generated_at": "2026-11-18T15:03:54.397398+00:00",
+    "source": "Supabase prod project wiwyitafoprxmlyndkwe, read-only PostgREST GET (service role)",
+    "total_users_profiles": 6,
+    "users_with_nonempty_scales": 5,
+    "total_achievements": 15,
+    "achievements_by_status": {
+      "pending": 4,
+      "published": 10,
+      "rejected": 1
+    },
+    "achievements_in_at_least_one_scale": 10,
+    "published_achievements_in_bt_model": 10,
+    "achievements_without_evaluations": [
+      32,
+      52,
+      53,
+      54,
+      55
+    ],
+    "published_without_evaluations": [],
+    "scale_length_distribution_total": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1,
+      "7": 1
+    },
+    "scale_length_distribution_published": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1,
+      "7": 1
+    },
+    "total_evaluation_rows": 17,
+    "total_pairwise_comparisons": 31,
+    "unique_pairs": 28,
+    "comparisons_per_user": {
+      "U1": 21,
+      "U2": 0,
+      "U3": 6,
+      "U4": 1,
+      "U5": 3
+    },
+    "expected_pairs_per_user": {
+      "U1": 21,
+      "U2": 0,
+      "U3": 6,
+      "U4": 1,
+      "U5": 3
+    },
+    "category_distribution_all": {
+      "creativity": 5,
+      "education": 2,
+      "geometry-dash": 2,
+      "household": 1,
+      "music": 1,
+      "other": 2,
+      "sport-health": 2
+    },
+    "category_distribution_evaluated": {
+      "creativity": 1,
+      "education": 2,
+      "geometry-dash": 2,
+      "household": 1,
+      "other": 2,
+      "sport-health": 2
+    },
+    "users_per_achievement": {
+      "31": 1,
+      "33": 2,
+      "35": 4,
+      "36": 2,
+      "46": 2,
+      "47": 2,
+      "48": 1,
+      "49": 1,
+      "50": 1,
+      "51": 1
+    },
+    "top5_applications_by_status": {},
+    "temporary_ratings_rows": 0,
+    "graph": {
+      "vertices": 10,
+      "edges": 28,
+      "connected_components": 1,
+      "component_sizes": [
+        10
+      ],
+      "isolated_vertices": [],
+      "single_global_ranking_identifiable": true
+    },
+    "data_quality": {
+      "duplicate_user_achievement_rows": [],
+      "orphan_evaluation_rows": 0,
+      "nonpublished_evaluations": [],
+      "invalid_positions": [],
+      "non_dense_scale_positions": [],
+      "locked_rows": [],
+      "tie_skipped_pairs": [],
+      "pair_count_mismatch_per_user": [],
+      "bt_comparisons_mismatch": [],
+      "evaluation_count_mismatch": [],
+      "average_position_mismatch": [
+        {
+          "achievement_id": 33,
+          "db": 2.5,
+          "computed": 3.5
+        },
+        {
+          "achievement_id": 35,
+          "db": 2.25,
+          "computed": 3.25
+        },
+        {
+          "achievement_id": 46,
+          "db": 2,
+          "computed": 3.0
+        },
+        {
+          "achievement_id": 47,
+          "db": 1,
+          "computed": 1.5
+        },
+        {
+          "achievement_id": 48,
+          "db": 4,
+          "computed": 5.0
+        }
+      ],
+      "se_ci_missing_published_with_evaluations": [],
+      "bt_staleness": {
+        "latest_evaluation_update": "2026-11-17T19:10:22.328792+00:00",
+        "bt_updated_at_per_achievement": {
+          "31": "2026-11-18T06:30:53.224924+00:00",
+          "33": "2026-11-18T06:30:53.224924+00:00",
+          "35": "2026-11-18T06:30:53.224924+00:00",
+          "36": "2026-11-18T06:30:53.224924+00:00",
+          "46": "2026-11-18T06:30:53.224924+00:00",
+          "47": "2026-11-18T06:30:53.224924+00:00",
+          "48": "2026-11-18T06:30:53.224924+00:00",
+          "49": "2026-11-18T06:30:53.224924+00:00",
+          "50": "2026-11-18T06:30:53.224924+00:00",
+          "51": "2026-11-18T06:30:53.224924+00:00"
+        }
+      }
+    }
+  },
+  "methodology_md": "# Методология выгрузки GAL Pilot v0.3\n\nДата снимка: 2026-11-18, ~14:57 UTC. Источник: прод Supabase `wiwyitafoprxmlyndkwe`.\nВсе операции — только чтение (PostgREST GET с service-role ключом). Изменяющих\nзапросов, пересчётов рейтингов и обращений к `auth.*` не выполнялось.\n\n## 1. Транспорт и воспроизводимость\n\n- Прямой TCP/TLS к `api.supabase.com` (Management API) с этой машины сброшен\n  (IP `8.47.69.1` / `8.6.112.1` блэкхолятся локальной сетью), поэтому выгрузка\n  выполнена через PostgREST `https://wiwyitafoprxmlyndkwe.supabase.co/rest/v1/`\n  (GET, service-role ключ из `.env`, пагинация по 1000 строк).\n- Скрипт: `research/gal_pilot_v0_3/export_dataset.py`. Запуск из корня:\n\n  ```bash\n  NO_PROXY='localhost,127.0.0.1,::1' no_proxy='localhost,127.0.0.1,::1' \\\n      .venv/Scripts/python.exe research/gal_pilot_v0_3/export_dataset.py\n  ```\n\n  (санитизация `NO_PROXY` обязательна — иначе `httpx.InvalidURL`).\n- Скрипт детерминирован: псевдонимы U1..Un назначаются сортировкой пользователей\n  по (дата первой оценки, UUID). Соответствие псевдоним↔UUID нигде не сохраняется.\n- Персональные данные (email, токены, IP, proof-файлы, username) не выгружались.\n  Из `profiles` взят только агрегат `count(*)`.\n\n## 2. Фактическая схема данных\n\n- `public.evaluations` — личная шкала: одна строка на `(user_id, achievement_id)`\n  (unique-констрейнт), колонки `position double precision >= 1`, `locked`,\n  `created_at`, `updated_at`. **Исторических версий нет**: редактирование — upsert,\n  старое значение позиции перезаписывается. `record_status=current` в выгрузке —\n  константа, отражающая это отсутствие версионирования.\n- `public.achievements`: `status` ∈ {pending, published, rejected, deleted}\n  (скрытие = `deleted`), `ranking_status` ∈ {unknown, ranked}, `evaluation_count`,\n  `average_position`, `rank`, `bt_strength`, `bt_rating`, `bt_comparisons`,\n  `bt_rating_se`, `bt_rating_ci_low`, `bt_rating_ci_high`, `bt_updated_at`.\n- `public.public_achievements` (вьюха, миграция 027): только `published`;\n  `display_rank`, `permanent_rank`, `is_temporary`, `in_leaderboard`, `sort_strength`.\n- Категории — `public.categories` (slug + русское название), FK `category_id`.\n\n## 3. Семантика позиции (ВАЖНО: отличается от предположения в ТЗ)\n\n**Меньшая позиция = БОЛЕЕ СЛОЖНОЕ достижение. Position 1 — самое сложное.**\n\nКод: `app/services/bradley_terry.py:98-99` («position=1 — самое сложное»);\nRPC `submit_evaluation` (миграция 029): `new_position = clamp(p_harder_count,\n0, other_count) + 1`, где `p_harder_count` — сколько других достижений пользователя\nсложнее данного. Шкала плотная: позиции 1..k без пропусков (сдвиги ±1 при\nвставке/редактировании, миграция 029, строки 94–106).\n\nТЗ предполагало конвенцию «меньшая позиция = легче»; выгрузка следует реальному\nкоду GAL. Направление сравнений в CSV закодировано явно (см. §5), поэтому\nперепроверка возможна без знания конвенции.\n\n## 4. Преобразование шкалы в попарные сравнения (фактический код GAL)\n\n`app/services/bradley_terry.py::scale_comparisons` (строки 75–90):\n\n1. Записи шкалы сортируются по `(position, achievement_id)`.\n2. Берутся **все уникальные пары** внутри шкалы: k(k−1)/2.\n3. Пара с равными позициями (tie) пропускается (строки 87–88).\n4. `winner = harder` — достижение с **меньшей** позицией (строки 85–89,\n   `Comparison(harder_id, easier_id, weight)`).\n5. **Вес каждой пары = 1/(k−1)** (строка 83), где k — длина шкалы. Суммарный\n   вклад пользователя = k/2 (сублинейная нормировка; зависимость пар внутри\n   шкалы она не устраняет — см. docstring модуля, строки 20–23).\n6. Пары между шкалами разных пользователей не строятся. Дедупликации на этапе\n   построения нет; агрегация весов по канонической паре происходит в\n   `fit_bradley_terry` (строки 142–149).\n\nФильтрация (`app/services/bt_recompute.py:60-78`): в модель входят **только\nоценки достижений со `status='published'`**; прочих статусов нет в evaluations\nна момент выгрузки (проверено). Статуса у самих evaluations нет — все строки\nдействительны.\n\n## 5. Конвенции колонок pairwise_comparisons.csv\n\n- `first_achievement_id` / `first_position` — достижение с меньшей позицией\n  (более сложное); `second_*` — с большей (более лёгкое).\n- `harder_achievement_id` = `winner_achievement_id` = first;\n  `easier_achievement_id` = `loser_achievement_id` = second.\n- `user_id` — псевдоним автора сравнения; позиции исходные, не пересчитанные.\n- `weight` = 1/(k−1) по опубликованной длине шкалы пользователя.\n- Сортировка: (user_id, first_position, first_achievement_id, second_achievement_id).\n\n## 6. Модель Bradley–Terry и рейтинг (для справки, не пересчитывался)\n\n- MM-алгоритм (Hunter 2004): `θ_i ← (W_i + α) / (Σ_j n_ij/(θ_i+θ_j) + α/(θ_i+1))`,\n  prior α = 0.5, центрирование mean(log θ) = 0, tol 1e-9, max 500 итераций.\n- `bt_rating = 1000 + (400/ln 10) · s`, где s = ln θ.\n- Неопределённость: кластерный бутстрэп по пользователям (ресэмплинг шкал целиком),\n  seed 20260101, 200 реплик (адаптивно `min(cfg, max(20, 120000/comparisons))`),\n  пороги: ≥3 шкалы, ≥5 валидных реплик, ≥2 сравнения на достижение;\n  SE = (400/ln10)·stdev(s), CI = перцентили 2.5/97.5 (method 7).\n- Глобальный порядок: `bt_strength desc nulls last → average_position asc →\n  rank_order asc → id asc` (`app/services/ranking.py:55-67`). Порог постоянного\n  ранга — **2 оценки** (`ranking_status='ranked'`); при 1 оценке — предварительная\n  сила без номера («?» в UI). Временный слой топ-5 (миграция 027) на момент\n  выгрузки пуст (`achievement_temporary_ratings` = 0 строк, заявок 0).\n- Значения в `ranking.csv` сняты как есть из БД (последний пересчёт\n  2026-11-18T06:30:53Z, новее последней оценки 2026-11-17T19:10:22Z);\n  `bt_comparisons` сверен с независимо восстановленным числом пар — совпадает\n  по всем 10 published-достижениям.\n\n## 7. Граф связности\n\n- Вершины: все 10 published-достижений (включая потенциально изолированные).\n- Ребро: ≥1 попарное сравнение (неориентированно, canonical order a<b).\n- Компоненты: union-find; дополнительно leave-one-out по каждому пользователю\n  (`graph_analysis.json → leave_one_out`) — для анализа влияния отдельных\n  пользователей на связность и идентифицируемость рейтинга.\n- Межкатегорийные рёбра помечены отдельно (`cross_category_edges`).\n\n## 8. Отличия от предварительных ориентиров ТЗ\n\n| Ориентир ТЗ | Факт |\n|---|---|\n| 5 пользователей | 6 профилей, 5 с непустыми шкалами |\n| 10 достижений | 15 всего (10 published, 4 pending, 1 rejected) |\n| 5 достижений в шкалах | 10 (все published входят в шкалы) |\n| все 5 пользователей оценивали | да, но шкала U2 длины 1 → 0 сравнений; сравнения дают 4 пользователя |\n| меньшая позиция = легче | наоборот: 1 = самое сложное |",
+  "data_quality_report_md": "# Отчёт о полноте и качестве данных — GAL Pilot v0.3\n\nСнимок: 2026-11-18 ~14:57 UTC, прод Supabase `wiwyitafoprxmlyndkwe`, только чтение.\nПроблемы ниже **не исправлялись** (ограничение задачи).\n\n## 1. Фактический состав выборки\n\n- Пользователей (profiles): **6**; с непустыми шкалами: **5** (U1–U5).\n- Достижений: **15** = 10 published + 4 pending + 1 rejected.\n- В шкалах состоит **10** достижений (все published); без оценок: #32 (rejected),\n  #52–#55 (pending). Published без оценок: нет.\n- Строк оценок: **17**. Длины шкал: U1=7, U2=1, U3=4, U4=2, U5=3.\n- Попарных сравнений: **31** (U1=21, U2=0, U3=6, U4=1, U5=3); уникальных пар: **28**.\n- Граф: 10 вершин, 28 рёбер, **1 связная компонента**, изолированных нет.\n- Временных рейтингов топ-5 и заявок: 0.\n\n## 2. Пройденные проверки (проблем не найдено)\n\n- Дубликаты `(user_id, achievement_id)`: 0 (гарантируется unique-констрейнтом).\n- Ссылки на несуществующие достижения: 0.\n- Некорректные позиции (<1 или нецелые): 0; все шкалы плотные 1..k.\n- Оценки скрытых/удалённых/неопубликованных достижений: 0.\n- `locked=true` (legacy-фиксация): 0.\n- Tie-пары (равные позиции): 0; фактическое число пар = k(k−1)/2 для всех шкал.\n- `bt_comparisons` в БД = независимо восстановленному числу сравнений по всем 10.\n- `evaluation_count` в БД = фактическому числу строк по всем 15.\n- BT актуален: `bt_updated_at` = 2026-11-18T06:30:53Z новее последней оценки\n  (2026-11-17T19:10:22Z). SE/CI заполнены у всех 10 published с оценками.\n\n## 3. Найденные проблемы и ограничения\n\n### P1. Устаревший `average_position` у 5 достижений (расхождение БД vs пересчёт)\n\n| achievement | average_position в БД | по текущим оценкам |\n|---|---|---|\n| #33 | 2.5 | 3.5 |\n| #35 | 2.25 | 3.25 |\n| #46 | 2.0 | 3.0 |\n| #47 | 1.0 | 1.5 |\n| #48 | 4.0 | 5.0 |\n\n**Корень:** RPC `submit_evaluation` (миграция 029, строки 94–121) при\nвставке/редактировании оценки сдвигает позиции **других** оценок пользователя,\nно пересчитывает `average_position`/`evaluation_count` **только для редактируемого**\nдостижения. У остальных достижений, чьи позиции сдвинулись, среднее остаётся старым.\n**Влияние:** `average_position` используется лишь как tie-breaker/fallback\nсортировки; BT-силы считаются из сырых позиций, поэтому `bt_rating`/ранги BT\nне затронуты (сверка `bt_comparisons` совпала). Для эксперимента, использующего\nсреднюю позицию как baseline, **брать пересчитанные значения из user_scales.csv**,\nа не колонку БД. Не исправлено.\n\n### P2. Шкала U2 не даёт сравнений\n\nДлина 1 (#35) → 0 пар. «Все 5 пользователей участвовали в оценивании» верно,\nно вклад в BT дают только 4 пользователя. U2 влияет лишь на `evaluation_count`/\n`average_position` достижения #35.\n\n### P3. Критическая зависимость связности от U1\n\n- U1 даёт 21/31 сравнений (67.7%) и 18/28 рёбер — единственных для этих пар.\n- Leave-one-out (полностью в `graph_analysis.json`):\n  - без **U1**: 4 компоненты (7+1+1+1), изолированы #31, #48, #50 — единый\n    рейтинг перестаёт быть идентифицируемым;\n  - без **U3**: 2 компоненты, изолировано #49;\n  - без **U5**: 2 компоненты, изолировано #51;\n  - без U2/U4: связность сохраняется.\n- Вывод: текущая связность держится на одном пользователе; устойчивость\n  глобального рейтинга к его уходу низкая.\n\n### P4. Широкие доверительные интервалы (малая выборка)\n\n5 шкал, 31 сравнение. Примеры: #33 SE≈150.5, ДИ [654, 1158]; #36 SE≈148.3,\nДИ [768, 1297]; #47 SE≈107.1. ДИ соседних по рейтингу достижений сильно\nперекрываются — статистически различить близкие места нельзя. SE/CI получены\nкластерным бутстрэпом по шкалам (200 реплик, seed 20260101); при 5 кластерах\nоценка неопределённости сама по себе шумная.\n\n### P5. 5 достижений имеют лишь 1 оценку\n\n#31, #48, #49, #50, #51 — `ranking_status='unknown'`, постоянного ранга нет\n(порог 2), в UI показываются как «?». Их BT-сила оценена, но позиция\nпредварительная; постоянный топ-5 на момент снимка: #46, #36, #47, #33, #35.\n\n### P6. Нет истории шкал\n\n`evaluations` — upsert без версионирования: прошлые позиции недоступны,\n`updated_at` фиксирует только последнее изменение. Динамику оценок и\n«исторические vs актуальные» шкалы анализировать нельзя; все записи актуальные.\n\n### P7. Зависимость наблюдений внутри шкалы\n\nВсе пары одной шкалы — одно упорядочение, а не независимые эксперименты.\nВес 1/(k−1) нормирует вклад, но не устраняет зависимость (осознанное ограничение\nGAL, docstring `bradley_terry.py`). Наивные биномиальные SE без кластеризации\nбудут занижены; корректный baseline сравнения — кластерный бутстрэп или\nPlackett–Luce.\n\n### P8. Предварительные ориентиры ТЗ не подтвердились\n\nНе «5 достижений в шкалах», а 10; не 10 достижений всего, а 15; пользователей 6\n(5 со шкалами). Конвенция позиции противоположна предположению ТЗ\n(1 = самое сложное). Выгрузка следует фактическим данным и коду.\n\n### P9. Ограничения доступа/среды\n\nManagement API (`api.supabase.com`) с этой машины недоступен (TCP reset,\nблэкхол диапазонов) — использован PostgREST GET. Это не повлияло на состав данных:\nвсе таблицы прочитаны полностью (17 оценок, 15 достижений, 11 категорий,\n9 записей модерации). Снимок одноразовый; при изменении прода данные устареют.\n\n## 4. Что можно и нельзя заключать по этим данным\n\n**Можно:**\n- Восстановить 5 индивидуальных шкал и 31 сравнение с авторством и весами.\n- Строить единый глобальный BT-рейтинг: граф связен (1 компонента, 10 вершин),\n  все published-достижения сравнимы; кросс-категорийных рёбер 25 из 28.\n- Сравнивать BT с baseline (средняя позиция / взвешенная средняя) — при условии\n  пересчёта средней из сырых позиций (P1).\n- Анализировать влияние пользователей (leave-one-out, доли веса) — P3 даёт\n  количественную меру.\n\n**Нельзя (пока):**\n- Утверждать статистически значимый порядок близких достижений (P4).\n- Делать популяционные выводы: 5 пользователей, из них 1 доминирует; выборка\n  нерепрезентативна, оценки смещены вкусами U1.\n- Анализировать динамику/версии шкал (P6).\n- Считать оценки независимыми наблюдениями (P7).\n- Распространять выводы на pending/rejected-достижения (#32, #52–#55) — они\n  вне модели и вне графа."
+}
