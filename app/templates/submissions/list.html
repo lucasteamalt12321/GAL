@@ -9,8 +9,9 @@
 </section>
 
 <p class="muted">
-  Здесь все ваши заявки о выполнении: статус, доказательства и причина отклонения.
-  Отклонённую заявку можно исправить и отправить снова — старая заявка будет заменена.
+  Здесь все ваши заявки: о выполнении достижений и в топ-5. Статус, доказательства
+  и причина отклонения. Отклонённую заявку о выполнении можно исправить и отправить
+  снова — старая заявка будет заменена.
 </p>
 
 <div class="chips submissions-filters">
@@ -97,4 +98,52 @@
     <p><a class="btn btn-primary" href="/achievements">Найти достижение</a></p>
   </section>
 {% endif %}
+
+<section class="leaderboard-section">
+  <h2>Заявки в топ-5</h2>
+  <p class="muted">
+    Временное место в топ-5 даёт достижению номер со звёздочкой (#3*): оно
+    участвует в общем рейтинге, пока у достижения меньше трёх обычных оценок.
+    После третьей независимой оценки место пересчитывается по обычным правилам,
+    звёздочка исчезает, а заявка закрывается автоматически.
+  </p>
+  {% if top5_applications %}
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Мои заявки в топ-5">
+      <table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th scope="col">Достижение</th>
+            <th scope="col">Запрошенное место</th>
+            <th scope="col">Статус</th>
+            <th scope="col">Подана</th>
+            <th scope="col">Решение</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in top5_applications %}
+            <tr>
+              <td>
+                <a href="/top5/{{ a.id }}">
+                  {{ a.achievement.title if a.achievement else 'Достижение #' ~ a.achievement_id }}
+                </a>
+              </td>
+              <td>#{{ a.proposed_position }}</td>
+              <td><span class="tag">{{ a.status|top5_status_label }}</span></td>
+              <td>{{ a.created_at|date_local }}</td>
+              <td>
+                {% if a.decision_reason %}{{ a.decision_reason }}{% else %}—{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">
+      Заявок в топ-5 пока нет. Заявка подаётся вместе с прохождением достижения —
+      выберите достижение в <a href="/achievements">каталоге</a> и отметьте
+      «Заявка в топ-5» в форме отправки доказательства.
+    </p>
+  {% endif %}
+</section>
 {% endblock %}

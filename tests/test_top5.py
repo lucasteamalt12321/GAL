@@ -138,28 +138,11 @@ def test_top5_page_requires_login() -> None:
     assert resp.headers["location"] == "/auth/login"
 
 
-def test_top5_page_renders_applications(monkeypatch) -> None:
+def test_top5_page_redirects_to_submissions(monkeypatch) -> None:
     _login(monkeypatch)
-    monkeypatch.setattr(
-        top5_service,
-        "list_my_applications",
-        lambda _r: [
-            {
-                "id": 3,
-                "achievement_id": 1,
-                "proposed_position": 2,
-                "status": "approved",
-                "created_at": "2026-11-01T10:00:00+00:00",
-                "decision_reason": "",
-                "achievement": {"id": 1, "title": "Sample"},
-            }
-        ],
-    )
-    resp = client.get("/top5")
-    assert resp.status_code == 200
-    assert "Временное место в топ-5" in resp.text
-    assert "Sample" in resp.text
-    assert "Приглашения эксперта" not in resp.text
+    resp = client.get("/top5", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/submissions"
 
 
 def test_separate_apply_route_removed(monkeypatch) -> None:

@@ -9,10 +9,9 @@ from app.templating import templates
 router = APIRouter(prefix="/top5", tags=["top5"])
 
 LOGIN_URL = "/auth/login"
-MY_URL = "/top5"
+MY_URL = "/submissions"
 
 INFO_MESSAGES = {
-    "cancelled": "Заявка отозвана.",
     "decided": "Решение сохранено.",
 }
 
@@ -25,24 +24,11 @@ def _error_url(url: str, message: str) -> str:
     return f"{url}?error={quote(message)}"
 
 
-@router.get("", response_class=HTMLResponse, include_in_schema=False)
-def my_page(
-    request: Request,
-    info: str | None = None,
-    error: str | None = None,
-) -> HTMLResponse:
+@router.get("", include_in_schema=False)
+def my_page(request: Request) -> RedirectResponse:
     if request.state.user is None:
         return _redirect(LOGIN_URL)
-    applications = top5_service.list_my_applications(request)
-    return templates.TemplateResponse(
-        request=request,
-        name="top5/index.html",
-        context={
-            "applications": applications,
-            "info": INFO_MESSAGES.get(info, info),
-            "error": error,
-        },
-    )
+    return _redirect(MY_URL)
 
 
 @router.post(

@@ -7,6 +7,7 @@ from app.services import achievements as achievements_service
 from app.services import auth as auth_service
 from app.services import completions as completions_service
 from app.services import evaluation as evaluation_service
+from app.services import top5 as top5_service
 
 client = TestClient(app)
 
@@ -77,6 +78,54 @@ def test_submissions_filter(monkeypatch) -> None:
     # Обе строки имеют одинаковый achievement title, поэтому проверяем
     # количество ссылок «исправить»: одна отклонённая.
     assert resp.text.count("Исправить и отправить снова") == 1
+
+
+def test_submissions_shows_top5_applications(monkeypatch) -> None:
+    _login(monkeypatch)
+    monkeypatch.setattr(completions_service, "list_user_completions", lambda _r: [])
+    monkeypatch.setattr(
+        top5_service,
+        "list_my_applications",
+        lambda _r: [
+            {
+                "id": 3,
+                "achievement_id": 1,
+                "proposed_position": 2,
+                "status": "approved",
+                "created_at": "2026-11-01T10:00:00+00:00",
+                "decision_reason": "",
+                "achievement": {"id": 1, "title": "Sample"},
+            }
+        ],
+    )
+    resp = client.get("/submissions")
+    assert resp.status_code == 200
+    assert "Заявки в топ-5" in resp.text
+    assert "Временное место в топ-5" in resp.text
+    assert "Sample" in resp.text
+    assert 'href="/top5/3"' in resp.text
+    assert 'href="/top5">Топ-5' not in resp.text
+
+
+def test_submissions_top5_degrades_without_schema(monkeypatch) -> None:
+    _login(monkeypatch)
+    monkeypatch.setattr(completions_service, "list_user_completions", lambda _r: [])
+
+    def _raise(_r):
+        raise top5_service.Top5Error("Требуется вход в аккаунт.")
+
+    monkeypatch.setattr(top5_service, "list_my_applications", _raise)
+    resp = client.get("/submissions")
+    assert resp.status_code == 200
+    assert "Заявок в топ-5 пока нет" in resp.text
+
+
+def test_submissions_cancelled_info_message(monkeypatch) -> None:
+    _login(monkeypatch)
+    monkeypatch.setattr(completions_service, "list_user_completions", lambda _r: [])
+    resp = client.get("/submissions?info=cancelled")
+    assert resp.status_code == 200
+    assert "Заявка в топ-5 отозвана." in resp.text
 
 
 def test_detail_shows_submit_form_for_logged_in_user(monkeypatch) -> None:
