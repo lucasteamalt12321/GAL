@@ -1,0 +1,654 @@
+{
+  "vertex_set": "all published achievements",
+  "vertices": 10,
+  "vertices_with_comparisons": 10,
+  "edges": 28,
+  "connected_components": 1,
+  "component_sizes": [
+    10
+  ],
+  "components": [
+    {
+      "achievements": [
+        31,
+        33,
+        35,
+        36,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51
+      ],
+      "titles": [
+        "Пройти уровень Supersonic в Geometry Dash на 100% и собрать 3 монеты",
+        "Снять короткое видео о математике",
+        "Выпить стакан воды",
+        "Заснуть раньше полночи",
+        "Пройти ежедневный уровень в Geometry Dash",
+        "Приготовить вкусный завтрак",
+        "Вернуться в Duolingo спустя месяц",
+        "Сгенерировать изображение по описанию",
+        "Объявление в чате",
+        "Защитник ночного народа"
+      ]
+    }
+  ],
+  "isolated_vertices": [],
+  "outside_main_component": [],
+  "single_global_ranking_identifiable": true,
+  "comparisons_per_achievement": {
+    "31": 6,
+    "33": 9,
+    "35": 10,
+    "36": 8,
+    "46": 9,
+    "47": 3,
+    "48": 6,
+    "49": 3,
+    "50": 6,
+    "51": 2
+  },
+  "edges_detail": [
+    {
+      "a": 31,
+      "b": 33,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 31,
+      "b": 35,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 31,
+      "b": 36,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 31,
+      "b": 46,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 31,
+      "b": 48,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 31,
+      "b": 50,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 33,
+      "b": 35,
+      "comparisons": 2,
+      "users": [
+        "U1",
+        "U3"
+      ],
+      "user_count": 2,
+      "total_weight": 0.5
+    },
+    {
+      "a": 33,
+      "b": 36,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 33,
+      "b": 46,
+      "comparisons": 2,
+      "users": [
+        "U1",
+        "U3"
+      ],
+      "user_count": 2,
+      "total_weight": 0.5
+    },
+    {
+      "a": 33,
+      "b": 48,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 33,
+      "b": 49,
+      "comparisons": 1,
+      "users": [
+        "U3"
+      ],
+      "user_count": 1,
+      "total_weight": 0.3333333333
+    },
+    {
+      "a": 33,
+      "b": 50,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 35,
+      "b": 36,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 35,
+      "b": 46,
+      "comparisons": 2,
+      "users": [
+        "U1",
+        "U3"
+      ],
+      "user_count": 2,
+      "total_weight": 0.5
+    },
+    {
+      "a": 35,
+      "b": 47,
+      "comparisons": 1,
+      "users": [
+        "U4"
+      ],
+      "user_count": 1,
+      "total_weight": 1.0
+    },
+    {
+      "a": 35,
+      "b": 48,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 35,
+      "b": 49,
+      "comparisons": 1,
+      "users": [
+        "U3"
+      ],
+      "user_count": 1,
+      "total_weight": 0.3333333333
+    },
+    {
+      "a": 35,
+      "b": 50,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 36,
+      "b": 46,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 36,
+      "b": 47,
+      "comparisons": 1,
+      "users": [
+        "U5"
+      ],
+      "user_count": 1,
+      "total_weight": 0.5
+    },
+    {
+      "a": 36,
+      "b": 48,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 36,
+      "b": 50,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 36,
+      "b": 51,
+      "comparisons": 1,
+      "users": [
+        "U5"
+      ],
+      "user_count": 1,
+      "total_weight": 0.5
+    },
+    {
+      "a": 46,
+      "b": 48,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 46,
+      "b": 49,
+      "comparisons": 1,
+      "users": [
+        "U3"
+      ],
+      "user_count": 1,
+      "total_weight": 0.3333333333
+    },
+    {
+      "a": 46,
+      "b": 50,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    },
+    {
+      "a": 47,
+      "b": 51,
+      "comparisons": 1,
+      "users": [
+        "U5"
+      ],
+      "user_count": 1,
+      "total_weight": 0.5
+    },
+    {
+      "a": 48,
+      "b": 50,
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ],
+      "user_count": 1,
+      "total_weight": 0.1666666667
+    }
+  ],
+  "cross_category_edges_count": 25,
+  "cross_category_edges": [
+    {
+      "a": 31,
+      "b": 33,
+      "category_a": "geometry-dash",
+      "category_b": "education",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 31,
+      "b": 35,
+      "category_a": "geometry-dash",
+      "category_b": "sport-health",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 31,
+      "b": 36,
+      "category_a": "geometry-dash",
+      "category_b": "sport-health",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 31,
+      "b": 48,
+      "category_a": "geometry-dash",
+      "category_b": "education",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 31,
+      "b": 50,
+      "category_a": "geometry-dash",
+      "category_b": "other",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 33,
+      "b": 35,
+      "category_a": "education",
+      "category_b": "sport-health",
+      "comparisons": 2,
+      "users": [
+        "U1",
+        "U3"
+      ]
+    },
+    {
+      "a": 33,
+      "b": 36,
+      "category_a": "education",
+      "category_b": "sport-health",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 33,
+      "b": 46,
+      "category_a": "education",
+      "category_b": "geometry-dash",
+      "comparisons": 2,
+      "users": [
+        "U1",
+        "U3"
+      ]
+    },
+    {
+      "a": 33,
+      "b": 49,
+      "category_a": "education",
+      "category_b": "creativity",
+      "comparisons": 1,
+      "users": [
+        "U3"
+      ]
+    },
+    {
+      "a": 33,
+      "b": 50,
+      "category_a": "education",
+      "category_b": "other",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 35,
+      "b": 46,
+      "category_a": "sport-health",
+      "category_b": "geometry-dash",
+      "comparisons": 2,
+      "users": [
+        "U1",
+        "U3"
+      ]
+    },
+    {
+      "a": 35,
+      "b": 47,
+      "category_a": "sport-health",
+      "category_b": "household",
+      "comparisons": 1,
+      "users": [
+        "U4"
+      ]
+    },
+    {
+      "a": 35,
+      "b": 48,
+      "category_a": "sport-health",
+      "category_b": "education",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 35,
+      "b": 49,
+      "category_a": "sport-health",
+      "category_b": "creativity",
+      "comparisons": 1,
+      "users": [
+        "U3"
+      ]
+    },
+    {
+      "a": 35,
+      "b": 50,
+      "category_a": "sport-health",
+      "category_b": "other",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 36,
+      "b": 46,
+      "category_a": "sport-health",
+      "category_b": "geometry-dash",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 36,
+      "b": 47,
+      "category_a": "sport-health",
+      "category_b": "household",
+      "comparisons": 1,
+      "users": [
+        "U5"
+      ]
+    },
+    {
+      "a": 36,
+      "b": 48,
+      "category_a": "sport-health",
+      "category_b": "education",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 36,
+      "b": 50,
+      "category_a": "sport-health",
+      "category_b": "other",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 36,
+      "b": 51,
+      "category_a": "sport-health",
+      "category_b": "other",
+      "comparisons": 1,
+      "users": [
+        "U5"
+      ]
+    },
+    {
+      "a": 46,
+      "b": 48,
+      "category_a": "geometry-dash",
+      "category_b": "education",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 46,
+      "b": 49,
+      "category_a": "geometry-dash",
+      "category_b": "creativity",
+      "comparisons": 1,
+      "users": [
+        "U3"
+      ]
+    },
+    {
+      "a": 46,
+      "b": 50,
+      "category_a": "geometry-dash",
+      "category_b": "other",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    },
+    {
+      "a": 47,
+      "b": 51,
+      "category_a": "household",
+      "category_b": "other",
+      "comparisons": 1,
+      "users": [
+        "U5"
+      ]
+    },
+    {
+      "a": 48,
+      "b": 50,
+      "category_a": "education",
+      "category_b": "other",
+      "comparisons": 1,
+      "users": [
+        "U1"
+      ]
+    }
+  ],
+  "leave_one_out": {
+    "U1": {
+      "remaining_comparisons": 10,
+      "remaining_edges": 10,
+      "connected_components": 4,
+      "component_sizes": [
+        7,
+        1,
+        1,
+        1
+      ],
+      "isolated_vertices": [
+        31,
+        48,
+        50
+      ]
+    },
+    "U2": {
+      "remaining_comparisons": 31,
+      "remaining_edges": 28,
+      "connected_components": 1,
+      "component_sizes": [
+        10
+      ],
+      "isolated_vertices": []
+    },
+    "U3": {
+      "remaining_comparisons": 25,
+      "remaining_edges": 25,
+      "connected_components": 2,
+      "component_sizes": [
+        9,
+        1
+      ],
+      "isolated_vertices": [
+        49
+      ]
+    },
+    "U4": {
+      "remaining_comparisons": 30,
+      "remaining_edges": 27,
+      "connected_components": 1,
+      "component_sizes": [
+        10
+      ],
+      "isolated_vertices": []
+    },
+    "U5": {
+      "remaining_comparisons": 28,
+      "remaining_edges": 25,
+      "connected_components": 2,
+      "component_sizes": [
+        9,
+        1
+      ],
+      "isolated_vertices": [
+        51
+      ]
+    }
+  }
+}

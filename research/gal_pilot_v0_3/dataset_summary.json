@@ -1,0 +1,149 @@
+{
+  "generated_at": "2026-11-18T14:56:05.595473+00:00",
+  "source": "Supabase prod project wiwyitafoprxmlyndkwe, read-only PostgREST GET (service role)",
+  "total_users_profiles": 7,
+  "users_with_nonempty_scales": 5,
+  "total_achievements": 15,
+  "achievements_by_status": {
+    "pending": 4,
+    "published": 10,
+    "rejected": 1
+  },
+  "achievements_in_at_least_one_scale": 10,
+  "published_achievements_in_bt_model": 10,
+  "achievements_without_evaluations": [
+    32,
+    52,
+    53,
+    54,
+    55
+  ],
+  "published_without_evaluations": [],
+  "scale_length_distribution_total": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 1,
+    "7": 1
+  },
+  "scale_length_distribution_published": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 1,
+    "7": 1
+  },
+  "total_evaluation_rows": 17,
+  "total_pairwise_comparisons": 31,
+  "unique_pairs": 28,
+  "comparisons_per_user": {
+    "U1": 21,
+    "U2": 0,
+    "U3": 6,
+    "U4": 1,
+    "U5": 3
+  },
+  "expected_pairs_per_user": {
+    "U1": 21,
+    "U2": 0,
+    "U3": 6,
+    "U4": 1,
+    "U5": 3
+  },
+  "category_distribution_all": {
+    "creativity": 5,
+    "education": 2,
+    "geometry-dash": 2,
+    "household": 1,
+    "music": 1,
+    "other": 2,
+    "sport-health": 2
+  },
+  "category_distribution_evaluated": {
+    "creativity": 1,
+    "education": 2,
+    "geometry-dash": 2,
+    "household": 1,
+    "other": 2,
+    "sport-health": 2
+  },
+  "users_per_achievement": {
+    "31": 1,
+    "33": 2,
+    "35": 4,
+    "36": 2,
+    "46": 2,
+    "47": 2,
+    "48": 1,
+    "49": 1,
+    "50": 1,
+    "51": 1
+  },
+  "top5_applications_by_status": {},
+  "temporary_ratings_rows": 0,
+  "graph": {
+    "vertices": 10,
+    "edges": 28,
+    "connected_components": 1,
+    "component_sizes": [
+      10
+    ],
+    "isolated_vertices": [],
+    "single_global_ranking_identifiable": true
+  },
+  "data_quality": {
+    "duplicate_user_achievement_rows": [],
+    "orphan_evaluation_rows": 0,
+    "nonpublished_evaluations": [],
+    "invalid_positions": [],
+    "non_dense_scale_positions": [],
+    "locked_rows": [],
+    "tie_skipped_pairs": [],
+    "pair_count_mismatch_per_user": [],
+    "bt_comparisons_mismatch": [],
+    "evaluation_count_mismatch": [],
+    "average_position_mismatch": [
+      {
+        "achievement_id": 33,
+        "db": 2.5,
+        "computed": 3.5
+      },
+      {
+        "achievement_id": 35,
+        "db": 2.25,
+        "computed": 3.25
+      },
+      {
+        "achievement_id": 46,
+        "db": 2,
+        "computed": 3.0
+      },
+      {
+        "achievement_id": 47,
+        "db": 1,
+        "computed": 1.5
+      },
+      {
+        "achievement_id": 48,
+        "db": 4,
+        "computed": 5.0
+      }
+    ],
+    "se_ci_missing_published_with_evaluations": [],
+    "bt_staleness": {
+      "latest_evaluation_update": "2026-11-17T19:10:22.328792+00:00",
+      "bt_updated_at_per_achievement": {
+        "31": "2026-11-18T06:30:53.224924+00:00",
+        "33": "2026-11-18T06:30:53.224924+00:00",
+        "35": "2026-11-18T06:30:53.224924+00:00",
+        "36": "2026-11-18T06:30:53.224924+00:00",
+        "46": "2026-11-18T06:30:53.224924+00:00",
+        "47": "2026-11-18T06:30:53.224924+00:00",
+        "48": "2026-11-18T06:30:53.224924+00:00",
+        "49": "2026-11-18T06:30:53.224924+00:00",
+        "50": "2026-11-18T06:30:53.224924+00:00",
+        "51": "2026-11-18T06:30:53.224924+00:00"
+      }
+    }
+  }
+}
