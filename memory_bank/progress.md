@@ -571,4 +571,4 @@
 
 ## last_checked_commit
 
-`7265f9c research: export GAL Pilot v0.3 dataset (read-only) with BT pairs, graph and quality analysis` (2026-11-18). Предыдущий — `b78d0fd memory bank: record live e2e check of merged submissions tab`. К проду применены все миграции 001–032 (`022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021`/`029`/`030`/`031`/`032` — 2026-11-17). Рабочая копия на момент выгрузки: изменений кода нет, `research/gal_pilot_v0_3/` — новый read-only датасет (скрипт ruff чист, прогон успешен).
+`08fbee0 research: BT v0.4 study — method comparison and rating stability curve` (2026-11-18). Предыдущий — `4cff61d research: add single-file bundle gal_pilot_v0_3_full.json`. К проду применены все миграции 001–032 (`022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021`/`029`/`030`/`031`/`032` — 2026-11-17). Код приложения не менялся; `pytest` — 337 passed (с санитизированным NO_PROXY), ruff чист.
