@@ -117,7 +117,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D9  | Reports                           | completed | 4   |
 | D10 | Polish + hardening (UI, security, errors) | completed | 1   |
 | D11 | Bugfix по итогам bug-hunt 09-28   | completed | 3   |
-| D12 | v1.1: функции, безопасность, CI   | completed | 5   |
+| D12 | v1.1: функции, безопасность, CI   | completed | 3   |
 | D13 | v1.2: Bradley–Terry ранкинг       | completed | 6   |
 | D14 | v1.8: надёжность BT (SE + 95% CI) | completed | 4 |
 | D15 | v1.9: предварительный топ-5       | completed | 4 |
@@ -125,6 +125,10 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D17 | Bugfix по итогам bug-hunt 11-15   | completed | 1 |
 | D18 | v1.11: заявка топ-5 при прохождении | completed | 3 |
 | D19 | Контент-рефактор: категории и тексты под школьную аудиторию | completed | 1 |
+| D20 | Appwrite-зеркало GAL на self-hosted Functions (без миграции БД) | completed | 1 |
+| D21 | Публичный адрес `gal.ravva.su` для зеркала (DNS + proxy rule + OAuth) | in_progress | 1 |
+
+Примечание к D20: добавлен по уточнению scope от 2026-11-22 («Appwrite — self-hosted, это должно быть зеркало, БД — та же Supabase»); вес D12 уменьшен с 5 до 3 (4 → 3 при добавлении D21) для сохранения суммы 100. Vercel и Supabase остаются основным деплоем и БД соответственно. D21: proxy rule `gal.ravva.su → gal-mirror` создан и verified (22 Nov 2026), DNS резолвится; `APP_URL`/`MIRROR_BASE_URL` функции обновлены на `https://gal.ravva.su`, требуется redeploy + внешние OAuth-redirects (LThub callback + Supabase Auth URLs).
 
 ## Success Criteria MVP
 

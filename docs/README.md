@@ -24,7 +24,9 @@ PostgreSQL  Auth     Storage
 ```
 
 - **FastAPI** — бизнес-логика (ранкинг, scoring, модерация, оценки), SSR-шаблоны.
-- **Supabase** — PostgreSQL, авторизация, приватное хранение доказательств.
+- **Vercel** — основной деплой и канонический адрес GAL; не удалялся.
+- **Appwrite Function `gal-mirror`** — зеркало GAL в self-hosted Appwrite: вызывает тот же FastAPI-объект, но **не заменяет** Supabase.
+- **Supabase** — PostgreSQL, авторизация, приватное хранение доказательств; остаётся единственной БД.
 
 ## Модули
 
@@ -179,6 +181,18 @@ PostgreSQL  Auth     Storage
 - Глобальные обработчики `httpx.HTTPError`, `postgrest.exceptions.APIError` и `SupabaseNotConfiguredError` отдают `errors/upstream.html` с кодом **503** и пишут причину в лог `gal.upstream`.
 - Лендинг не зависит от БД: топы подгружаются best-effort, при сбое показывается статическая часть.
 - `/health` не обращается к БД и всегда отвечает JSON.
+
+## Appwrite-зеркало (D20)
+
+- Self-hosted Appwrite: endpoint `https://aw2.ravva.su/v1`, проект `6b019993003c1f1df715` («Global achievements list»). Проект принадлежит классному руководителю; доступ — по API-ключу из `.env.local` (`APPWRITE_API_KEY`). **Миграции БД не выполнялись**: Vercel остаётся основным деплоем, Supabase — единственной БД.
+- Функция `gal-mirror`: Python 3.12, `version v5`, entrypoint `main.py`, `execute: any`, timeout 60 с, build/runtime `s-8vcpu-8gb`; активный деплой `6b02b6e01210893ebe2a`.
+- Адаптер `appwrite/functions/gal-mirror/main.py` принимает `context.req` (method/path/query/headers/body), прогоняет запрос через `httpx.ASGITransport` с тем же `app.main:app`, что и Vercel, и возвращает `context.res.binary`. Повторяющиеся `Set-Cookie` сохраняются списком заголовков; служебные `x-appwrite-*`/`x-open-runtimes-*` и hop-by-hop поля отбрасываются.
+- open-runtimes импортирует точку входа как `function.main`, поэтому адаптер добавляет свой каталог в `sys.path` до `from app.main import app`; без этого `ModuleNotFoundError: app` давал 503 на каждом запросе.
+- Сборка: `python scripts/build_appwrite_mirror.py` копирует текущий `app/` (шаблоны и статика включены), адаптер и отдельный `requirements.txt` (без `uvicorn`) в `appwrite/build/gal-mirror/` (каталог в `.gitignore`). Деплой: `appwrite functions create-deployment --function-id gal-mirror --code appwrite/build/gal-mirror --entrypoint main.py --commands "pip install -r requirements.txt" --activate`.
+- Переменные функции: `SUPABASE_*` (секреты), `SUPABASE_TIMEOUT_SECONDS=6`, `APP_ENV=production`, `APP_URL`, `MIRROR_BASE_URL`. Ключи Appwrite в функцию **не** передаются.
+- Вызов: `appwrite functions create-execution --function-id gal-mirror --method GET --path /health` (поддерживаются `--path` с query, `--headers`, `--body`). Публичного домена у функции пока нет: `APP_URL`/`MIRROR_BASE_URL` оставляют Vercel-адрес, статика и OAuth-редиректы идут на канонический домен. В Appwrite 2.7 домены подключаются не через `/v1/functions/{id}/domains` (404), а через **proxy rules**: `appwrite proxy create-function-rule --domain gal.ravva.su --function-id gal-mirror`; для этого сначала нужна DNS-запись `gal.ravva.su CNAME sites.aw2.ravva.su` (proxy ingress `83.147.252.175`), затем registration OAuth-redirect `https://gal.ravva.su/auth/lthub/callback`. Это отдельный заблокированный deliverable D21.
+- Проверено 2026-11-22: сборка `ready`; `/health` — 200 с JSON, security-заголовками и `Set-Cookie`; `/`, `/leaderboard`, `/achievements`, `/auth/login` — 200; `/auth/me` — 401; `/static/css/style.css` — 200 `text/css`. Ошибок рантайма в логах execution нет.
+- Ограничение: функция доступна через Appwrite CLI/консоль; браузерный публичный адрес и отдельный OAuth-callback для неё не настраивались — это зеркало контента и логики, а неsecond origin для авторизации.
 
 ## UI
 

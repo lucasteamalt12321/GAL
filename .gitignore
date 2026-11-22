@@ -24,6 +24,7 @@ scripts/fix_test_user.py
 # deployment
 .vercel/
 .vercel
+appwrite/build/
 
 # editor / os
 .idea/

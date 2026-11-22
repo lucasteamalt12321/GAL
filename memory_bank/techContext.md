@@ -9,7 +9,7 @@
 | База данных  | Supabase PostgreSQL                 |
 | Auth         | Supabase Auth (email + password)    |
 | Storage      | Supabase Storage (proofs)           |
-| Деплой       | Vercel                              |
+| Деплой       | Vercel (основной) + Appwrite Function `gal-mirror` (зеркало) |
 | Линтер       | ruff                                |
 | Пакеты       | pip (requirements.txt)              |
 
@@ -53,6 +53,11 @@ LTHUB_CLIENT_ID=gal          # публичный PKCE-клиент
 LTHUB_AUTHORIZE_URL=https://lthub.vercel.app/oauth/authorize
 LTHUB_TOKEN_URL=https://lthub.vercel.app/oauth/token
 LTHUB_USERINFO_URL=https://lthub.vercel.app/oauth/userinfo
+APPWRITE_ENDPOINT=https://aw2.ravva.su/v1
+APPWRITE_PROJECT_ID=6b019993003c1f1df715
+APPWRITE_API_KEY=             # ключ проекта из .env.local, в функцию НЕ передаётся
+APPWRITE_TOKEN=               # тот же ключ для CLI (appwrite client --key)
+MIRROR_BASE_URL=              # база для ссылок зеркала; сейчас Vercel, после D21 — gal.ravva.su
 LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
 OAUTH_PROVIDER_ENABLED=true   # GAL как OAuth-провайдер для LTHub
 OAUTH_LTHUB_CLIENT_ID=lthub   # публичный PKCE-клиент LTHub
@@ -66,6 +71,14 @@ OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (
 - `vercel.json` — routing ASGI на `app.main:app`.
 - Serverless функции; статистика не хранится локально.
 - Переменные окружения задаются в Vercel dashboard.
+
+## Appwrite (self-hosted, D20/D21)
+
+- Endpoint `https://aw2.ravva.su/v1`, проект `6b019993003c1f1df715` «Global achievements list» (владелец — классный руководитель); доступ только по API-ключу, консоль владельца не использовалась. Сервер 2.7.4, CLI 28.14.0, конфиг `appwrite.config.json`.
+- Function `gal-mirror`: python-3.12, entrypoint `main.py`, execute.any, timeout 60, активный deployment `6b02b6e01210893ebe2a`. `appwrite/functions/gal-mirror/main.py` — ASGI-адаптер на `httpx.ASGITransport` к тому же `app.main:app`; open-runtimes импортирует entrypoint как `function.main`, поэтому каталог адаптера добавляется в `sys.path`.
+- Сборка: `python scripts/build_appwrite_mirror.py` → `appwrite/build/gal-mirror/` (в `.gitignore`); деплой через `appwrite functions create-deployment … --activate`. Зависимости функции без `uvicorn`.
+- Переменные функции: `SUPABASE_*` (секреты), `SUPABASE_TIMEOUT_SECONDS=6`, `APP_ENV=production`, `APP_URL`/`MIRROR_BASE_URL` = Vercel. Ключи Appwrite (`APPWRITE_API_KEY`/`APPWRITE_TOKEN`) в функцию **не** передаются. Supabase остаётся единственной БД, миграции не применялись.
+- Публичный домен: в 2.7 нет `/v1/functions/{id}/domains` (404); домены подключаются через proxy rules (`POST /v1/proxy/rules/function`, CLI `appwrite proxy create-function-rule`). Для `gal.ravva.su` нужен DNS `CNAME sites.aw2.ravva.su` (proxy ingress `83.147.252.175`) и затем смена `APP_URL`/`MIRROR_BASE_URL` + OAuth-redirect `https://gal.ravva.su/auth/lthub/callback`. Заблокировано внешним доступом (D21).
 
 ## Supabase (проект создан: `wiwyitafoprxmlyndkwe`)
 

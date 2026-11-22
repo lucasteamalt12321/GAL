@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **100%** (D1–D19 completed; D18 «v1.11: заявка топ-5 при прохождении» завершён: код закоммичен (`cb81d99`) и задеплоен, миграция 031 применена к проду 2026-11-17). Все миграции 001–032 применены к проду: 025/026/027 — 2026-11-14, 028 — 2026-11-15, 021/029/030/031/032 — 2026-11-17.
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **99%** (D1–D20 completed; D21 «Публичный адрес gal.ravva.su» — `blocked`: нужен DNS зоны `ravva.su` и разрешение на proxy rule в проекте руководителя). D20 «Appwrite-зеркало» завершено 2026-11-22: функция `gal-mirror`, деплой `6b02b6e01210893ebe2a` готов, HTTP-проверки пройдены. D18 «v1.11: заявка топ-5 при прохождении» завершён: код закоммичен (`cb81d99`) и задеплоен, миграция 031 применена к проду 2026-11-17. Все миграции 001–032 применены к проду: 025/026/027 — 2026-11-14, 028 — 2026-11-15, 021/029/030/031/032 — 2026-11-17.
 
 ## Deliverables статус
 
@@ -27,8 +27,22 @@
 | D17 | Bugfix по итогам bug-hunt 11-15   | completed |
 | D18 | v1.11: заявка топ-5 при прохождении | completed |
 | D19 | Контент-рефактор: категории и тексты под школьную аудиторию | completed |
+| D20 | Appwrite-зеркало GAL на self-hosted Functions (без миграции БД) | completed |
+| D21 | Публичный адрес `gal.ravva.su` для зеркала (DNS + proxy rule + OAuth) | in_progress |
 
 ## Changelog
+
+### 2026-11-22 — D20 завершено (Appwrite-зеркало); D21 заблокирован (адрес gal.ravva.su)
+
+**Запрос.** «Установить Appwrite CLI, настроить проект» → «Appwrite — self-hosted, это должно быть зеркало, БД — та же Supabase» → «а какая ссылка на сайт?» → «как сделать gal.ravva.su?».
+
+**Выполнено (D20).** Установлен `appwrite-cli` 28.14.0; `appwrite client --endpoint https://aw2.ravva.su/v1 --project-id 6b019993003c1f1df715 --key …`; созданы `appwrite.config.json`, адаптер `appwrite/functions/gal-mirror/main.py` (context.req → `httpx.ASGITransport` → `app.main:app`, Set-Cookie списком, `sys.path`-фикс для open-runtimes), `appwrite/functions/gal-mirror/requirements.txt`, `scripts/build_appwrite_mirror.py`; `.env.example`/`.gitignore` обновлены. Создана функция `gal-mirror` (python-3.12, v5, execute.any, timeout 60) с 8 переменными `SUPABASE_*`/`APP_ENV`/`APP_URL`/`MIRROR_BASE_URL`; активный деплой `6b02b6e01210893ebe2a` (`ready`). Проверено через `create-execution`: `/health` 200, `/`, `/leaderboard`, `/achievements`, `/auth/login` 200, `/auth/me` 401, `/static/css/style.css` 200 text/css. Vercel, Supabase, миграции, `app/`, `vercel.json` не менялись.
+
+**Исследование (D21).** Версия сервера 2.7.4; публичных доменов у Functions нет, `/v1/functions/gal-mirror/domains` → 404. Через `/openapi.json` найден верный механизм: `/v1/proxy/rules/function` (CLI `appwrite proxy create-function-rule --domain … --function-id …`). В проекте уже 4 proxy-правила старого Site «GAL» (verified, SSL выдан), но deployment `6b01a11f7e467dec4017` — failed. `gal.ravva.su` не резолвится; `sites.aw2.ravva.su` → `83.147.252.175` (proxy ingress), `aw2.ravva.su` → `217.177.10.231` (API). Подготовлено сообщение владельцу от имени ИИ-ассистента с просьбой добавить DNS и proxy rule. **Ни DNS, ни proxy rule, ни переменные функции не менялись.**
+
+**Обновление (redirect).** По жалобе «с LTHub редиректит на vercel проект GAL, а не appwrite» подтверждено: proxy rule/DNS уже были готовы, но функция отдавала Vercel callback. `APP_URL`/`MIRROR_BASE_URL` обновлены на `https://gal.ravva.su`, redeploy `6b02e6f2ea626f1d8bad` активен и `ready`; execution подтверждает `redirect_uri=https://gal.ravva.su/auth/lthub/callback`. Внешний остаток: разрешить этот callback в OAuth-клиенте `gal` на LThub и добавить `https://gal.ravva.su/**` в Supabase Auth Redirect URLs.
+
+**Состояние.** D21 `in_progress`, процент по Deliverables — 99% (вес D21 не засчитан до полного завершения). `ruff check`/`ruff format --check` по `appwrite/` и `scripts/build_appwrite_mirror.py` — чисто. Код `app/`, Vercel, Supabase-данные и миграции не менялись.
 
 ### 2026-11-18 — исследование BT v0.4: сравнение методов и кривая устойчивости
 
@@ -571,4 +585,4 @@
 
 ## last_checked_commit
 
-`08fbee0 research: BT v0.4 study — method comparison and rating stability curve` (2026-11-18). Предыдущий — `4cff61d research: add single-file bundle gal_pilot_v0_3_full.json`. К проду применены все миграции 001–032 (`022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021`/`029`/`030`/`031`/`032` — 2026-11-17). Код приложения не менялся; `pytest` — 337 passed (с санитизированным NO_PROXY), ruff чист.
+`d814920 Add Appwrite self-hosted mirror and update D21 status` (2026-11-22). Предыдущий — `0de9398 memory bank: update last_checked_commit to 08fbee0`. К проду применены все миграции 001–032 (`022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021`/`029`/`030`/`031`/`032` — 2026-11-17). Код `app/` не менялся; D20 Appwrite-зеркало развёрнуто (деплой `6b02e6f2ea626f1d8bad`, ready), D21 `gal.ravva.su` — proxy rule verified, redirect GAL→LTHub исправлен, внешний OAuth-redirect в LTHub/Supabase остаётся.
