@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.dependencies import get_current_user
 from app.forms import body_field
 from app.services import auth as auth_service
+from app.services import lthub_accounts
 from app.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -60,8 +61,8 @@ async def login(request: Request) -> HTMLResponse:
     identifier = (await body_field(request, "email")).strip()
     password = await body_field(request, "password")
     target = _safe_next(await body_field(request, "next"))
-    email = auth_service.resolve_login_email(identifier)
-    if email is None:
+    account = auth_service.resolve_login_account(identifier)
+    if account is None:
         return _page(
             request,
             "auth/login.html",
@@ -69,29 +70,77 @@ async def login(request: Request) -> HTMLResponse:
             email=identifier,
             next=target,
         )
-    try:
-        client = auth_service.new_anon_client()
-        res = client.auth.sign_in_with_password({"email": email, "password": password})
-    except auth_service.AUTH_ERRORS as exc:
-        return _page(
-            request,
-            "auth/login.html",
-            error=_error_message(exc),
-            email=identifier,
-            next=target,
+    profile_id, email = account
+    session, error = _sign_in(email, password)
+    if session is None:
+        session, error = _sign_in_with_lthub_password(
+            profile_id=profile_id, email=email, password=password
         )
-    session = res.session
     if session is None:
         return _page(
             request,
             "auth/login.html",
-            error="Не удалось получить сессию.",
+            error=error or "Неверный email или пароль.",
             email=identifier,
             next=target,
         )
     response = RedirectResponse(target, status_code=303)
     auth_service.set_auth_cookies(response, session)
     return response
+
+
+def _sign_in(email: str, password: str) -> tuple[object | None, str | None]:
+    """Вход по паролю в Supabase.
+
+    Возвращает пару (сессия, текст ошибки). Текст ошибки — None, если пароль
+    не подошёл; при сбое сети сообщение пользователю не показывается, чтобы
+    не выдавать детали сервиса.
+    """
+    try:
+        client = auth_service.new_anon_client()
+        res = client.auth.sign_in_with_password({"email": email, "password": password})
+    except auth_service.AUTH_ERRORS as exc:
+        message = str(exc).lower()
+        if "invalid" in message or "credentials" in message:
+            return None, None
+        return None, _error_message(exc)
+    if res.session is None:
+        return None, "Не удалось получить сессию."
+    return res.session, None
+
+
+def _sign_in_with_lthub_password(
+    *, profile_id: str, email: str, password: str
+) -> tuple[object | None, str | None]:
+    """Вход по паролю LTHub: пароль аккаунта берётся из LTHub.
+
+    Для аккаунта, зарегистрированного через LTHub, GAL сверяет пароль с API
+    LTHub и, если он верный, делает его паролем аккаунта в GAL.
+    """
+    try:
+        service = auth_service.new_service_client()
+    except auth_service.AUTH_ERRORS:
+        return None, None
+    identity = lthub_accounts.find_identity_for_login(
+        service, profile_id=profile_id, email=email
+    )
+    if not identity:
+        return None, None
+    login = identity.get("lthub_login") or ""
+    subject = identity.get("subject") or ""
+    target_profile = identity.get("profile_id") or profile_id
+    result = lthub_accounts.verify_password(
+        login, password, expected_subject=subject or None
+    )
+    if result == lthub_accounts.PASSWORD_OK:
+        lthub_accounts.mirror_password(service, target_profile, subject, password)
+        return _sign_in(email, password)
+    if result == lthub_accounts.PASSWORD_UNAVAILABLE:
+        return (
+            None,
+            "LTHub сейчас недоступен. Попробуйте позже или войдите через LTHub.",
+        )
+    return None, None
 
 
 @router.get("/register", response_class=HTMLResponse, include_in_schema=False)

@@ -42,7 +42,7 @@ app/
 ├── templates/             # Jinja2-шаблоны
 └── static/                # CSS/JS/favicon
 
-migrations/                # SQL-миграции Supabase (001–032)
+migrations/                # SQL-миграции Supabase (001–033)
 scripts/                   # применение миграций и live-e2e
 tests/                     # pytest
 ```
@@ -82,6 +82,10 @@ cp .env.example .env
 | `LTHUB_CLIENT_ID` | OAuth client id в LTHub, по умолчанию `gal` |
 | `LTHUB_AUTHORIZE_URL` / `LTHUB_TOKEN_URL` / `LTHUB_USERINFO_URL` | endpoints LTHub |
 | `LTHUB_REDIRECT_URI` | callback; пусто — `APP_URL` + `/auth/lthub/callback` |
+| `LTHUB_API_BASE_URL` | база API LTHub для проверки пароля, по умолчанию `https://lthub.vercel.app` |
+| `LTHUB_LOGIN_URL` | endpoint проверки пароля; пусто — `LTHUB_API_BASE_URL` + `/api/auth/login` |
+| `LTHUB_PASSWORD_CHECK_ENABLED` | принимать пароль LTHub-аккаунта в GAL (по умолчанию `true`) |
+| `LTHUB_REQUEST_TIMEOUT_SECONDS` | таймаут запроса к LTHub, по умолчанию `6` |
 | `OAUTH_PROVIDER_ENABLED` | GAL как OAuth 2.0 provider для LTHub (по умолчанию `true`) |
 | `OAUTH_LTHUB_CLIENT_ID` | client id LTHub, по умолчанию `lthub` |
 | `OAUTH_LTHUB_REDIRECT_URIS` | дополнительные redirect URI клиента LTHub через запятую (прод и localhost включены по умолчанию) |
@@ -111,6 +115,8 @@ CI (`.github/workflows/ci.yml`) запускает ruff и pytest на кажд�
 ## Вход через LTHub
 
 GAL — публичный OAuth-клиент LTHub (authorization code + PKCE, без client secret). Кнопка есть на страницах входа и регистрации; при первом входе создаётся Supabase-аккаунт с **ником из LTHub** (если он свободен; иначе добавляется суффикс), привязанный к LTHub-профилю в `external_identities`. Подробности протокола — в `core/oauth.py` LTHub и `app/routers/lthub_auth.py`.
+
+**Пароль LTHub-аккаунта — это пароль в LTHub.** GAL не заводит для таких аккаунтов отдельный пароль: при входе по паролю GAL сверяет его с API LTHub (`POST /api/auth/login`) и, если LTHub подтвердил, делает этот пароль паролем аккаунта в GAL. Поэтому один и тот же пароль работает в обоих сервисах, а смена пароля в LTHub автоматически действует в GAL. Если LTHub недоступен — GAL пускает по последней подтверждённой копии пароля (или по кнопке «Войти через LTHub»). Логин LTHub хранится в `external_identities.lthub_login` (миграция `033_lthub_password.sql`); после подтверждения пароля OAuth-вход его больше не перевыпускает.
 
 ## GAL как OAuth-провайдер
 
@@ -174,6 +180,7 @@ python scripts/bt_experiment.py         # синтетический экспе�
 - `030_top5_apply_upsert.sql` — адресный upsert временных сил вместо очистки всего кэша. Применена к проду 2026-11-17.
 - `031_top5_completion_claims.sql` — заявка в топ-5 вместе с прохождением: `completion_id`, необязательный `evidence_url`, guard/RLS для автора или владельца прохождения, backfill старых заявок. Применена к проду 2026-11-17.
 - `032_content_refactor.sql` — контент-рефактор: русские названия категорий (slug сохранены), новые категории «Творчество»/«Спорт и здоровье»/«Дом и быт», формализованные тексты достижений. Применена к проду 2026-11-17.
+- `033_lthub_password.sql` — `external_identities.lthub_login` (логин в LTHub для проверки пароля) и `password_synced` (подтверждённый пользователем пароль не перевыпускается при OAuth-входе). Применена к проду 2026-11-23.
 
 Применение:
 

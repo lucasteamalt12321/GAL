@@ -2,7 +2,7 @@
 
 ## Общий прогресс
 
-Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **99%** (D1–D20 completed; D21 «Публичный адрес gal.ravva.su» — `blocked`: нужен DNS зоны `ravva.su` и разрешение на proxy rule в проекте руководителя). D20 «Appwrite-зеркало» завершено 2026-11-22: функция `gal-mirror`, деплой `6b02b6e01210893ebe2a` готов, HTTP-проверки пройдены. D18 «v1.11: заявка топ-5 при прохождении» завершён: код закоммичен (`cb81d99`) и задеплоен, миграция 031 применена к проду 2026-11-17. Все миграции 001–032 применены к проду: 025/026/027 — 2026-11-14, 028 — 2026-11-15, 021/029/030/031/032 — 2026-11-17.
+Процент выполнения (по `## Project Deliverables` в `projectbrief.md`): **99%** (D1–D20 и D22 completed; D21 «Публичный адрес gal.ravva.su» — `blocked`: нужен DNS зоны `ravva.su` и разрешение на proxy rule в проекте руководителя). D22 «v1.12: пароль LTHub-аккаунта в GAL» завершён 2026-11-23: пароль аккаунта, зарегистрированного через LTHub, сверяется с API LTHub и становится паролем в GAL; миграция 033 применена к проду; пароль `lucasteam` установлен в `LucasTeam1`. D20 «Appwrite-зеркало» завершено 2026-11-22: функция `gal-mirror`, деплой `6b02b6e01210893ebe2a` готов, HTTP-проверки пройдены. D18 «v1.11: заявка топ-5 при прохождении» завершён: код закоммичен (`cb81d99`) и задеплоен, миграция 031 применена к проду 2026-11-17. Все миграции 001–033 применены к проду: 025/026/027 — 2026-11-14, 028 — 2026-11-15, 021/029/030/031/032 — 2026-11-17, 033 — 2026-11-23.
 
 ## Deliverables статус
 
@@ -29,8 +29,34 @@
 | D19 | Контент-рефактор: категории и тексты под школьную аудиторию | completed |
 | D20 | Appwrite-зеркало GAL на self-hosted Functions (без миграции БД) | completed |
 | D21 | Публичный адрес `gal.ravva.su` для зеркала (DNS + proxy rule + OAuth) | in_progress |
+| D22 | v1.12: пароль LTHub-аккаунта в GAL (пароль берётся из LTHub) | completed |
 
 ## Changelog
+
+### 2026-11-23 — D22: пароль LTHub-аккаунта в GAL (пароль владельца `LucasTeam1`)
+
+**Запрос.** «У меня есть аккаунт LucasTeam, на котором я зарегистрировался через LThub. Сделай, чтобы в таких случаях пароль тоже брался из LThub. Сначала для меня установи пароль LucasTeam1».
+
+**Разведка LTHub** (`https://lthub.vercel.app`, Flask): `POST /api/auth/login` с JSON `{"login","password"}` → 200 `{"login","token","user_id"}`; 401 `{"error":"Неверный логин или пароль"}`; 400 без полей; 409 «Логин уже занят» при повторной регистрации; `POST /api/auth/logout` → 200; `GET /api/auth/me` требует `Authorization: Bearer <token>` (401 без него); `/api/auth/update` (смена профиля) принимает `password`, но **пароль не меняет** (проверено на временном аккаунте `gal_probe_tmp_2026`, user_id 42 — оставлен в LTHub, удалить нечем). Эндпоинта смены пароля у LTHub нет; `/oauth/authorize` отдаёт consent-страницу и не принимает bearer-токен (серверный OAuth-обмен кода невозможен). Вывод: пароль LTHub можно только **читать/проверять**, но не менять.
+
+**Реализация (GAL).**
+- `migrations/033_lthub_password.sql` — `external_identities.lthub_login` (логин в LTHub) и `external_identities.password_synced` (пароль подтверждён пользователем → OAuth-вход его не перевыпускает). Праза/RLS не меняются. **Применена к проду 2026-11-23 (HTTP 201).**
+- `app/config.py` — `LTHUB_API_BASE_URL`, `LTHUB_LOGIN_URL`, `LTHUB_PASSWORD_CHECK_ENABLED`, `LTHUB_REQUEST_TIMEOUT_SECONDS`.
+- `app/services/lthub_accounts.py` — `verify_password()` (POST `/api/auth/login`; 200 → ok, но `user_id` сверяется с subject: пароль чужого аккаунта не проходит; 400/401/403/404/409 → отказ; 5xx/сеть/таймаут → недоступность), `find_identity_by_profile/by_subject/for_login`, `store_lthub_login`, `mark_password_synced`, `mirror_password`; в `login_with_lthub` перевыпуск служебного пароля — только если `password_synced = false`.
+- `app/services/auth.py` — `resolve_login_account()` (профиль + email; `resolve_login_email` оставлен как обёртка).
+- `app/routers/auth.py` — вход: локальный пароль → при неудаче проверка в LTHub → зеркало пароля → сессия; недоступность LTHub → отдельное сообщение.
+- `app/routers/settings.py`, `app/services/profiles.py` — смена пароля помечает пароль подтверждённым; в UI LTHub-аккаунта пояснение, что пароль в LTHub не меняется.
+- Шаблоны: подсказка «Для аккаунтов LTHub подходит пароль от LTHub» на странице входа.
+
+**Продукт.** Пароль аккаунта владельца `lucasteam` (subject 8, `lthub-oauth-8@example.com`) установлен в `LucasTeam1`; `external_identities.lthub_login = lucasteam`, `password_synced = true`; вход проверен через Supabase token endpoint (200).
+
+**Попутно.** Исправлен латентный баг в `login_with_lthub`: `except (auth_service.AUTH_ERRORS, httpx.HTTPError)` — кортеж в кортеже → при любой ошибке Python бросал `TypeError` вместо `LthubAccountError` (500 вместо понятного отказа).
+
+**Тесты.** Новый `tests/test_lthub_password.py` (17 тестов: контракт API LTHub, отказ/недоступность/чужая учётка, зеркало пароля, вход по паролю LTHub, отказ при неверном пароле, недоступность LTHub, вход без LTHub-identity, OAuth-вход не затирает подтверждённый пароль). `tests/test_auth.py` переведён с `resolve_login_email` на `resolve_login_account`. **354 passed**, ruff check/format чисты.
+
+**Ограничение.** Пароль в самом LTHub сменить нельзя (нет API) — там остаётся прежний. В GAL работают оба: пароль LTHub проверяется по API и при входе становится основным, а локально заданный (`LucasTeam1`) остаётся копией до следующего входа по паролю LTHub.
+
+**Примечание по параллельной сессии.** В рабочей копии одновременно правились `app/services/completions.py`, `app/services/moderation.py`, `app/routers/achievements.py` (другая сессия) — их файлы не тронуты, коммит собран в отдельном worktree `D:/VariousProjects/GAL_wt_lthub` только из файлов этой задачи.
 
 ### 2026-11-22 — D20 завершено (Appwrite-зеркало); D21 заблокирован (адрес gal.ravva.su)
 
@@ -585,4 +611,4 @@
 
 ## last_checked_commit
 
-`d814920 Add Appwrite self-hosted mirror and update D21 status` (2026-11-22). Предыдущий — `0de9398 memory bank: update last_checked_commit to 08fbee0`. К проду применены все миграции 001–032 (`022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021`/`029`/`030`/`031`/`032` — 2026-11-17). Код `app/` не менялся; D20 Appwrite-зеркало развёрнуто (деплой `6b02e6f2ea626f1d8bad`, ready), D21 `gal.ravva.su` — proxy rule verified, redirect GAL→LTHub исправлен, внешний OAuth-redirect в LTHub/Supabase остаётся.
+`d814920 Add Appwrite self-hosted mirror and update D21 status` (2026-11-22) + коммит D22 «пароль LTHub-аккаунта в GAL» (2026-11-23). Предыдущий — `0de9398 memory bank: update last_checked_commit to 08fbee0`. К проду применены все миграции 001–033 (`022`/`024` — 2026-11-11, `025`/`026`/`027` — 2026-11-14, `028` — 2026-11-15, `021`/`029`/`030`/`031`/`032` — 2026-11-17, `033` — 2026-11-23). Изменён код `app/` (пароль LTHub-аккаунта в GAL, D22); D20 Appwrite-зеркало развёрнуто (деплой `6b02e6f2ea626f1d8bad`, ready), D21 `gal.ravva.su` — proxy rule verified, redirect GAL→LTHub исправлен, внешний OAuth-redirect в LTHub/Supabase остаётся.

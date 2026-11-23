@@ -6,6 +6,7 @@ from fastapi import Request
 from postgrest.exceptions import APIError
 
 from app.services import auth as auth_service
+from app.services import lthub_accounts
 
 PROFILE_ERRORS = (
     APIError,
@@ -119,3 +120,20 @@ def change_password(
             (auth_service.SESSION_COOKIE, session.access_token, {}),
             (auth_service.REFRESH_COOKIE, session.refresh_token, {}),
         ]
+    _mark_password_synced(user.id)
+
+
+def _mark_password_synced(profile_id: str) -> None:
+    """Помечает пароль LTHub-аккаунта пользовательским.
+
+    Иначе OAuth-вход через LTHub перевыпустит служебный пароль и новый
+    пароль перестанет работать.
+    """
+    try:
+        service = auth_service.new_service_client()
+    except auth_service.AUTH_ERRORS:
+        return
+    identity = lthub_accounts.find_identity_by_profile(service, profile_id)
+    if not identity:
+        return
+    lthub_accounts.mark_password_synced(service, identity.get("subject") or "", True)

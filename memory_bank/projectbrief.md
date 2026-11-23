@@ -117,7 +117,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D9  | Reports                           | completed | 4   |
 | D10 | Polish + hardening (UI, security, errors) | completed | 1   |
 | D11 | Bugfix по итогам bug-hunt 09-28   | completed | 3   |
-| D12 | v1.1: функции, безопасность, CI   | completed | 3   |
+| D12 | v1.1: функции, безопасность, CI   | completed | 2   |
 | D13 | v1.2: Bradley–Terry ранкинг       | completed | 6   |
 | D14 | v1.8: надёжность BT (SE + 95% CI) | completed | 4 |
 | D15 | v1.9: предварительный топ-5       | completed | 4 |
@@ -127,8 +127,11 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D19 | Контент-рефактор: категории и тексты под школьную аудиторию | completed | 1 |
 | D20 | Appwrite-зеркало GAL на self-hosted Functions (без миграции БД) | completed | 1 |
 | D21 | Публичный адрес `gal.ravva.su` для зеркала (DNS + proxy rule + OAuth) | in_progress | 1 |
+| D22 | v1.12: пароль LTHub-аккаунта в GAL (пароль берётся из LTHub) | completed | 1 |
 
 Примечание к D20: добавлен по уточнению scope от 2026-11-22 («Appwrite — self-hosted, это должно быть зеркало, БД — та же Supabase»); вес D12 уменьшен с 5 до 3 (4 → 3 при добавлении D21) для сохранения суммы 100. Vercel и Supabase остаются основным деплоем и БД соответственно. D21: proxy rule `gal.ravva.su → gal-mirror` создан и verified (22 Nov 2026), DNS резолвится; `APP_URL`/`MIRROR_BASE_URL` функции обновлены на `https://gal.ravva.su`, требуется redeploy + внешние OAuth-redirects (LThub callback + Supabase Auth URLs).
+
+Примечание к D22: добавлен 2026-11-23 по запросу владельца («пароль тоже брался из LThub»); вес D12 уменьшен с 3 до 2 для сохранения суммы 100. Реализация: проверка пароля через API LTHub (`POST /api/auth/login`) при входе в GAL, зеркало подтверждённого пароля в Supabase-аккаунте, `external_identities.lthub_login` и `password_synced` (миграция 033, применена к проду 2026-11-23). Пароль аккаунта владельца (`lucasteam`) установлен в `LucasTeam1`.
 
 ## Success Criteria MVP
 

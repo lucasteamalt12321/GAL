@@ -28,6 +28,10 @@
 
   <h2>Смена пароля</h2>
   {% if password_error %}<div class="flash flash-error">{{ password_error }}</div>{% endif %}
+  {% if password_managed_by_lthub %}
+    <p class="hint muted">Аккаунт зарегистрирован через LTHub: пароль LTHub подходит и для входа в GAL.
+      Смена пароля здесь не меняет пароль в LTHub.</p>
+  {% endif %}
   <form method="post" action="/settings/password" class="stack">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label class="field">

@@ -59,6 +59,10 @@ APPWRITE_API_KEY=             # ключ проекта из .env.local, в фу
 APPWRITE_TOKEN=               # тот же ключ для CLI (appwrite client --key)
 MIRROR_BASE_URL=              # база для ссылок зеркала; сейчас Vercel, после D21 — gal.ravva.su
 LTHUB_REDIRECT_URI=           # пусто = APP_URL + /auth/lthub/callback
+LTHUB_API_BASE_URL=           # база API LTHub для проверки пароля (по умолчанию https://lthub.vercel.app)
+LTHUB_LOGIN_URL=              # пусто = LTHUB_API_BASE_URL + /api/auth/login
+LTHUB_PASSWORD_CHECK_ENABLED=true  # принимать пароль LTHub-аккаунта в GAL
+LTHUB_REQUEST_TIMEOUT_SECONDS=6    # таймаут запроса к LTHub
 OAUTH_PROVIDER_ENABLED=true   # GAL как OAuth-провайдер для LTHub
 OAUTH_LTHUB_CLIENT_ID=lthub   # публичный PKCE-клиент LTHub
 OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (прод/localhost уже по умолчанию)

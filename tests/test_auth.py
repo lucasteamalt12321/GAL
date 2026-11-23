@@ -600,8 +600,10 @@ def test_login_by_username_resolves_and_logs_in(monkeypatch) -> None:
 
     monkeypatch.setattr(
         auth_service,
-        "resolve_login_email",
-        lambda ident: "tonybig11200@gmail.com" if ident == "TonyBig" else None,
+        "resolve_login_account",
+        lambda ident: (
+            ("uid-1", "tonybig11200@gmail.com") if ident == "TonyBig" else None
+        ),
     )
     monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
     resp = client.post(
@@ -617,7 +619,7 @@ def test_login_by_username_resolves_and_logs_in(monkeypatch) -> None:
 
 def test_login_unknown_username_generic_error(monkeypatch) -> None:
     client.cookies.clear()
-    monkeypatch.setattr(auth_service, "resolve_login_email", lambda _ident: None)
+    monkeypatch.setattr(auth_service, "resolve_login_account", lambda _ident: None)
     resp = client.post("/auth/login", data={"email": "ghost", "password": "secret1"})
     assert resp.status_code == 200
     assert "Неверный email или пароль" in resp.text
@@ -690,7 +692,9 @@ def test_login_wrong_password_does_not_leak_resolved_email(monkeypatch) -> None:
 
     resolved_email = "tonybig11200@gmail.com"
     monkeypatch.setattr(
-        auth_service, "resolve_login_email", lambda _ident: resolved_email
+        auth_service,
+        "resolve_login_account",
+        lambda _ident: ("uid-1", resolved_email),
     )
     monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
 

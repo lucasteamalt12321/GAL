@@ -1,12 +1,25 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.services import auth as auth_service
+from app.services import lthub_accounts
 from app.services import profiles as profiles_service
 from app.templating import templates
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 LOGIN_URL = "/auth/login"
+
+
+def _is_lthub_account(user_id: str | None) -> bool:
+    """Аккаунт зарегистрирован через LTHub (пароль берётся из LTHub)."""
+    if not user_id:
+        return False
+    try:
+        service = auth_service.new_service_client()
+    except auth_service.AUTH_ERRORS:
+        return False
+    return lthub_accounts.find_identity_by_profile(service, user_id) is not None
 
 
 @router.get("/profile", response_class=HTMLResponse, include_in_schema=False)
@@ -87,6 +100,9 @@ def _render(
             "error": error,
             "info": info_messages.get(info, info),
             "password_error": password_error,
+            "password_managed_by_lthub": _is_lthub_account(
+                user.id if user is not None else None
+            ),
             "username": username if username is not None else (user.username or ""),
             "display_name": display_name
             if display_name is not None

@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     # Пусто — берётся APP_URL (или origin запроса) + /auth/lthub/callback.
     lthub_redirect_uri: str = ""
 
+    # API LTHub: проверка пароля аккаунта, зарегистрированного через LTHub.
+    # Пароль берётся из LTHub — GAL сверяет его с API LTHub и принимает как
+    # пароль аккаунта в GAL.
+    lthub_api_base_url: str = "https://lthub.vercel.app"
+    # Пусто — берётся LTHUB_API_BASE_URL + /api/auth/login.
+    lthub_login_url: str = ""
+    lthub_password_check_enabled: bool = True
+    lthub_request_timeout_seconds: float = 6.0
+
     # OAuth-провайдер GAL для LTHub (authorization code + PKCE, public client).
     oauth_provider_enabled: bool = True
     oauth_lthub_client_id: str = "lthub"
