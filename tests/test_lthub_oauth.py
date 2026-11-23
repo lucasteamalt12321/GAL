@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 from fastapi.testclient import TestClient
 
 import app.routers.lthub_auth as lthub_router
@@ -182,6 +183,113 @@ def test_lthub_callback_surfaces_oauth_error(monkeypatch) -> None:
     )
     assert resp.status_code == 303
     assert "LTHub" in resp.headers["location"]
+
+
+def test_lthub_callback_uses_profile_from_token_payload(monkeypatch) -> None:
+    """LTHub отдаёт профиль в ответе /oauth/token — /oauth/userinfo не зовём.
+
+    Запасной путь (userinfo) стоит до ~11 c на холодном контейнере LTHub,
+    а колбэк идёт через прокси с таймаутом ~5 c.
+    """
+    _enable(monkeypatch)
+
+    def _post(*_args, **_kwargs):
+        return _Response(
+            {
+                "access_token": "lthub-token",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "user": {
+                    "id": "42",
+                    "username": "alice",
+                    "display_name": "Alice",
+                },
+            }
+        )
+
+    def _get(*_args, **_kwargs):
+        raise AssertionError("userinfo не должен вызываться")
+
+    monkeypatch.setattr(lthub_router.httpx, "post", _post)
+    monkeypatch.setattr(lthub_router.httpx, "get", _get)
+    captured: list[dict] = []
+
+    def _login(_request, **kwargs):
+        captured.append(kwargs)
+        return SimpleNamespace(access_token="access", refresh_token="refresh")
+
+    monkeypatch.setattr(lthub_accounts, "login_with_lthub", _login)
+    local = TestClient(app)
+    local.cookies.set("gal_lthub_state", "expected", path="/auth/lthub")
+    local.cookies.set("gal_lthub_verifier", "v" * 64, path="/auth/lthub")
+    resp = local.get(
+        "/auth/lthub/callback?code=abc&state=expected",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+    assert captured == [{"subject": "42", "login": "alice", "display_name": "Alice"}]
+
+
+def test_lthub_callback_falls_back_to_userinfo(monkeypatch) -> None:
+    """Без поля `user` в ответе токена профиль берём из /oauth/userinfo."""
+    _enable(monkeypatch)
+
+    def _post(*_args, **_kwargs):
+        return _Response({"access_token": "lthub-token"})
+
+    calls: list[str] = []
+
+    def _get(url, *_args, **_kwargs):
+        calls.append(url)
+        return _Response({"sub": "42", "login": "alice", "display_name": "Alice"})
+
+    monkeypatch.setattr(lthub_router.httpx, "post", _post)
+    monkeypatch.setattr(lthub_router.httpx, "get", _get)
+    captured: list[dict] = []
+
+    def _login(_request, **kwargs):
+        captured.append(kwargs)
+        return SimpleNamespace(access_token="access", refresh_token="refresh")
+
+    monkeypatch.setattr(lthub_accounts, "login_with_lthub", _login)
+    local = TestClient(app)
+    local.cookies.set("gal_lthub_state", "expected", path="/auth/lthub")
+    local.cookies.set("gal_lthub_verifier", "v" * 64, path="/auth/lthub")
+    resp = local.get(
+        "/auth/lthub/callback?code=abc&state=expected",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert calls == ["https://lthub.test/oauth/userinfo"]
+    assert captured == [{"subject": "42", "login": "alice", "display_name": "Alice"}]
+
+
+def test_warm_lthub_endpoints_probes_token_and_userinfo(monkeypatch) -> None:
+    """Прогрев LTHub идёт GET-ом по обоим эндпоинтам (без grant-запроса)."""
+    _enable(monkeypatch)
+    seen: list[str] = []
+
+    def _get(url, *_args, **_kwargs):
+        seen.append(url)
+        return _Response({})
+
+    monkeypatch.setattr(lthub_router.httpx, "get", _get)
+    lthub_router._warm_lthub_endpoints()
+    assert seen == [
+        "https://lthub.test/oauth/token",
+        "https://lthub.test/oauth/userinfo",
+    ]
+
+
+def test_warm_lthub_endpoints_survives_errors(monkeypatch) -> None:
+    _enable(monkeypatch)
+
+    def _get(_url, *_args, **_kwargs):
+        raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr(lthub_router.httpx, "get", _get)
+    lthub_router._warm_lthub_endpoints()
 
 
 def test_username_and_email_are_deterministic() -> None:
