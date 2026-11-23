@@ -65,6 +65,9 @@
               {% endif %}
             </td>
             <td>
+              {% if item.comment %}
+                <p class="submission-comment">{{ item.comment }}</p>
+              {% endif %}
               {% if item.status == 'rejected' %}
                 {% if item.rejection_reason %}<span class="muted">{{ item.rejection_reason }}</span>{% endif %}
                 <div class="submission-actions">
@@ -142,7 +145,8 @@
     <p class="muted">
       Заявок в топ-5 пока нет. Заявка подаётся вместе с прохождением достижения —
       выберите достижение в <a href="/achievements">каталоге</a> и отметьте
-      «Заявка в топ-5» в форме отправки доказательства.
+      «Заявка в топ-5» в форме отправки доказательства. Автор достижения может
+      подать заявку сразу при создании достижения.
     </p>
   {% endif %}
 </section>

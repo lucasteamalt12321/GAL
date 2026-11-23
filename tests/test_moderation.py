@@ -305,7 +305,25 @@ def test_queue_shows_three_buttons_for_top5_claim(monkeypatch) -> None:
     assert resp.text.count('value="approved_top5"') == 1
     assert resp.text.count('value="approved"') == 2
     assert resp.text.count('value="rejected"') == 2
-    assert "Заявки в топ-5 (старые)" in resp.text
+    assert "Заявки в топ-5 без ожидающего прохождения" in resp.text
+
+
+def test_queue_hides_top5_place_until_achievement_published(monkeypatch) -> None:
+    _login_as(monkeypatch, "moderator")
+    monkeypatch.setattr(moderation_service, "list_pending_achievements", lambda _r: [])
+    row = _queue_completion(True)
+    row["top5_claim_blocked"] = True
+    monkeypatch.setattr(
+        moderation_service,
+        "list_pending_completions",
+        lambda _r: [row],
+    )
+    monkeypatch.setattr(top5_service, "try_moderation_queue", lambda _r: [])
+    resp = client.get("/moderation")
+    assert resp.status_code == 200
+    assert "Топ-5: просит #2" in resp.text
+    assert "ещё не опубликовано" in resp.text
+    assert 'value="approved_top5"' not in resp.text
 
 
 class _DecisionQuery:
@@ -325,7 +343,15 @@ class _DecisionQuery:
     def eq(self, *_args):
         return self
 
+    def select(self, *_args):
+        return self
+
+    def maybe_single(self):
+        return self
+
     def execute(self):
+        if self.name == "achievements":
+            return SimpleNamespace(data={"id": 5, "status": "published"})
         if self.name == "achievement_completions":
             self.client.updates.append(self.payload)
             return SimpleNamespace(data=[{"id": 3}])

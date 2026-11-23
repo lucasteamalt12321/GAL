@@ -564,6 +564,6 @@ def test_moderation_queue_shows_top5(monkeypatch) -> None:
     )
     resp = client.get("/moderation")
     assert resp.status_code == 200
-    assert "Заявки в топ-5 (старые)" in resp.text
+    assert "Заявки в топ-5 без ожидающего прохождения" in resp.text
     assert 'href="/top5/5"' in resp.text
     assert "место выставляется вручную при решении" in resp.text

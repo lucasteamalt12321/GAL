@@ -165,6 +165,9 @@ def application_context(request: Request, achievement: dict) -> dict:
 
     Заявку подаёт любой пользователь вместе с прохождением, поэтому проверка
     автора не нужна; видимость чужой заявки ограничивает RLS.
+
+    Исключение — ещё не опубликованное достижение: заявку на него подаёт
+    только автор, и только вместе с созданием достижения (миграция 034).
     """
     user = request.state.user
     context = {
@@ -174,15 +177,21 @@ def application_context(request: Request, achievement: dict) -> dict:
     }
     if user is None:
         return context
-    if achievement.get("status") != "published":
+    status = achievement.get("status")
+    is_creator = str(achievement.get("creator_id")) == str(user.id)
+    if status == "pending":
+        if not is_creator:
+            return context
+    elif status != "published":
         return context
-    if int(achievement.get("evaluation_count") or 0) >= PERMANENT_EVALUATIONS:
-        return context
-    # Эффективное место могло сдвинуться временной заявкой; ограничение
-    # «уже в топ-5» относится только к постоянному месту.
-    rank = achievement.get("permanent_rank", achievement.get("rank"))
-    if rank is not None and int(rank) <= MAX_POSITION:
-        return context
+    else:
+        if int(achievement.get("evaluation_count") or 0) >= PERMANENT_EVALUATIONS:
+            return context
+        # Эффективное место могло сдвинуться временной заявкой; ограничение
+        # «уже в топ-5» относится только к постоянному месту.
+        rank = achievement.get("permanent_rank", achievement.get("rank"))
+        if rank is not None and int(rank) <= MAX_POSITION:
+            return context
 
     client = auth_service.user_client_from_request(request)
     if client is None:
@@ -224,6 +233,10 @@ def submit_application(
 
     Доказательство — proof самого прохождения; отдельная ссылка не нужна
     (миграция 031 сделала evidence_url необязательным).
+
+    Заявку подаёт владелец прохождения. Автор достижения вправе подать заявку
+    вместе с созданием достижения, когда оно ещё не опубликовано
+    (миграция 034): доказательство — его собственное прохождение верификации.
     """
     user, client = _client(request)
     position = parse_position(proposed_position)
@@ -238,7 +251,13 @@ def submit_application(
     achievement = _achievement_row(client, achievement_id)
     if achievement is None:
         raise Top5Error("Достижение не найдено.")
-    if achievement.get("status") != "published":
+    status = achievement.get("status")
+    if status == "pending":
+        # Ещё не опубликованное достижение: заявку подаёт только автор —
+        # вместе с созданием достижения (миграция 034).
+        if str(achievement.get("creator_id")) != str(user.id):
+            raise Top5Error(DB_MESSAGES["ACHIEVEMENT_NOT_PUBLISHED"])
+    elif status != "published":
         raise Top5Error(DB_MESSAGES["ACHIEVEMENT_NOT_PUBLISHED"])
     if int(achievement.get("evaluation_count") or 0) >= PERMANENT_EVALUATIONS:
         raise Top5Error(DB_MESSAGES["ALREADY_PERMANENT"])
@@ -294,6 +313,13 @@ def submit_application(
         # RLS скрывает чужую активную заявку: страховка — уникальный индекс.
         if "23505" in str(exc) or "duplicate" in str(exc).lower():
             raise Top5Error("Заявка уже рассматривается.") from exc
+        if status == "pending" and "ACHIEVEMENT_NOT_PUBLISHED" in str(exc):
+            # Не применена миграция 034: авторская заявка на ещё не
+            # опубликованное достижение отклоняется базой.
+            raise Top5Error(
+                "Заявка на ещё не опубликованное достижение недоступна: "
+                "в базе не применена миграция 034."
+            ) from exc
         raise _db_error(exc) from exc
     return (res.data or [{}])[0]
 
@@ -325,6 +351,36 @@ def claims_for_completions(client, completion_ids: list[int]) -> dict[int, dict]
         int(row["completion_id"]): row
         for row in res.data or []
         if row.get("completion_id") is not None
+    }
+
+
+def claims_for_achievements(client, achievement_ids: list[int]) -> dict[int, dict]:
+    """Активные заявки топ-5 по id достижений (очередь модерации).
+
+    Нужна для карточки ожидающего достижения: автор может подать заявку в
+    топ-5 вместе с созданием достижения, и модератор должен видеть
+    запрошенное место до публикации.
+    """
+    if not achievement_ids:
+        return {}
+    try:
+        res = (
+            client.table("top5_applications")
+            .select(
+                "id,achievement_id,applicant_id,proposed_position,justification,status"
+            )
+            .in_("achievement_id", achievement_ids)
+            .in_("status", list(ACTIVE_STATUSES))
+            .execute()
+        )
+    except APIError as exc:
+        if _is_missing_schema(exc):
+            return {}
+        raise
+    return {
+        int(row["achievement_id"]): row
+        for row in res.data or []
+        if row.get("achievement_id") is not None
     }
 
 
@@ -430,23 +486,39 @@ def get_application(request: Request, application_id: int) -> dict | None:
 
 
 def list_evaluations(request: Request, application_id: int) -> list[dict]:
+    """Оценки модераторов по заявке.
+
+    Независимая экспертиза отключена (2026-11-17): legacy-голоса с типом
+    ``expert`` не показываются в карточке заявки — пересчёт их и так игнорирует.
+    """
     _user, client = _client(request)
-    return _read_rows(
+    rows = _read_rows(
         client.table("top5_evaluations")
         .select(EVALUATION_SELECT)
         .eq("application_id", application_id)
         .order("created_at")
     )
+    return [row for row in rows if row.get("evaluator_type") != "expert"]
 
 
 def list_events(request: Request, application_id: int) -> list[dict]:
+    """Журнал заявки.
+
+    События независимой экспертизы скрыты: экспертиза отключена, а в журнале
+    не должно напоминать о несуществующем сценарии.
+    """
     _user, client = _client(request)
-    return _read_rows(
+    rows = _read_rows(
         client.table("top5_events")
         .select(EVENT_SELECT)
         .eq("application_id", application_id)
         .order("created_at")
     )
+    return [
+        row
+        for row in rows
+        if row.get("event_type") not in ("expert_invited", "expert_status_changed")
+    ]
 
 
 def application_bundle(request: Request, application_id: int) -> dict | None:

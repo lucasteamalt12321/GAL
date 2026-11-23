@@ -51,6 +51,11 @@ def _form_context(
     harder_count: str = "",
     difficulty_label: str = "Ожидаемая сложность",
     blocked: bool = False,
+    top5_claim_allowed: bool = False,
+    top5_claim_checked: bool = False,
+    top5_position: str = "",
+    top5_justification: str = "",
+    comment: str = "",
 ) -> dict:
     return {
         # Заблокированная форма категорий не показывает — не ходим в БД зря.
@@ -64,15 +69,25 @@ def _form_context(
         "achievement": achievement,
         "action": action,
         "submit_label": submit_label,
-        "max_proof_bytes": completions_service.MAX_REQUEST_PROOF_BYTES,
+        "max_attachment_bytes": completions_service.MAX_ATTACHMENT_BYTES,
+        "max_files_per_completion": completions_service.MAX_FILES_PER_COMPLETION,
+        "max_comment_length": completions_service.MAX_COMMENT_LENGTH,
         "difficulty_scale": scale or [],
         "harder_count": harder_count,
         "difficulty_label": difficulty_label,
         "blocked": blocked,
+        "top5_claim_allowed": top5_claim_allowed,
+        "top5_claim_checked": top5_claim_checked,
+        "top5_position": top5_position,
+        "top5_justification": top5_justification,
+        "comment": comment,
     }
 
 
 def _create_context(**kwargs) -> dict:
+    # В форме создания заявку в топ-5 подаёт автор: достижение ещё не
+    # опубликовано, но заявка создаётся вместе с ним (миграция 034).
+    kwargs.setdefault("top5_claim_allowed", True)
     return _form_context(**kwargs)
 
 
@@ -86,6 +101,31 @@ def _validate_fields(title: str, description: str, requirements: str) -> str | N
     if len(requirements) > 4000:
         return "Требования слишком длинные (максимум 4000 символов)."
     return None
+
+
+def _parse_top5_claim(
+    top5_claim: str, top5_position: str, top5_justification: str
+) -> tuple[int | None, str, str | None]:
+    """Разбор полей заявки в топ-5: (место, обоснование, ошибка).
+
+    Одинаково используется в форме создания достижения и в форме прохождения:
+    экспертная оценка в заявке не участвует, решает модератор.
+    """
+    if top5_claim != "on":
+        return None, "", None
+    position = top5_service.parse_position(top5_position)
+    justification = (top5_justification or "").strip()
+    if position is None:
+        return None, justification, "Укажите запрашиваемое место в топ-5 от 1 до 5."
+    if not justification:
+        return (
+            None,
+            justification,
+            "Обоснование сложности обязательно для заявки в топ-5.",
+        )
+    if len(justification) > top5_service.MAX_JUSTIFICATION:
+        return None, justification, "Обоснование сложности слишком длинное."
+    return position, justification, None
 
 
 @router.get("", response_class=HTMLResponse, include_in_schema=False)
@@ -159,7 +199,12 @@ def create(
     category_id: str = Form(""),
     external_url: str = Form(""),
     harder_count: str = Form(""),
+    top5_claim: str = Form(""),
+    top5_position: str = Form(""),
+    top5_justification: str = Form(""),
+    comment: str = Form(""),
     file: Annotated[UploadFile | None, File()] = None,
+    files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> HTMLResponse:
     if request.state.user is None:
         return RedirectResponse(LOGIN_URL, status_code=303)
@@ -178,10 +223,24 @@ def create(
     description = description.strip()
     requirements = requirements.strip()
     external_url = external_url.strip()
-    has_file = bool(file is not None and file.filename)
+    comment = comment.strip()
+    uploads = completions_service.collect_uploads(files, file)
+    has_file = bool(uploads)
     parsed_category = _parse_category_id(category_id)
     scale = evaluation_service.list_user_scale(request)
     parsed_harder = evaluation_service.parse_harder_count(harder_count, len(scale))
+
+    claim_position, claim_justification, claim_error = _parse_top5_claim(
+        top5_claim, top5_position, top5_justification
+    )
+    # Поля заявки сохраняем при перерисовке формы — иначе пользователь теряет
+    # отметку, обоснование и комментарий после любой ошибки.
+    claim_state = {
+        "top5_claim_checked": top5_claim == "on",
+        "top5_position": top5_position,
+        "top5_justification": claim_justification,
+        "comment": comment,
+    }
 
     field_error = _validate_fields(title, description, requirements)
     if field_error:
@@ -197,6 +256,7 @@ def create(
                 external_url=external_url,
                 scale=scale,
                 harder_count=harder_count,
+                **claim_state,
             ),
         )
 
@@ -213,6 +273,7 @@ def create(
                 external_url=external_url,
                 scale=scale,
                 harder_count=harder_count,
+                **claim_state,
             ),
         )
 
@@ -229,6 +290,24 @@ def create(
                 external_url=external_url,
                 scale=scale,
                 harder_count=harder_count,
+                **claim_state,
+            ),
+        )
+
+    if claim_error is not None:
+        return templates.TemplateResponse(
+            request=request,
+            name=CREATE_TEMPLATE,
+            context=_create_context(
+                error=claim_error,
+                title=title,
+                description=description,
+                requirements=requirements,
+                category_id=category_id,
+                external_url=external_url,
+                scale=scale,
+                harder_count=harder_count,
+                **claim_state,
             ),
         )
 
@@ -258,16 +337,18 @@ def create(
                 external_url=external_url,
                 scale=scale,
                 harder_count=harder_count,
+                **claim_state,
             ),
         )
 
     try:
-        completions_service.submit_completion(
+        completion = completions_service.submit_completion(
             request,
             achievement_id=item["id"],
-            description="Доказательство создателя",
+            description="",
+            comment=(comment or "").strip(),
             external_url=external_url,
-            uploaded=file,
+            uploads=uploads,
             harder_count=parsed_harder,
             proofs_visible=True,
         )
@@ -280,6 +361,33 @@ def create(
             f"/achievements/{item['id']}"
             f"?error={quote('Достижение создано, но доказательство не прикрепилось. Пришлите его со страницы достижения.')}",
             status_code=303,
+        )
+
+    if claim_position is not None:
+        # Заявка в топ-5 создаётся вместе с достижением: доказательство заявки —
+        # собственное прохождение автора (миграция 034).
+        try:
+            top5_service.submit_application(
+                request,
+                item["id"],
+                proposed_position=claim_position,
+                justification=claim_justification,
+                completion_id=int(completion["id"]),
+            )
+        except top5_service.Top5Error as exc:
+            return RedirectResponse(
+                f"/achievements/{item['id']}?info=submitted"
+                f"&error={quote(f'Заявка в топ-5 не создана: {exc}')}",
+                status_code=303,
+            )
+        except top5_service.TOP5_ERRORS:
+            return RedirectResponse(
+                f"/achievements/{item['id']}?info=submitted"
+                f"&error={quote('Заявка в топ-5 не создана. Попробуйте ещё раз.')}",
+                status_code=303,
+            )
+        return RedirectResponse(
+            f"/achievements/{item['id']}?info=submitted_top5", status_code=303
         )
     return RedirectResponse(
         f"/achievements/{item['id']}?info=submitted", status_code=303
@@ -392,7 +500,9 @@ def complete(
     top5_claim: str = Form(""),
     top5_position: str = Form(""),
     top5_justification: str = Form(""),
+    comment: str = Form(""),
     file: Annotated[UploadFile | None, File()] = None,
+    files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> HTMLResponse:
     if request.state.user is None:
         return RedirectResponse(LOGIN_URL, status_code=303)
@@ -414,30 +524,27 @@ def complete(
             f"?error={quote('Выберите, сложнее или легче ваших достижений новое.')}",
             status_code=303,
         )
-    claim_position = None
-    claim_justification = ""
-    if top5_claim == "on":
-        claim_position = top5_service.parse_position(top5_position)
-        claim_justification = (top5_justification or "").strip()
-        claim_error = None
-        if claim_position is None:
-            claim_error = "Укажите запрашиваемое место в топ-5 от 1 до 5."
-        elif not claim_justification:
-            claim_error = "Обоснование сложности обязательно для заявки в топ-5."
-        elif len(claim_justification) > top5_service.MAX_JUSTIFICATION:
-            claim_error = "Обоснование сложности слишком длинное."
-        if claim_error is not None:
-            return RedirectResponse(
-                f"/achievements/{achievement_id}?error={quote(claim_error)}",
-                status_code=303,
-            )
+    claim_position, claim_justification, claim_error = _parse_top5_claim(
+        top5_claim, top5_position, top5_justification
+    )
+    if claim_error is not None:
+        return RedirectResponse(
+            f"/achievements/{achievement_id}?error={quote(claim_error)}",
+            status_code=303,
+        )
     try:
         completion = completions_service.submit_completion(
             request,
             achievement_id=achievement_id,
-            description=description,
+            # Описание отдельного доказательства не заполняется: комментарий
+            # относится ко всей заявке и хранится в achievement_completions.
+            description="",
+            # Комментарий относится к самому прохождению (документу), а не к
+            # отдельному файлу: он хранится в achievement_completions.comment
+            # и виден там же, где видны доказательства.
+            comment=(comment or description).strip(),
             external_url=external_url,
-            uploaded=file,
+            uploads=completions_service.collect_uploads(files, file),
             harder_count=parsed,
             # Верификация создателя всегда публична; обычный пользователь
             # может скрыть доказательство от остальных.
@@ -605,7 +712,9 @@ def detail(
             "my_evaluation": my_evaluation,
             "can_evaluate": can_evaluate,
             "eval_reason": eval_reason,
-            "max_proof_bytes": completions_service.MAX_REQUEST_PROOF_BYTES,
+            "max_attachment_bytes": completions_service.MAX_ATTACHMENT_BYTES,
+            "max_files_per_completion": completions_service.MAX_FILES_PER_COMPLETION,
+            "max_comment_length": completions_service.MAX_COMMENT_LENGTH,
             "top5_context": top5_context,
             "top5_claim_allowed": can_submit and top5_context["can_claim"],
             "error": error,

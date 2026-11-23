@@ -45,8 +45,12 @@
   <p>{{ application.justification }}</p>
   <p>
     Доказательство:
-    <a href="{{ application.evidence_url }}" target="_blank" rel="noopener noreferrer">открыть ссылку</a>
-    {% if application.evidence_note %}<span class="muted"> — {{ application.evidence_note }}</span>{% endif %}
+    {% if application.evidence_url %}
+      <a href="{{ application.evidence_url }}" target="_blank" rel="noopener noreferrer">открыть ссылку</a>
+      {% if application.evidence_note %}<span class="muted"> — {{ application.evidence_note }}</span>{% endif %}
+    {% else %}
+      <span class="muted">proof прохождения — в заявке о выполнении</span>
+    {% endif %}
   </p>
   <p class="muted">
     Заявитель:

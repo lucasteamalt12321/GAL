@@ -23,6 +23,13 @@
               {% if a.created_at %}· {{ a.created_at|datetime_local }}{% endif %}</p>
           {% endif %}
           {% if a.description %}<p class="prose">{{ a.description }}</p>{% endif %}
+          {% if a.top5_claim %}
+            <p class="muted">
+              Автор просит место <strong>#{{ a.top5_claim.proposed_position }}</strong> в топ-5.
+              Заявка рассматривается после публикации достижения.
+            </p>
+            <p class="prose">{{ a.top5_claim.justification }}</p>
+          {% endif %}
           <form method="post" action="/moderation/achievements/{{ a.id }}" class="stack">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <label class="field">
@@ -45,8 +52,12 @@
     <p class="muted">Нет достижений на проверке.</p>
   {% endif %}
 
-  <h2>Заявки в топ-5 (старые)</h2>
-  <p class="muted">Новые заявки приходят вместе с прохождениями ниже.</p>
+  <h2>Заявки в топ-5 без ожидающего прохождения</h2>
+  <p class="muted">
+    Новые заявки приходят вместе с прохождениями ниже. Сюда попадают заявки
+    авторов на свои достижения (после публикации) и старые заявки без
+    привязки к прохождению.
+  </p>
   {% if top5_applications %}
     <ul class="mod-list">
       {% for a in top5_applications %}
@@ -107,9 +118,18 @@
           {% else %}
             <p class="muted">Без доказательств.</p>
           {% endif %}
+          {% if c.comment %}
+            <p class="prose"><strong>Комментарий:</strong> {{ c.comment }}</p>
+          {% endif %}
           {% if c.top5_claim %}
             <p class="muted">Обоснование сложности:</p>
             <p class="prose">{{ c.top5_claim.justification }}</p>
+            {% if c.top5_claim_blocked %}
+              <p class="muted">
+                Достижение ещё не опубликовано — сначала одобрите его публикацию
+                в разделе «Достижения на проверке», затем выставляйте место.
+              </p>
+            {% endif %}
           {% endif %}
           <form method="post" action="/moderation/completions/{{ c.id }}" class="stack">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -118,7 +138,11 @@
               <textarea name="reason" rows="2" maxlength="500"
                         placeholder="Только для отклонения"></textarea>
             </label>
-            {% if c.top5_claim %}
+            {% if c.top5_claim_blocked %}
+              <p class="muted">
+                Место в топ-5 нельзя выставить до публикации достижения.
+              </p>
+            {% elif c.top5_claim %}
               <label class="field">
                 <span class="field-label">Место в топ-5 (ваш выбор)</span>
                 <select name="top5_position">

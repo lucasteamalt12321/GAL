@@ -6,10 +6,15 @@
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <fieldset class="field proof-field">
       <legend class="field-label">Доказательство</legend>
-      <p class="muted">Приложите файл (до {{ max_proof_bytes // 1048576 }} МБ) или ссылку. Для видео лучше ссылка на YouTube/Диск.</p>
+      <p class="muted">
+        Приложите несколько файлов суммарно до {{ max_attachment_bytes // 1048576 }} МБ
+        (не более {{ max_files_per_completion }}) или ссылку. Для видео лучше ссылка на YouTube/Диск.
+      </p>
       <label class="field">
-        <span class="field-label">Файл</span>
-        <input type="file" name="file" data-max-bytes="{{ max_proof_bytes }}">
+        <span class="field-label">Файлы</span>
+        <input type="file" name="files" multiple
+               data-max-bytes="{{ max_attachment_bytes }}"
+               data-max-files="{{ max_files_per_completion }}">
       </label>
       <label class="field">
         <span class="field-label">Ссылка</span>
@@ -25,29 +30,12 @@
       </label>
       <p class="muted">Модераторы увидят доказательство при проверке в любом случае.</p>
     {% endif %}
-    {% if top5_claim_allowed %}
-      <label class="checkbox-field">
-        <input type="checkbox" name="top5_claim" value="on" data-top5-claim-toggle>
-        <span>Заявка в топ-5</span>
-      </label>
-      <div class="stack top5-claim-fields" data-top5-claim-fields hidden>
-        <label class="field">
-          <span class="field-label">Запрашиваемое место</span>
-          <select name="top5_position">
-            {% for n in range(1, 6) %}<option value="{{ n }}">#{{ n }}</option>{% endfor %}
-          </select>
-        </label>
-        <label class="field">
-          <span class="field-label">Обоснование сложности</span>
-          <textarea name="top5_justification" rows="3" maxlength="4000"
-                    placeholder="Почему это достижение тянет на топ-5"></textarea>
-        </label>
-        <p class="muted">Модератор рассмотрит заявку вместе с прохождением и может выставить своё место.</p>
-      </div>
-    {% endif %}
+    {% include "partials/top5_claim_fields.html" %}
     <label class="field">
-      <span class="field-label">Комментарий</span>
-      <textarea name="description" rows="3" maxlength="2000"></textarea>
+      <span class="field-label">Комментарий к прохождению</span>
+      <textarea name="comment" rows="3" maxlength="{{ max_comment_length }}"
+                placeholder="Что доказывают приложенные файлы"></textarea>
+      <span class="muted">Комментарий относится ко всей заявке: его видят модераторы, а остальные пользователи — если доказательства не скрыты.</span>
     </label>
     <button type="submit" class="btn btn-primary">{{ submit_label|default("Отправить на модерацию") }}</button>
   </form>

@@ -1,5 +1,6 @@
 import logging
 import uuid
+from collections.abc import Callable
 from pathlib import PurePosixPath
 
 import httpx
@@ -8,12 +9,28 @@ from postgrest.exceptions import APIError
 from storage3.exceptions import StorageException
 from supabase import Client
 
+from app.config import get_settings
 from app.services import auth as auth_service
 
 logger = logging.getLogger(__name__)
 
 PROOFS_BUCKET = "proofs"
 MAX_PROOF_BYTES = 50 * 1024 * 1024
+# Потолок длины комментария в БД (CHECK в миграции 035).
+MAX_DB_COMMENT_LENGTH = 2000
+
+# Суммарный лимит вложений одной заявки на прохождение: несколько файлов
+# считаются вместе. Значение настраивается (MAX_ATTACHMENT_BYTES), потому что
+# Vercel обрезает тело serverless-функции на ~4.5 МБ, а self-hosted Appwrite
+# Functions такой потолок не имеют.
+MAX_ATTACHMENT_BYTES = max(1024 * 1024, int(get_settings().max_attachment_bytes))
+MAX_FILES_PER_COMPLETION = max(1, int(get_settings().max_files_per_completion))
+# Потолок задаёт CHECK-ограничение в БД (миграция 035): выше 2000 символов
+# заявка не сохранится, поэтому лимит приложения не может быть больше.
+MAX_COMMENT_LENGTH = max(
+    1, min(MAX_DB_COMMENT_LENGTH, int(get_settings().max_comment_length))
+)
+
 PROOF_URL_TTL = 3600
 
 LINK_PROOF = "link"
@@ -22,17 +39,27 @@ VIDEO_PROOF = "video"
 DOCUMENT_PROOF = "document"
 OTHER_PROOF = "other"
 
-# Vercel обрезает тело serverless-функции на ~4.5 МБ, поэтому серверный лимит
-# 50 МБ (лимит бакета) в приложении недостижим: файл большего размера
-# отклоняется платформой до FastAPI. Показываем реальный потолок приложения.
-MAX_REQUEST_PROOF_BYTES = 4 * 1024 * 1024
 
-
-def _too_large_message() -> str:
-    mib = MAX_REQUEST_PROOF_BYTES // (1024 * 1024)
+def _too_large_message(limit: int = MAX_ATTACHMENT_BYTES) -> str:
+    mib = limit // (1024 * 1024)
     return (
-        f"Файл слишком большой. Максимум {mib} МБ — для более крупных "
-        "доказательств используйте ссылку."
+        f"Суммарный объём вложений больше {mib} МБ. Приложите меньшие файлы "
+        "или используйте ссылку на доказательство."
+    )
+
+
+def _file_too_large_message(limit: int = MAX_ATTACHMENT_BYTES) -> str:
+    mib = limit // (1024 * 1024)
+    return (
+        f"Файл слишком большой: максимум {mib} МБ на один файл — для более "
+        "крупных доказательств используйте ссылку."
+    )
+
+
+def _too_many_files_message(limit: int = MAX_FILES_PER_COMPLETION) -> str:
+    return (
+        f"Слишком много файлов: максимум {limit}. Объедините их в архив "
+        "или приложите часть по ссылке."
     )
 
 
@@ -53,7 +80,7 @@ def _storage_error_message(exc: StorageException) -> str:
     if status == 413 or any(
         marker in raw for marker in ("maximum allowed size", "too large", "file size")
     ):
-        return _too_large_message()
+        return _file_too_large_message()
     if status in (401, 403) or any(
         marker in raw
         for marker in (
@@ -119,21 +146,47 @@ def _safe_filename(filename: str) -> str:
     return cleaned[:80] or "proof"
 
 
+def _is_missing_comment(exc: Exception) -> bool:
+    """Ошибка «колонки comment ещё нет» (деплой раньше миграции 035)."""
+    code = str(getattr(exc, "code", "") or "").upper()
+    text = str(exc).lower()
+    if code not in {"PGRST204", "42703"} and "column" not in text:
+        return False
+    return "comment" in text
+
+
+def fetch_completions_with_comment(client: Client, base_fields: str, apply: Callable):
+    """Выбирает строки прохождений, добавляя колонку comment, если она есть.
+
+    До применения миграции 035 колонки ещё нет — запрос повторяется без неё,
+    чтобы страницы не падали из-за неприменённой миграции.
+    """
+
+    def _run(fields: str):
+        return apply(client.table("achievement_completions").select(fields)).execute()
+
+    try:
+        return _run(f"{base_fields},comment")
+    except APIError as exc:
+        if not _is_missing_comment(exc):
+            raise
+        return _run(base_fields)
+
+
 def get_user_completion(request: Request, achievement_id: int) -> dict | None:
     user = request.state.user
     client = auth_service.user_client_from_request(request)
     if user is None or client is None:
         return None
-    res = (
-        client.table("achievement_completions")
-        .select(
-            "id,achievement_id,user_id,status,created_at,approved_at,"
-            "requested_harder_count"
-        )
-        .eq("achievement_id", achievement_id)
-        .eq("user_id", user.id)
-        .maybe_single()
-        .execute()
+    res = fetch_completions_with_comment(
+        client,
+        "id,achievement_id,user_id,status,created_at,approved_at,"
+        "requested_harder_count",
+        lambda query: (
+            query.eq("achievement_id", achievement_id)
+            .eq("user_id", user.id)
+            .maybe_single()
+        ),
     )
     if res is None:
         return None
@@ -146,16 +199,12 @@ def get_user_completion_by_id(request: Request, completion_id: int) -> dict | No
     client = auth_service.user_client_from_request(request)
     if user is None or client is None:
         return None
-    res = (
-        client.table("achievement_completions")
-        .select(
-            "id,achievement_id,user_id,status,created_at,approved_at,"
-            "requested_harder_count,"
-            "user:profiles!user_id(username,display_name,avatar_url)"
-        )
-        .eq("id", completion_id)
-        .maybe_single()
-        .execute()
+    res = fetch_completions_with_comment(
+        client,
+        "id,achievement_id,user_id,status,created_at,approved_at,"
+        "requested_harder_count,"
+        "user:profiles!user_id(username,display_name,avatar_url)",
+        lambda query: query.eq("id", completion_id).maybe_single(),
     )
     if res is None:
         return None
@@ -190,6 +239,7 @@ def list_proofs(request: Request, completion_id: int) -> list[dict]:
         .select("id,storage_path,proof_type,description,created_at")
         .eq("completion_id", completion_id)
         .order("created_at")
+        .order("id")
         .execute()
     )
     return res.data or []
@@ -281,18 +331,15 @@ def list_user_completions(request: Request, limit: int = 200) -> list[dict]:
     client = auth_service.user_client_from_request(request)
     if user is None or client is None:
         return []
-    res = (
-        client.table("achievement_completions")
-        .select(
-            "id,achievement_id,status,created_at,approved_at,"
-            "achievement:achievements(id,title,status,creator_id,"
-            "category:categories(name)),"
-            "proofs(id,storage_path,proof_type,description,created_at)"
-        )
-        .eq("user_id", user.id)
-        .order("created_at", desc=True)
-        .limit(limit)
-        .execute()
+    res = fetch_completions_with_comment(
+        client,
+        "id,achievement_id,status,created_at,approved_at,"
+        "achievement:achievements(id,title,status,creator_id,"
+        "category:categories(name)),"
+        "proofs(id,storage_path,proof_type,description,created_at)",
+        lambda query: (
+            query.eq("user_id", user.id).order("created_at", desc=True).limit(limit)
+        ),
     )
     rows = res.data or []
     if not rows:
@@ -476,12 +523,43 @@ def _update_completion(client: Client, completion_id: int, fields: dict) -> None
         )
 
 
+def _missing_columns(exc: Exception) -> set[str]:
+    """Какие из новых колонок ещё не существуют в БД (миграция не применена)."""
+    code = str(getattr(exc, "code", "") or "").upper()
+    text = str(exc).lower()
+    if code not in {"PGRST204", "42703"} and "column" not in text:
+        return set()
+    return {name for name in ("proofs_visible", "comment") if name in text}
+
+
+def _set_completion_comment(client: Client, completion_id: int, comment: str) -> None:
+    """Записывает (или очищает) комментарий к прохождению.
+
+    Пользователь не может обновлять achievement_completions под RLS, поэтому
+    комментарий пишет security definer RPC (владелец, заявка pending).
+    Пустая строка очищает прежний комментарий — иначе текст отклонённой
+    заявки уехал бы вместе с новой. Если миграция ещё не применена, заявка
+    сохраняется без комментария.
+    """
+    try:
+        client.rpc(
+            "set_completion_comment",
+            {"p_completion_id": completion_id, "p_comment": comment or ""},
+        ).execute()
+    except COMPLETION_ERRORS:
+        logger.info(
+            "Completion comment is not applied yet (migration 035 pending)",
+            exc_info=True,
+        )
+
+
 def create_completion(
     request: Request,
     achievement_id: int,
     user_id: str,
     harder_count: int | None = None,
     proofs_visible: bool = True,
+    comment: str = "",
 ) -> dict:
     client = auth_service.user_client_from_request(request)
     if client is None:
@@ -496,16 +574,22 @@ def create_completion(
     if not proofs_visible:
         # true совпадает с default из миграции 028 и не требует новой колонки.
         payload["proofs_visible"] = False
+    if comment:
+        payload["comment"] = comment
     try:
         try:
             res = client.table("achievement_completions").insert(payload).execute()
         except APIError as exc:
-            if "proofs_visible" not in payload or not _is_missing_visibility(exc):
+            missing = _missing_columns(exc)
+            missing &= set(payload)
+            if not missing:
                 raise
             logger.info(
-                "proofs_visible is not applied yet; creating visible completion"
+                "Columns %s are not applied yet; creating completion without them",
+                sorted(missing),
             )
-            payload.pop("proofs_visible")
+            for name in missing:
+                payload.pop(name, None)
             res = client.table("achievement_completions").insert(payload).execute()
     except APIError as exc:
         if getattr(exc, "code", None) == "23505" or "duplicate" in str(exc).lower():
@@ -586,8 +670,8 @@ def attach_proof(
         size = _uploaded_size(uploaded)
         if size is None:
             raise ProofError("Не удалось определить размер файла.")
-        if size > MAX_REQUEST_PROOF_BYTES or size > MAX_PROOF_BYTES:
-            raise ProofError(_too_large_message())
+        if size > MAX_ATTACHMENT_BYTES or size > MAX_PROOF_BYTES:
+            raise ProofError(_file_too_large_message())
 
     # Теперь читаем файл
     try:
@@ -642,15 +726,181 @@ def attach_proof(
     return res.data[0]
 
 
+def _attachment_files(uploads) -> list:
+    """Оставляет только реально выбранные файлы.
+
+    Multipart может прислать пустые элементы (например, если браузер отправил
+    поле без файла), а у них нет ни имени, ни содержимого.
+    """
+    files = []
+    for item in uploads or []:
+        if item is None:
+            continue
+        if not getattr(item, "filename", None):
+            continue
+        files.append(item)
+    return files
+
+
+def collect_uploads(files, file=None) -> list:
+    """Собирает вложения из поля multiple и старого одиночного поля file.
+
+    Старые формы (и закешированные страницы) присылают один файл в поле
+    `file`, новые — несколько в `files`. Оба варианта поддерживаются.
+    """
+    uploads = _attachment_files(files)
+    uploads.extend(_attachment_files([file]))
+    return uploads
+
+
+def _validate_attachments(files: list) -> int:
+    """Проверяет число файлов и суммарный размер; возвращает суммарный размер."""
+    if len(files) > MAX_FILES_PER_COMPLETION:
+        raise ProofError(_too_many_files_message())
+
+    total = 0
+    for item in files:
+        size = _uploaded_size(item)
+        if size is None:
+            raise ProofError("Не удалось определить размер файла.")
+        if size > MAX_ATTACHMENT_BYTES or size > MAX_PROOF_BYTES:
+            raise ProofError(_file_too_large_message())
+        total += size
+    if total > MAX_ATTACHMENT_BYTES:
+        raise ProofError(_too_large_message())
+    return total
+
+
+def attach_proofs(
+    request: Request,
+    *,
+    completion_id: int,
+    achievement_id: int,
+    description: str,
+    external_url: str,
+    uploads,
+) -> list[dict]:
+    """Прикрепляет к прохождению ссылку и/или несколько файлов.
+
+    Каждый файл становится отдельным доказательством: так модератор видит
+    все приложенные материалы, а пользователь может прислать, например,
+    скриншот и короткое видео одной отправкой. Суммарный объём ограничен
+    MAX_ATTACHMENT_BYTES.
+    """
+    files = _attachment_files(uploads)
+    _validate_attachments(files)
+
+    proofs: list[dict] = []
+    try:
+        if external_url:
+            proofs.append(
+                attach_proof(
+                    request,
+                    completion_id=completion_id,
+                    achievement_id=achievement_id,
+                    description=description,
+                    external_url=external_url,
+                    uploaded=None,
+                )
+            )
+        for item in files:
+            proofs.append(
+                attach_proof(
+                    request,
+                    completion_id=completion_id,
+                    achievement_id=achievement_id,
+                    description=description,
+                    external_url="",
+                    uploaded=item,
+                )
+            )
+    except CompletionError:
+        # Часть вложений уже загружена — откатываем их, чтобы не оставить
+        # заявку с «половинными» доказательствами.
+        cleanup_failed_proofs(request, completion_id, proofs)
+        raise
+    return proofs
+
+
+def cleanup_failed_proofs(
+    request: Request, completion_id: int, proofs: list[dict]
+) -> None:
+    """Откатывает частично загруженные доказательства.
+
+    Если вложений несколько, сбой на третьем файле не должен оставить заявку
+    с двумя доказательствами из четырёх: строки proofs удаляются, объекты
+    Storage — тоже. Сама заявка остаётся pending, чтобы пользователь мог
+    прикласть файлы заново.
+    """
+    if not proofs:
+        return
+
+    paths = [
+        proof.get("storage_path")
+        for proof in proofs
+        if proof.get("storage_path") and proof.get("proof_type") != LINK_PROOF
+    ]
+
+    client = auth_service.user_client_from_request(request)
+    proof_ids = [
+        proof.get("id") for proof in proofs if proof.get("id") is not None
+    ]
+    removed = False
+    if client is not None and proof_ids:
+        try:
+            client.rpc(
+                "remove_completion_proofs",
+                {"p_completion_id": completion_id, "p_proof_ids": proof_ids},
+            ).execute()
+            removed = True
+        except COMPLETION_ERRORS:
+            logger.info(
+                "remove_completion_proofs is not applied yet; rolling back with service role",
+                exc_info=True,
+            )
+
+    if not removed and proof_ids:
+        # Миграция 035 ещё не применена — удаляем строки через service role.
+        try:
+            service_client = auth_service.new_service_client()
+            (
+                service_client.table("proofs")
+                .delete()
+                .eq("completion_id", completion_id)
+                .in_("id", proof_ids)
+                .execute()
+            )
+        except COMPLETION_ERRORS:
+            logger.warning(
+                "Failed to remove proof rows of completion %s",
+                completion_id,
+                exc_info=True,
+            )
+
+    if not paths:
+        return
+    client = auth_service.user_client_from_request(request)
+    if client is None:
+        return
+    try:
+        client.storage.from_(PROOFS_BUCKET).remove(paths)
+    except COMPLETION_ERRORS:
+        logger.warning(
+            "Failed to remove uploaded proof objects %r", paths, exc_info=True
+        )
+
+
 def submit_completion(
     request: Request,
     *,
     achievement_id: int,
     description: str,
     external_url: str,
-    uploaded,
+    uploaded=None,
+    uploads=None,
     harder_count: int | None = None,
     proofs_visible: bool = True,
+    comment: str = "",
 ) -> dict:
     user = request.state.user
     if user is None:
@@ -659,9 +909,16 @@ def submit_completion(
     if client is None:
         raise CompletionError("Требуется вход в систему.")
 
+    comment = (comment or "").strip()
+    if len(comment) > MAX_COMMENT_LENGTH:
+        raise ProofError(
+            f"Комментарий слишком длинный: максимум {MAX_COMMENT_LENGTH} символов."
+        )
+
     existing = get_user_completion(request, achievement_id)
 
     completion: dict
+    comment_stored = False
     stale_proof_paths: list[str] = []
     if existing is not None and existing["status"] == "rejected":
         stale_proof_paths = [
@@ -708,11 +965,15 @@ def submit_completion(
             user.id,
             harder_count=harder_count,
             proofs_visible=proofs_visible,
+            comment=comment,
         )
+        # Комментарий записан вместе с заявкой. Если колонки ещё нет (миграция
+        # 035 не применена), комментарий допишется через RPC ниже.
+        comment_stored = (completion.get("comment") or "").strip() == comment
 
     external_url = (external_url or "").strip()
-    filename = getattr(uploaded, "filename", None)
-    if not external_url and not filename:
+    files = _attachment_files(uploads) + _attachment_files([uploaded])
+    if not external_url and not files:
         already_pending = completion.get("status") == "pending" or (
             existing is not None and existing["status"] == "rejected"
         )
@@ -731,13 +992,13 @@ def submit_completion(
         raise ProofError("Приложите файл или укажите ссылку на доказательство.")
 
     try:
-        attach_proof(
+        attach_proofs(
             request,
             completion_id=completion["id"],
             achievement_id=achievement_id,
             description=description,
             external_url=external_url,
-            uploaded=uploaded,
+            uploads=files,
         )
     except CompletionError as exc:
         logger.warning(
@@ -756,6 +1017,11 @@ def submit_completion(
                 "Failed to clean empty completion %s", completion["id"], exc_info=True
             )
         raise
+
+    if not comment_stored:
+        # Заявка уже существовала: комментарий пишется (или очищается) через
+        # RPC — прежний текст отклонённой заявки не должен уезжать дальше.
+        _set_completion_comment(client, completion["id"], comment)
 
     if stale_proof_paths:
         # Старые файлы удаляем только после успешной загрузки нового

@@ -30,10 +30,11 @@ PENDING_ACHIEVEMENTS = (
 )
 PENDING_COMPLETIONS = (
     "id,achievement_id,user_id,status,created_at,"
-    "achievement:achievements(id,title),"
+    "achievement:achievements(id,title,status),"
     "user:profiles!achievement_completions_user_id_fkey(id,username,display_name),"
     "proofs(id,storage_path,proof_type,description,created_at)"
 )
+
 REVIEW_SELECT = (
     "id,completion_id,achievement_id,moderator_id,decision,reason,created_at"
 )
@@ -55,20 +56,29 @@ def list_pending_achievements(request: Request) -> list[dict]:
         .limit(QUEUE_LIMIT)
         .execute()
     )
-    return res.data or []
+    items = res.data or []
+    if not items:
+        return items
+    # Автор мог подать заявку в топ-5 вместе с созданием достижения —
+    # модератор видит запрошенное место ещё до публикации.
+    claims = top5_service.claims_for_achievements(
+        client, [int(item["id"]) for item in items]
+    )
+    for item in items:
+        item["top5_claim"] = claims.get(int(item["id"]))
+    return items
 
 
 def list_pending_completions(request: Request) -> list[dict]:
     client = auth_service.user_client_from_request(request)
     if client is None:
         return []
-    res = (
-        client.table("achievement_completions")
-        .select(PENDING_COMPLETIONS)
-        .eq("status", "pending")
-        .order("created_at")
-        .limit(QUEUE_LIMIT)
-        .execute()
+    res = completions_service.fetch_completions_with_comment(
+        client,
+        PENDING_COMPLETIONS,
+        lambda query: (
+            query.eq("status", "pending").order("created_at").limit(QUEUE_LIMIT)
+        ),
     )
     items = res.data or []
     for item in items:
@@ -80,7 +90,12 @@ def list_pending_completions(request: Request) -> list[dict]:
         client, [int(item["id"]) for item in items]
     )
     for item in items:
-        item["top5_claim"] = claims.get(int(item["id"]))
+        claim = claims.get(int(item["id"]))
+        item["top5_claim"] = claim
+        # Место в топ-5 нельзя выставить, пока достижение не опубликовано:
+        # временная сила считается только для опубликованных достижений.
+        status = (item.get("achievement") or {}).get("status")
+        item["top5_claim_blocked"] = bool(claim) and status not in (None, "published")
     return items
 
 
@@ -267,6 +282,32 @@ def _achievement_target(client, achievement_id: int) -> dict | None:
     return res.data
 
 
+def _achievement_status(client, achievement_id: int) -> str | None:
+    """Статус достижения или None, если строка недоступна.
+
+    Сбой чтения не должен блокировать решение модератора — в этом случае
+    статус неизвестен (None) и проверка публикации не выполняется.
+    """
+    try:
+        res = (
+            client.table("achievements")
+            .select("id,status")
+            .eq("id", achievement_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception:  # статус не критичен для решения
+        logger.warning(
+            "failed to read achievement status for %s",
+            achievement_id,
+            exc_info=True,
+        )
+        return None
+    if res is None or not res.data:
+        return None
+    return res.data.get("status")
+
+
 def decide_achievement(
     request: Request, achievement_id: int, decision: str, reason: str
 ) -> None:
@@ -311,6 +352,20 @@ def decide_achievement(
 
     if decision == "rejected":
         _reject_creator_completion(client, achievement_id, creator_id, user.id, reason)
+        # Заявка в топ-5, поданная автором вместе с достижением, без достижения
+        # не имеет смысла — закрываем её, чтобы она не висела в очереди.
+        try:
+            top5_service.close_claims_for_achievement(
+                client,
+                achievement_id,
+                reason or "Достижение отклонено модератором",
+            )
+        except MODERATION_ERRORS:
+            logger.warning(
+                "closing top5 claims failed for rejected achievement %s",
+                achievement_id,
+                exc_info=True,
+            )
     else:
         # Достижение уже published — теперь сохранённая ожидаемая сложность
         # создателя может стать его первой оценкой.
@@ -402,6 +457,13 @@ def decide_completion(
             raise ModerationError("Заявка в топ-5 не найдена или уже рассмотрена.")
         if str(claim.get("applicant_id")) == str(user.id):
             raise ModerationError("Нельзя выставить место собственной заявке.")
+        # Авторская заявка подаётся вместе с созданием достижения, поэтому
+        # место можно выставить только после публикации.
+        status = _achievement_status(client, int(claim["achievement_id"]))
+        if status is not None and status != "published":
+            raise ModerationError(
+                "Достижение ещё не опубликовано — сначала одобрите его публикацию."
+            )
         raw = str(top5_position or "").strip()
         position = (
             top5_service.parse_position(raw, maximum=top5_service.MAX_POSITION + 1)

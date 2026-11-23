@@ -76,6 +76,9 @@
                 {% else %}
                   —
                 {% endif %}
+                {% if a.comment %}
+                  <div class="muted completion-comment">{{ a.comment }}</div>
+                {% endif %}
               </td>
               <td>{% if a.approved_at %}{{ a.approved_at|date_local }}{% else %}—{% endif %}</td>
             </tr>

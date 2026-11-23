@@ -48,6 +48,12 @@
         </ul>
       </section>
     {% endif %}
+    {% if completion.comment %}
+      <section class="prose proof-section">
+        <h2>Комментарий к прохождению</h2>
+        <p>{{ completion.comment }}</p>
+      </section>
+    {% endif %}
   </div>
 </div>
 

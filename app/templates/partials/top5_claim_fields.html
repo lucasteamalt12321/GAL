@@ -1,0 +1,30 @@
+{# Блок заявки в топ-5 — общий для формы прохождения и формы создания
+   достижения. Экспертная оценка не участвует: заявку рассматривает модератор
+   и выставляет место вручную (1–6). #}
+{% if top5_claim_allowed %}
+  <label class="checkbox-field">
+    <input type="checkbox" name="top5_claim" value="on" data-top5-claim-toggle{% if top5_claim_checked %} checked{% endif %}>
+    <span>Заявка в топ-5</span>
+  </label>
+  <div class="stack top5-claim-fields" data-top5-claim-fields
+       {% if not top5_claim_checked %}hidden{% endif %}>
+    <label class="field">
+      <span class="field-label">Запрашиваемое место</span>
+      <select name="top5_position">
+        {% for n in range(1, 6) %}
+          <option value="{{ n }}"{% if top5_position|string == n|string %} selected{% endif %}>#{{ n }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">
+      <span class="field-label">Обоснование сложности</span>
+      <textarea name="top5_justification" rows="3" maxlength="4000"
+                placeholder="Почему это достижение тянет на топ-5">{{ top5_justification|default("", true) }}</textarea>
+    </label>
+    <p class="muted">
+      {{ top5_claim_hint|default(
+        "Модератор рассмотрит заявку вместе с прохождением и может выставить своё место.",
+        true) }}
+    </p>
+  </div>
+{% endif %}

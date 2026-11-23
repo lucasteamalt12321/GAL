@@ -17,10 +17,23 @@
     document.querySelectorAll('input[type="file"][data-max-bytes]').forEach(function (input) {
       input.addEventListener("change", function () {
         var max = parseInt(input.getAttribute("data-max-bytes"), 10);
-        var file = input.files && input.files[0];
-        if (!file || !max || file.size <= max) return;
+        var maxFiles = parseInt(input.getAttribute("data-max-files"), 10);
+        var files = input.files ? Array.prototype.slice.call(input.files) : [];
+        if (!files.length) return;
+        if (maxFiles && files.length > maxFiles) {
+          window.alert(
+            "Слишком много файлов: максимум " + maxFiles + ". Объедините их в архив."
+          );
+          input.value = "";
+          return;
+        }
+        var total = 0;
+        for (var i = 0; i < files.length; i++) total += files[i].size;
+        if (!max || total <= max) return;
         var mib = Math.round(max / (1024 * 1024));
-        window.alert("Файл больше " + mib + " МБ. Для крупных доказательств используйте ссылку.");
+        window.alert(
+          "Суммарный объём файлов больше " + mib + " МБ. Для крупных доказательств используйте ссылку."
+        );
         input.value = "";
       });
     });

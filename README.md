@@ -181,6 +181,8 @@ python scripts/bt_experiment.py         # синтетический экспе�
 - `031_top5_completion_claims.sql` — заявка в топ-5 вместе с прохождением: `completion_id`, необязательный `evidence_url`, guard/RLS для автора или владельца прохождения, backfill старых заявок. Применена к проду 2026-11-17.
 - `032_content_refactor.sql` — контент-рефактор: русские названия категорий (slug сохранены), новые категории «Творчество»/«Спорт и здоровье»/«Дом и быт», формализованные тексты достижений. Применена к проду 2026-11-17.
 - `033_lthub_password.sql` — `external_identities.lthub_login` (логин в LTHub для проверки пароля) и `password_synced` (подтверждённый пользователем пароль не перевыпускается при OAuth-входе). Применена к проду 2026-11-23.
+- `034_creator_top5_claim.sql` — заявка в топ-5 при создании достижения.
+- `035_completion_comment.sql` — комментарий к заявке на прохождение (`achievement_completions.comment`), RPC `set_completion_comment` и `remove_completion_proofs`, публичные RPC прошедших пересозданы с колонкой `comment`.
 
 Применение:
 

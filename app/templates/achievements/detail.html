@@ -64,9 +64,15 @@
     </p>
   {% endif %}
 
-  {% if top5_context and top5_context.my_application and achievement.status == 'published' %}
+  {% if top5_context and top5_context.my_application %}
     <div class="evaluation-box">
       <p>Заявка в топ-5: <strong>{{ top5_context.my_application.status|top5_status_label }}</strong>.</p>
+      {% if achievement.status != 'published' %}
+        <p class="muted">
+          Достижение ещё не опубликовано: место в топ-5 выставит модератор
+          после публикации.
+        </p>
+      {% endif %}
       {% if is_creator or is_moderator or top5_context.is_applicant %}
         <a class="btn" href="/top5/{{ top5_context.my_application.id }}">Открыть заявку</a>
       {% endif %}
@@ -173,6 +179,9 @@
                   {% endfor %}
                 </span>
               {% endif %}
+              {% if c.comment %}
+                <span class="muted completer-comment">· {{ c.comment }}</span>
+              {% endif %}
             </li>
           {% endfor %}
         </ul>
@@ -206,6 +215,9 @@
             </li>
           {% endfor %}
         </ul>
+      {% endif %}
+      {% if own_completion.comment %}
+        <p class="prose"><strong>Комментарий:</strong> {{ own_completion.comment }}</p>
       {% endif %}
       {% if own_completion.status == 'rejected' %}
         <div class="flash flash-error">

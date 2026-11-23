@@ -16,14 +16,23 @@ def _collapse(sql: str) -> str:
 
 
 def _latest_function(name: str) -> str:
-    marker = f"create or replace function public.{name}("
+    """Последнее определение функции в порядке применения миграций.
+
+    Учитываются оба варианта: `create or replace function` и `create function`
+    после `drop function` (так пересозданы публичные RPC в 026/035).
+    """
+    markers = (
+        f"create or replace function public.{name}(",
+        f"create function public.{name}(",
+    )
     latest = ""
     for path in sorted(MIGRATIONS.glob("*.sql")):
         sql = path.read_text(encoding="utf-8")
-        for match in re.finditer(re.escape(marker), sql, flags=re.IGNORECASE):
-            end = sql.find("$$;", match.start())
-            assert end != -1, f"Unterminated function body in {path.name}"
-            latest = sql[match.start() : end + 3]
+        for marker in markers:
+            for match in re.finditer(re.escape(marker), sql, flags=re.IGNORECASE):
+                end = sql.find("$$;", match.start())
+                assert end != -1, f"Unterminated function body in {path.name}"
+                latest = sql[match.start() : end + 3]
     assert latest, f"Function {name} is not defined in migrations"
     return _collapse(latest)
 
@@ -40,6 +49,36 @@ def test_public_proofs_respect_completion_visibility() -> None:
         assert "c.proofs_visible" in body
         assert "c.user_id = auth.uid()" in body
         assert "public.is_moderator()" in body
+
+
+def test_public_completion_comment_follows_proof_visibility() -> None:
+    """Комментарий к прохождению виден ровно там же, где доказательства."""
+    for name in ("achievement_completers", "user_completed_achievements"):
+        body = _latest_function(name)
+
+        assert "comment text" in body
+        assert "then c.comment" in body
+        # Колонка в select-list (CASE) и в group by.
+        assert body.count("c.comment") >= 2
+
+
+def test_completion_comment_rpcs_are_owner_scoped() -> None:
+    """Комментарий и откат вложений пишет только владелец pending-заявки."""
+    comment = _latest_function("set_completion_comment")
+    assert "security definer" in comment
+    assert "auth.uid()" in comment
+    assert "c.user_id = v_uid" in comment
+    assert "c.status = 'pending'" in comment
+    assert "raise exception 'auth_required'" in comment
+    assert "revoke execute on function public.set_completion_comment" in _collapse(
+        (MIGRATIONS / "035_completion_comment.sql").read_text(encoding="utf-8")
+    )
+
+    rollback = _latest_function("remove_completion_proofs")
+    assert "security definer" in rollback
+    assert "c.user_id = v_uid" in rollback
+    assert "c.status = 'pending'" in rollback
+    assert "pr.id = any(p_proof_ids)" in rollback
 
 
 def test_creator_proof_visibility_cannot_be_hidden() -> None:

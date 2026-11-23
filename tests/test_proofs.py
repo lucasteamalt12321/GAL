@@ -137,12 +137,12 @@ def test_attach_link_skips_storage(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_attach_rejects_too_large_file(monkeypatch: pytest.MonkeyPatch) -> None:
-    oversized = b"x" * (completions_service.MAX_REQUEST_PROOF_BYTES + 1)
+    oversized = b"x" * (completions_service.MAX_ATTACHMENT_BYTES + 1)
 
     with pytest.raises(completions_service.ProofError) as excinfo:
         _attach(monkeypatch, _Uploaded(oversized))
 
-    assert "4 МБ" in str(excinfo.value)
+    assert "16 МБ" in str(excinfo.value)
 
 
 def test_storage_denied_message_is_user_friendly(
@@ -169,7 +169,7 @@ def test_storage_payload_too_large_message(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(completions_service.ProofError) as excinfo:
         _attach(monkeypatch, _Uploaded(b"data"), error=error)
 
-    assert "4 МБ" in str(excinfo.value)
+    assert "16 МБ" in str(excinfo.value)
 
 
 class _SignedUrlBucket:

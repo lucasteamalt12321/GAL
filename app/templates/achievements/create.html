@@ -38,16 +38,28 @@
     {% include "partials/scale_picker.html" %}
     <fieldset class="field proof-field">
       <legend class="field-label">Ваше доказательство</legend>
-      <p class="muted">Приложите файл (до {{ max_proof_bytes // 1048576 }} МБ) или ссылку.</p>
+      <p class="muted">
+        Приложите несколько файлов суммарно до {{ max_attachment_bytes // 1048576 }} МБ
+        (не более {{ max_files_per_completion }}) или ссылку.
+      </p>
       <label class="field">
-        <span class="field-label">Файл</span>
-        <input type="file" name="file" data-max-bytes="{{ max_proof_bytes }}">
+        <span class="field-label">Файлы</span>
+        <input type="file" name="files" multiple
+               data-max-bytes="{{ max_attachment_bytes }}"
+               data-max-files="{{ max_files_per_completion }}">
       </label>
       <label class="field">
         <span class="field-label">Ссылка на доказательство</span>
         <input type="url" name="external_url" value="{{ external_url }}" placeholder="https://...">
       </label>
+      <label class="field">
+        <span class="field-label">Комментарий к доказательству</span>
+        <textarea name="comment" rows="3" maxlength="{{ max_comment_length }}"
+                  placeholder="Что доказывают приложенные файлы">{{ comment }}</textarea>
+      </label>
     </fieldset>
+    {% set top5_claim_hint = "Заявка уйдёт на модерацию вместе с достижением. Место в топ-5 выставит модератор после публикации." %}
+    {% include "partials/top5_claim_fields.html" %}
     <button type="submit" class="btn btn-primary">Отправить на модерацию</button>
   </form>
   <p class="muted">Достижение публикуется только после проверки модератором доказательства вашего собственного выполнения.</p>
