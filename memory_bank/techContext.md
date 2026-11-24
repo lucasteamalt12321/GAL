@@ -70,6 +70,12 @@ OAUTH_LTHUB_REDIRECT_URIS=    # доп. redirect URI через запятую (
 
 `.env.example` содержит шаблон; `.env` не коммитится.
 
+## Инструменты доступа к БД (2026-11-24)
+
+- **Supabase CLI v3.3.0** установлен глобально (`npm i -g supabase`, `C:\Users\admin\AppData\Roaming\npm\supabase.ps1`). `supabase login` вне TTY требует `--token` (PAT) или `SUPABASE_ACCESS_TOKEN`; удалённые `db query`/`db push`/`db dump` дополнительно требуют пароль БД (либо `supabase link`). На этой машине PAT и пароль БД отсутствуют — CLI пока не привязан к проекту.
+- **Management API** (`scripts/apply_migrations.py`) использует `SUPABASE_URL` + `SUPABASE_ACCESS_TOKEN` из `.env`; файла `.env` в рабочей копии нет, поэтому скрипт непригоден без восстановления ключей.
+- **Рабочий обход (использован 2026-11-24):** SQL Editor дашборда Supabase (`https://supabase.com/dashboard/project/<ref>/sql`) — выполнять DDL вручную из файлов `migrations/`. Дашборд сам показывает диалог «Potential issue detected» для разрушительных операций; для отката-валидации скрипт оборачивается в `begin; … rollback;`.
+
 ## Vercel
 
 - `vercel.json` — routing ASGI на `app.main:app`.
