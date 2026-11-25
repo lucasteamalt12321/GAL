@@ -6,8 +6,59 @@
 """
 
 import pytest
+from postgrest.exceptions import APIError
 
 from app.main import app  # noqa: F401  (гарантирует импорт приложения)
+
+
+@pytest.fixture(autouse=True)
+def _service_client_without_network(monkeypatch):
+    """По умолчанию тесты работают с БД без миграции 036.
+
+    RPC отсутствует, таблица реестра тоже — сервис легитимно уходит в
+    legacy-путь. Тесты самого RPC переопределяют `new_service_client` локально.
+    """
+    from app.services import auth as auth_service
+
+    class _RpcResult:
+        def execute(self):
+            raise APIError(
+                {
+                    "code": "PGRST202",
+                    "message": (
+                        "Could not find the function "
+                        "public.submit_completion_with_proofs"
+                    ),
+                }
+            )
+
+    class _FingerprintsTable:
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            raise APIError(
+                {
+                    "code": "42P01",
+                    "message": "relation public.submission_fingerprints does not exist",
+                }
+            )
+
+    class _Pre036ServiceClient:
+        def rpc(self, name, params=None):
+            if name != "submit_completion_with_proofs":
+                raise AssertionError(f"unexpected RPC {name}")
+            return _RpcResult()
+
+        def table(self, name):
+            if name != "submission_fingerprints":
+                raise AssertionError(f"unexpected table {name}")
+            return _FingerprintsTable()
+
+    monkeypatch.setattr(auth_service, "new_service_client", _Pre036ServiceClient)
 
 
 @pytest.fixture(autouse=True)

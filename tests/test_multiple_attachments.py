@@ -125,7 +125,7 @@ def test_several_files_become_separate_proofs(
         monkeypatch,
         [
             _Uploaded(b"\x89PNG\r\n", "one.png"),
-            _Uploaded(b"\x89PNG\r\n", "two.png"),
+            _Uploaded(b"\x89PNG\n", "two.png"),
             _Uploaded(b"%PDF", "report.pdf", "application/pdf"),
         ],
     )
@@ -213,7 +213,10 @@ def test_partial_failure_rolls_back_uploaded_files(
         )
 
     # Первое доказательство откачено: строка удалена, объект снят.
-    assert ("remove_completion_proofs", {"p_completion_id": 7, "p_proof_ids": [1]}) in fake.rpcs
+    assert (
+        "remove_completion_proofs",
+        {"p_completion_id": 7, "p_proof_ids": [1]},
+    ) in fake.rpcs
     assert fake.bucket.removed
 
 
@@ -340,7 +343,7 @@ def test_complete_endpoint_accepts_several_files_and_comment(
         "/achievements/5/complete",
         files=[
             ("files", ("one.png", b"\x89PNG\r\n", "image/png")),
-            ("files", ("two.png", b"\x89PNG\r\n", "image/png")),
+            ("files", ("two.png", b"\x89PNG\n", "image/png")),
         ],
         data={"comment": "Два скриншота"},
         follow_redirects=False,

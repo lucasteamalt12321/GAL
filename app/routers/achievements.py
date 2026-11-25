@@ -328,8 +328,10 @@ def create(
             request=request,
             name=CREATE_TEMPLATE,
             context=_create_context(
-                error=str(exc)[:300]
-                or "Не удалось создать достижение. Попробуйте ещё раз.",
+                error=achievements_service.friendly_achievement_error(
+                    exc,
+                    default="Не удалось создать достижение. Попробуйте ещё раз.",
+                ),
                 title=title,
                 description=description,
                 requirements=requirements,
@@ -353,13 +355,29 @@ def create(
             proofs_visible=True,
         )
     except completions_service.CompletionError as exc:
+        try:
+            achievements_service.soft_delete_own_pending(request, item["id"])
+        except achievements_service.ACHIEVEMENT_ERRORS:
+            logger.warning(
+                "Failed to roll back achievement %s without proof",
+                item["id"],
+                exc_info=True,
+            )
         return RedirectResponse(
             f"/achievements/{item['id']}?error={quote(str(exc))}", status_code=303
         )
     except completions_service.COMPLETION_ERRORS:
+        try:
+            achievements_service.soft_delete_own_pending(request, item["id"])
+        except achievements_service.ACHIEVEMENT_ERRORS:
+            logger.warning(
+                "Failed to roll back achievement %s without proof",
+                item["id"],
+                exc_info=True,
+            )
         return RedirectResponse(
             f"/achievements/{item['id']}"
-            f"?error={quote('Достижение создано, но доказательство не прикрепилось. Пришлите его со страницы достижения.')}",
+            f"?error={quote('Достижение не сохранено: доказательство не прикрепилось. Отправьте заявку со страницы достижения.')}",
             status_code=303,
         )
 
@@ -470,7 +488,9 @@ def edit(
             request=request,
             name=EDIT_TEMPLATE,
             context=_form_context(
-                error=str(exc)[:300] or "Не удалось сохранить изменения.",
+                error=achievements_service.friendly_achievement_error(
+                    exc, default="Не удалось сохранить изменения."
+                ),
                 title=title,
                 description=description,
                 requirements=requirements,

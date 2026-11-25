@@ -3,15 +3,34 @@ from fastapi import Request
 from postgrest.exceptions import APIError
 
 from app.services import auth as auth_service
+from app.services.submissions import (
+    DUPLICATE_SUBMISSION_MESSAGE,
+    DuplicateSubmissionError,
+    is_duplicate_submission,
+)
 
 ACHIEVEMENT_ERRORS = (
     APIError,
     httpx.HTTPError,
     auth_service.SupabaseNotConfiguredError,
+    DuplicateSubmissionError,
     # create_achievement сам бросает PermissionError, когда user-JWT клиент
     # недоступен (битая сессия) — раньше это давало 500 вместо формы с ошибкой.
     PermissionError,
 )
+
+
+def friendly_achievement_error(exc: Exception, *, default: str) -> str:
+    """Сырые ошибки PostgREST/БД не показываем пользователю.
+
+    Известные доменные ошибки уже несут понятный текст; всё остальное
+    (коды 23505/PGRST*/CHECK и т.п.) заменяется общим сообщением.
+    """
+    if isinstance(exc, (APIError, httpx.HTTPError)):
+        return default
+    message = str(exc).strip()
+    return message[:300] or default
+
 
 ACHIEVEMENT_SELECT = (
     "*, category:categories(id,name,slug), "
@@ -370,7 +389,12 @@ def create_achievement(
     }
     if category_id is not None:
         payload["category_id"] = category_id
-    res = client.table("achievements").insert(payload).execute()
+    try:
+        res = client.table("achievements").insert(payload).execute()
+    except APIError as exc:
+        if is_duplicate_submission(exc):
+            raise DuplicateSubmissionError(DUPLICATE_SUBMISSION_MESSAGE) from exc
+        raise
     return res.data[0]
 
 
@@ -394,14 +418,19 @@ def update_achievement(
         "requirements": requirements,
         "category_id": category_id,
     }
-    res = (
-        client.table("achievements")
-        .update(payload)
-        .eq("id", achievement_id)
-        .eq("creator_id", user.id)
-        .eq("status", "pending")
-        .execute()
-    )
+    try:
+        res = (
+            client.table("achievements")
+            .update(payload)
+            .eq("id", achievement_id)
+            .eq("creator_id", user.id)
+            .eq("status", "pending")
+            .execute()
+        )
+    except APIError as exc:
+        if is_duplicate_submission(exc):
+            raise DuplicateSubmissionError(DUPLICATE_SUBMISSION_MESSAGE) from exc
+        raise
     if not res.data:
         raise PermissionError("Достижение не найдено или уже опубликовано.")
     return res.data[0]

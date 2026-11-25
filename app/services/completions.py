@@ -1,4 +1,6 @@
+import hashlib
 import logging
+import re
 import uuid
 from collections.abc import Callable
 from pathlib import PurePosixPath
@@ -11,6 +13,18 @@ from supabase import Client
 
 from app.config import get_settings
 from app.services import auth as auth_service
+from app.services.submissions import (
+    DUPLICATE_PROOF_MESSAGE,
+    DUPLICATE_SUBMISSION_MESSAGE,
+    INVALID_PROOF_URL_MESSAGE,
+    MIGRATION_PENDING_MESSAGE,
+    PROOF_REQUIRED_MESSAGE,
+    SERVICE_NOT_CONFIGURED_MESSAGE,
+    is_already_completed,
+    is_duplicate_proof,
+    is_duplicate_submission,
+    proof_validation_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +137,10 @@ class AlreadyCompletedError(CompletionError):
     pass
 
 
+class DuplicateSubmissionError(CompletionError):
+    pass
+
+
 class ProofError(CompletionError):
     pass
 
@@ -153,6 +171,45 @@ def _is_missing_comment(exc: Exception) -> bool:
     if code not in {"PGRST204", "42703"} and "column" not in text:
         return False
     return "comment" in text
+
+
+def _is_missing_submission_rpc(exc: Exception) -> bool:
+    code = str(getattr(exc, "code", "") or "").upper()
+    text = str(exc).lower()
+    return code == "PGRST202" or (
+        "submit_completion_with_proofs" in text
+        and any(
+            marker in text
+            for marker in ("could not find", "does not exist", "schema cache")
+        )
+    )
+
+
+def _is_missing_fingerprint_table(exc: Exception) -> bool:
+    code = str(getattr(exc, "code", "") or "").upper()
+    text = str(exc).lower()
+    if code in {"42P01", "PGRST205"}:
+        return True
+    return "submission_fingerprints" in text and any(
+        marker in text
+        for marker in ("could not find", "does not exist", "schema cache")
+    )
+
+
+def _submission_migration_present(service_client: Client) -> bool:
+    """Отличает не применённую 036 от окна обновления схемы PostgREST."""
+    try:
+        service_client.table("submission_fingerprints").select("id").limit(1).execute()
+        return True
+    except APIError as exc:
+        if _is_missing_fingerprint_table(exc):
+            return False
+        raise
+    except COMPLETION_ERRORS as exc:
+        logger.warning(
+            "Cannot check submission migration state: %s", exc, exc_info=True
+        )
+        raise CompletionError(MIGRATION_PENDING_MESSAGE) from exc
 
 
 def fetch_completions_with_comment(client: Client, base_fields: str, apply: Callable):
@@ -464,7 +521,7 @@ def safe_external_url(value: str | None) -> str | None:
     candidate = (value or "").strip()
     if not candidate:
         return None
-    if not candidate.lower().startswith(("http://", "https://")):
+    if re.fullmatch(r"https?://\S+", candidate, flags=re.IGNORECASE) is None:
         return None
     return candidate
 
@@ -592,6 +649,8 @@ def create_completion(
                 payload.pop(name, None)
             res = client.table("achievement_completions").insert(payload).execute()
     except APIError as exc:
+        if is_duplicate_submission(exc):
+            raise DuplicateSubmissionError(DUPLICATE_SUBMISSION_MESSAGE) from exc
         if getattr(exc, "code", None) == "23505" or "duplicate" in str(exc).lower():
             raise AlreadyCompletedError(
                 "Вы уже отправляли доказательство для этого достижения."
@@ -646,7 +705,7 @@ def attach_proof(
     if external_url:
         external_url = safe_external_url(external_url)
         if external_url is None:
-            raise ProofError("Ссылка должна начинаться с http:// или https://")
+            raise ProofError(INVALID_PROOF_URL_MESSAGE)
         res = (
             client.table("proofs")
             .insert(
@@ -689,15 +748,19 @@ def attach_proof(
             path, content, {"content-type": content_type, "upsert": False}
         )
     except StorageException as exc:
+        # Ответ об ошибке мог потеряться после того, как объект уже сохранился.
+        _remove_storage_paths(client, [path])
         logger.warning("Proof upload rejected by storage: %s", exc, exc_info=True)
         raise ProofError(_storage_error_message(exc)) from exc
     except httpx.HTTPError as exc:
+        _remove_storage_paths(client, [path])
         logger.warning("Proof upload network error: %s", exc, exc_info=True)
         raise ProofError(
             "Не удалось загрузить файл: сервис хранения не отвечает. "
             "Попробуйте ещё раз или приложите ссылку."
         ) from exc
     except Exception as exc:  # пользователю нужен понятный текст, детали — в лог
+        _remove_storage_paths(client, [path])
         logger.exception("Unexpected proof upload failure")
         raise ProofError(
             "Не удалось загрузить файл доказательства. Попробуйте ещё раз "
@@ -842,9 +905,7 @@ def cleanup_failed_proofs(
     ]
 
     client = auth_service.user_client_from_request(request)
-    proof_ids = [
-        proof.get("id") for proof in proofs if proof.get("id") is not None
-    ]
+    proof_ids = [proof.get("id") for proof in proofs if proof.get("id") is not None]
     removed = False
     if client is not None and proof_ids:
         try:
@@ -890,7 +951,416 @@ def cleanup_failed_proofs(
         )
 
 
+def _remove_storage_paths(client: Client, paths: list[str]) -> None:
+    """Удаляет объекты Storage; отсутствующий объект не считается ошибкой."""
+    if not paths or client is None:
+        return
+    try:
+        client.storage.from_(PROOFS_BUCKET).remove(paths)
+    except COMPLETION_ERRORS:
+        logger.warning(
+            "Failed to remove uploaded proof objects %r", paths, exc_info=True
+        )
+
+
+def _remove_uploaded_paths(request: Request, paths: list[str]) -> None:
+    _remove_storage_paths(auth_service.user_client_from_request(request), paths)
+
+
+def _rewind_uploads(uploads: list) -> None:
+    for item in uploads:
+        stream = getattr(item, "file", None)
+        if stream is None:
+            continue
+        try:
+            stream.seek(0)
+        except (OSError, ValueError):
+            pass
+
+
+def _prepare_submission_proofs(
+    request: Request,
+    *,
+    achievement_id: int,
+    description: str,
+    external_url: str,
+    uploads: list,
+) -> tuple[list[dict], list[str]]:
+    """Загружает файлы, но ещё не создаёт строки proofs.
+
+    Итоговый набор уходит одним RPC, поэтому БД видит полный fingerprint, а не
+    промежуточное состояние после первого файла.
+    """
+    user = request.state.user
+    client = auth_service.user_client_from_request(request)
+    if user is None or client is None:
+        raise CompletionError("Требуется вход в систему.")
+
+    external_url = (external_url or "").strip()
+    description = (description or "").strip()
+    if external_url:
+        external_url = safe_external_url(external_url)
+        if external_url is None:
+            raise ProofError(INVALID_PROOF_URL_MESSAGE)
+
+    files = _attachment_files(uploads)
+    _validate_attachments(files)
+    proofs: list[dict] = []
+    uploaded_paths: list[str] = []
+    if external_url:
+        proofs.append(
+            {
+                "storage_path": external_url,
+                "proof_type": LINK_PROOF,
+                "description": description,
+            }
+        )
+
+    try:
+        for item in files:
+            try:
+                item.file.seek(0)
+                content = item.file.read()
+            except OSError as exc:
+                raise ProofError(
+                    "Не удалось прочитать файл. Выберите его заново."
+                ) from exc
+            if not content:
+                raise ProofError("Приложите файл или укажите ссылку на доказательство.")
+
+            filename = getattr(item, "filename", None)
+            content_type = (
+                getattr(item, "content_type", None) or "application/octet-stream"
+            )
+            path = (
+                f"{user.id}/{achievement_id}/{uuid.uuid4().hex}-"
+                f"{_safe_filename(filename)}"
+            )
+            # Регистрируем путь до загрузки: если ответ Storage потерян, объект
+            # всё равно может существовать и его нужно будет удалить.
+            uploaded_paths.append(path)
+            try:
+                client.storage.from_(PROOFS_BUCKET).upload(
+                    path, content, {"content-type": content_type, "upsert": False}
+                )
+            except StorageException as exc:
+                logger.warning(
+                    "Proof upload rejected by storage: %s", exc, exc_info=True
+                )
+                raise ProofError(_storage_error_message(exc)) from exc
+            except httpx.HTTPError as exc:
+                logger.warning("Proof upload network error: %s", exc, exc_info=True)
+                raise ProofError(
+                    "Не удалось загрузить файл: сервис хранения не отвечает. "
+                    "Попробуйте ещё раз или приложите ссылку."
+                ) from exc
+            except Exception as exc:
+                logger.exception("Unexpected proof upload failure")
+                raise ProofError(
+                    "Не удалось загрузить файл доказательства. Попробуйте ещё раз "
+                    "или приложите ссылку."
+                ) from exc
+
+            proofs.append(
+                {
+                    "storage_path": path,
+                    "proof_type": _detect_proof_type(content_type, filename),
+                    "description": description,
+                    "content_hash": hashlib.sha256(content).hexdigest(),
+                }
+            )
+    except CompletionError:
+        _remove_uploaded_paths(request, uploaded_paths)
+        raise
+    return proofs, uploaded_paths
+
+
+def _submission_state(
+    service_client: Client, user_id: str, achievement_id: int
+) -> tuple[int | None, int, str | None]:
+    """Возвращает (completion_id, submission_attempt, status) до отправки RPC.
+
+    Читаем service-ролью: после 036 пользовательский JWT может не видеть
+    отклонённую заявку, а её старые файлы всё равно нужно убрать из Storage.
+    """
+    try:
+        res = (
+            service_client.table("achievement_completions")
+            .select("id,submission_attempt,status")
+            .eq("achievement_id", achievement_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+    except COMPLETION_ERRORS:
+        logger.warning("Failed to read submission state", exc_info=True)
+        return None, 0, None
+    row = res.data if res is not None else None
+    if not isinstance(row, dict):
+        return None, 0, None
+    try:
+        return (
+            int(row["id"]),
+            int(row.get("submission_attempt") or 0),
+            row.get("status"),
+        )
+    except (KeyError, TypeError, ValueError):
+        logger.warning("Invalid submission state row: %r", row)
+        return None, 0, None
+
+
+def _service_proof_paths(service_client: Client, completion_id: int) -> set[str]:
+    """Файловые пути доказательств, прочитанные service-ролью."""
+    try:
+        res = (
+            service_client.table("proofs")
+            .select("storage_path,proof_type")
+            .eq("completion_id", completion_id)
+            .execute()
+        )
+    except COMPLETION_ERRORS:
+        logger.warning("Failed to read proof paths of %s", completion_id, exc_info=True)
+        return set()
+    paths: set[str] = set()
+    for row in res.data or []:
+        path = row.get("storage_path")
+        if path and row.get("proof_type") != LINK_PROOF:
+            paths.add(path)
+    return paths
+
+
+def _stale_proof_paths(
+    service_client: Client, user_id: str, achievement_id: int
+) -> tuple[int | None, int, list[str]]:
+    """Возвращает (id, попытку и файлы отклонённой заявки) до отправки RPC."""
+    completion_id, attempt, status = _submission_state(
+        service_client, user_id, achievement_id
+    )
+    if completion_id is None or status != "rejected":
+        return completion_id, attempt, []
+    return (
+        completion_id,
+        attempt,
+        sorted(_service_proof_paths(service_client, completion_id)),
+    )
+
+
+def _reconcile_submission(
+    request: Request,
+    service_client: Client,
+    *,
+    user_id: str,
+    achievement_id: int,
+    previous_completion_id: int | None,
+    previous_attempt: int,
+    uploaded_paths: list[str],
+) -> dict | None:
+    """Проверяет, не зафиксировался ли RPC, если ответ потерян в сети.
+
+    Ключ идемпотентности попытки задаёт БД в 036: пара
+    (submission_attempt, fingerprint) под advisory lock не даёт повтору с тем
+    же содержимым стать новой заявкой. Здесь по номеру попытки и путям proof
+    определяем, что коммит уже прошёл: тогда файлы удалять нельзя и просить
+    повторную отправку тоже нельзя.
+    """
+    completion_id, attempt, _status = _submission_state(
+        service_client, user_id, achievement_id
+    )
+    if completion_id is None:
+        _remove_uploaded_paths(request, uploaded_paths)
+        return None
+    applied = previous_completion_id is None or (
+        completion_id == previous_completion_id and attempt > previous_attempt
+    )
+    stored_paths = (
+        _service_proof_paths(service_client, completion_id) if applied else set()
+    )
+    if applied and uploaded_paths and set(uploaded_paths).issubset(stored_paths):
+        logger.warning(
+            "RPC response lost after commit; reconciled completion %s attempt %s",
+            completion_id,
+            attempt,
+        )
+        return {"id": completion_id, "attempt_no": attempt}
+    _remove_uploaded_paths(request, uploaded_paths)
+    return None
+
+
+def _submit_completion_with_rpc(
+    request: Request,
+    *,
+    achievement_id: int,
+    description: str,
+    external_url: str,
+    uploads: list,
+    harder_count: int | None,
+    proofs_visible: bool,
+    comment: str,
+) -> dict | None:
+    """Отправляет полный набор proofs; None означает отсутствие миграции 036.
+
+    Отсутствие service-ключа — ошибка конфигурации, а не повод уходить в legacy:
+    после применения 036 прямой INSERT у authenticated отозван.
+    """
+    try:
+        service_client = auth_service.new_service_client()
+    except auth_service.SupabaseNotConfiguredError as exc:
+        raise CompletionError(SERVICE_NOT_CONFIGURED_MESSAGE) from exc
+
+    # Проверяем до загрузки файлов: иначе на БД без 036 одни и те же объекты
+    # загружались бы дважды — сначала для RPC, затем повторно legacy-путём.
+    if not _submission_migration_present(service_client):
+        return None
+
+    user = request.state.user
+    completion_id_before, previous_attempt, stale_paths = _stale_proof_paths(
+        service_client, user.id, achievement_id
+    )
+    proofs, uploaded_paths = _prepare_submission_proofs(
+        request,
+        achievement_id=achievement_id,
+        description=description,
+        external_url=external_url,
+        uploads=uploads,
+    )
+    try:
+        res = service_client.rpc(
+            "submit_completion_with_proofs",
+            {
+                "p_user_id": user.id,
+                "p_achievement_id": achievement_id,
+                "p_harder_count": harder_count,
+                "p_proofs_visible": proofs_visible,
+                "p_comment": comment,
+                "p_proofs": proofs,
+            },
+        ).execute()
+    except APIError as exc:
+        if _is_missing_submission_rpc(exc):
+            # Таблица реестра уже подтверждена до загрузки: значит 036 применена,
+            # но PostgREST не обновил кэш. Legacy здесь уже не работает.
+            _remove_uploaded_paths(request, uploaded_paths)
+            raise CompletionError(MIGRATION_PENDING_MESSAGE) from exc
+        _remove_uploaded_paths(request, uploaded_paths)
+        if is_duplicate_submission(exc):
+            raise DuplicateSubmissionError(DUPLICATE_SUBMISSION_MESSAGE) from exc
+        if is_duplicate_proof(exc):
+            raise ProofError(DUPLICATE_PROOF_MESSAGE) from exc
+        if is_already_completed(exc):
+            raise AlreadyCompletedError(
+                "Вы уже отправляли доказательство для этого достижения."
+            ) from exc
+        validation_message = proof_validation_error(exc)
+        if validation_message is not None:
+            raise ProofError(validation_message) from exc
+        if "ACHIEVEMENT_NOT_FOUND" in str(exc) or "NOT_ALLOWED" in str(exc):
+            raise CompletionError(
+                "Достижение недоступно для отправки прохождения."
+            ) from exc
+        logger.warning("Completion submission RPC failed: %s", exc, exc_info=True)
+        raise CompletionError(
+            "Не удалось отправить заявку. Попробуйте ещё раз."
+        ) from exc
+    except COMPLETION_ERRORS as exc:
+        # Ответ мог быть потерян как до, так и после commit. Сверяемся с БД:
+        # если попытка зафиксирована, возвращаем её как успех (иначе пользователь
+        # повторит отправку и упрется в ALREADY_COMPLETED); если нет — удаляем
+        # загруженные файлы, чтобы не оставить orphan-объекты Storage.
+        logger.warning(
+            "Completion submission RPC network failure: %s", exc, exc_info=True
+        )
+        reconciled = _reconcile_submission(
+            request,
+            service_client,
+            user_id=user.id,
+            achievement_id=achievement_id,
+            previous_completion_id=completion_id_before,
+            previous_attempt=previous_attempt,
+            uploaded_paths=uploaded_paths,
+        )
+        if reconciled is not None:
+            if stale_paths:
+                _remove_uploaded_paths(request, stale_paths)
+            return reconciled
+        raise CompletionError(
+            "Не удалось отправить заявку. Попробуйте ещё раз."
+        ) from exc
+
+    rows = res.data or []
+    if isinstance(rows, dict):
+        rows = [rows]
+    if len(rows) != 1 or not isinstance(rows[0], dict):
+        logger.warning("Unexpected submission RPC response: %r", res.data)
+        raise CompletionError("Не удалось отправить заявку. Попробуйте ещё раз.")
+    row = rows[0]
+    try:
+        completion_id = int(row["completion_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.warning("Invalid submission RPC row: %r", row)
+        raise CompletionError(
+            "Не удалось отправить заявку. Попробуйте ещё раз."
+        ) from exc
+    if stale_paths:
+        _remove_uploaded_paths(request, stale_paths)
+    return {"id": completion_id, "attempt_no": row.get("attempt_no")}
+
+
 def submit_completion(
+    request: Request,
+    *,
+    achievement_id: int,
+    description: str,
+    external_url: str,
+    uploaded=None,
+    uploads=None,
+    harder_count: int | None = None,
+    proofs_visible: bool = True,
+    comment: str = "",
+) -> dict:
+    user = request.state.user
+    if user is None:
+        raise CompletionError("Требуется вход в систему.")
+    comment = (comment or "").strip()
+    if len(comment) > MAX_COMMENT_LENGTH:
+        raise ProofError(
+            f"Комментарий слишком длинный: максимум {MAX_COMMENT_LENGTH} символов."
+        )
+
+    external_url = (external_url or "").strip()
+    files = _attachment_files(uploads) + _attachment_files([uploaded])
+    if not external_url and not files:
+        # Раньше здесь создавалась пустая заявка legacy-INSERT; после 036 такой
+        # путь невозможен, да и пользователю он просто не нужен.
+        raise ProofError(PROOF_REQUIRED_MESSAGE)
+
+    result = _submit_completion_with_rpc(
+        request,
+        achievement_id=achievement_id,
+        description=description,
+        external_url=external_url,
+        uploads=files,
+        harder_count=harder_count,
+        proofs_visible=proofs_visible,
+        comment=comment,
+    )
+    if result is not None:
+        return result
+
+    _rewind_uploads(files)
+    return _submit_completion_legacy(
+        request,
+        achievement_id=achievement_id,
+        description=description,
+        external_url=external_url,
+        uploaded=uploaded,
+        uploads=uploads,
+        harder_count=harder_count,
+        proofs_visible=proofs_visible,
+        comment=comment,
+    )
+
+
+def _submit_completion_legacy(
     request: Request,
     *,
     achievement_id: int,

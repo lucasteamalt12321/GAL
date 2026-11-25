@@ -11,7 +11,8 @@
 <p class="muted">
   Здесь все ваши заявки: о выполнении достижений и в топ-5. Статус, доказательства
   и причина отклонения. Отклонённую заявку о выполнении можно исправить и отправить
-  снова — старая заявка будет заменена.
+  снова — старая заявка будет заменена. Отправить абсолютно идентичную заявку
+  повторно нельзя: измените текст, ссылку или состав файлов.
 </p>
 
 <div class="chips submissions-filters">
@@ -72,6 +73,7 @@
                 {% if item.rejection_reason %}<span class="muted">{{ item.rejection_reason }}</span>{% endif %}
                 <div class="submission-actions">
                   <a class="btn btn-small" href="/achievements/{{ item.achievement_id }}#proof">Исправить и отправить снова</a>
+                  <p class="muted">Точный повтор блокируется: измените текст, ссылку или файлы.</p>
                 </div>
               {% elif item.status == 'pending' %}
                 <span class="muted">Ждёт проверки модератора</span>

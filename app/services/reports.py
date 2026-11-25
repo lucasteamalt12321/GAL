@@ -16,6 +16,10 @@ from postgrest.exceptions import APIError
 
 from app.services import auth as auth_service
 from app.services import bt_recompute
+from app.services.submissions import (
+    DUPLICATE_SUBMISSION_MESSAGE,
+    is_duplicate_submission,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,15 +91,20 @@ def create_report(
     if existing is not None and existing.data:
         raise ReportError("Вы уже оставили жалобу на это достижение.")
 
-    client.table("reports").insert(
-        {
-            "achievement_id": achievement_id,
-            "reporter_id": user.id,
-            "reason": reason,
-            "description": description,
-            "status": "pending",
-        }
-    ).execute()
+    try:
+        client.table("reports").insert(
+            {
+                "achievement_id": achievement_id,
+                "reporter_id": user.id,
+                "reason": reason,
+                "description": description,
+                "status": "pending",
+            }
+        ).execute()
+    except APIError as exc:
+        if is_duplicate_submission(exc):
+            raise ReportError(DUPLICATE_SUBMISSION_MESSAGE) from exc
+        raise
 
 
 def decide_report(

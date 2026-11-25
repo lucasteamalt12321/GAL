@@ -27,6 +27,10 @@ from postgrest.exceptions import APIError
 
 from app.services import auth as auth_service
 from app.services import bt_recompute
+from app.services.submissions import (
+    DUPLICATE_SUBMISSION_MESSAGE,
+    is_duplicate_submission,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +123,8 @@ def _client(request: Request):
 
 def _db_error(exc: Exception) -> Top5Error:
     text = f"{getattr(exc, 'message', '')} {exc}"
+    if is_duplicate_submission(exc):
+        return Top5Error(DUPLICATE_SUBMISSION_MESSAGE)
     for code, message in DB_MESSAGES.items():
         if code in text:
             return Top5Error(message)
@@ -310,6 +316,8 @@ def submit_application(
             .execute()
         )
     except TOP5_ERRORS as exc:
+        if is_duplicate_submission(exc):
+            raise Top5Error(DUPLICATE_SUBMISSION_MESSAGE) from exc
         # RLS скрывает чужую активную заявку: страховка — уникальный индекс.
         if "23505" in str(exc) or "duplicate" in str(exc).lower():
             raise Top5Error("Заявка уже рассматривается.") from exc
@@ -317,8 +325,7 @@ def submit_application(
             # Не применена миграция 034: авторская заявка на ещё не
             # опубликованное достижение отклоняется базой.
             raise Top5Error(
-                "Заявка на ещё не опубликованное достижение недоступна: "
-                "в базе не применена миграция 034."
+                "Заявку на ещё не опубликованное достижение пока нельзя отправить."
             ) from exc
         raise _db_error(exc) from exc
     return (res.data or [{}])[0]

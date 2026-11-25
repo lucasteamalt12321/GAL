@@ -347,3 +347,126 @@ def test_top5_legacy_claims_backfilled() -> None:
     assert "c.achievement_id = a.achievement_id" in migration
     assert "c.user_id = a.applicant_id" in migration
     assert "c.status = 'approved'" in migration
+
+
+def _migration(number: str) -> str:
+    paths = list(MIGRATIONS.glob(f"{number}_*.sql"))
+    assert len(paths) == 1, f"Expected one migration {number}, got {paths}"
+    return _collapse(paths[0].read_text(encoding="utf-8"))
+
+
+# +------------------------ миграция 036 (D25) ------------------------+
+
+
+def test_036_registry_separates_submission_types() -> None:
+    """Прохождение, топ-5, достижение и жалоба не конфликтуют между собой."""
+    sql = _migration("036")
+    assert "unique (submission_type, submitter_id, fingerprint)" in sql
+    assert "submission_type in ('achievement', 'completion', 'top5', 'report')" in sql
+    assert "alter table public.submission_fingerprints enable row level security" in sql
+
+    body = _latest_function("submission_fingerprint")
+    assert "'algorithm_version', 1" in body
+    assert "'submission_type', p_type" in body
+    assert "'submitter_id', p_submitter_id" in body
+
+
+def test_036_duplicate_registration_is_serialized_and_reported() -> None:
+    body = _latest_function("register_submission_fingerprint")
+    assert "pg_advisory_xact_lock" in body
+    assert "p_type || ':' || p_submitter_id::text || ':' || v_fingerprint" in body
+    assert "for update" in body
+    assert "errcode = '23505'" in body
+    assert "message = 'duplicate_submission'" in body
+    # Повтор той же попытки разрешён только при редактировании achievement;
+    # completion/top5/report всегда создают новую попытку.
+    assert "p_type = 'achievement' or p_attempt_no = v_last_attempt" in body
+    assert "p_previous_fingerprint" in body
+
+
+def test_036_triggers_cover_all_client_writes() -> None:
+    sql = _migration("036")
+    assert (
+        "before insert or update of title, description, requirements, category_id"
+        in sql
+    )
+    assert "before insert on public.top5_applications" in sql
+    assert "create trigger zz_top5_applications_fingerprint" in sql
+    assert "before insert on public.reports" in sql
+
+
+def test_036_completion_rpc_is_service_only_and_atomic() -> None:
+    body = _latest_function("submit_completion_with_proofs")
+    assert "auth.role() <> 'service_role'" in body
+    assert "message = 'proof_required'" in body
+    assert "pg_advisory_xact_lock" in body
+    assert "p_user_id::text || ':' || p_achievement_id::text" in body
+    assert "for update" in body
+    assert "submission_attempt = v_attempt" in body
+    assert "delete from public.proofs p where p.completion_id = v_completion_id" in body
+    assert "register_submission_fingerprint(" in body
+    assert "return query select v_completion_id, v_attempt" in body
+
+
+def test_036_proof_hash_trigger_validates_links_and_files() -> None:
+    body = _latest_function("set_proof_content_hash")
+    assert "^https?://[^[:space:]]+$" in body
+    assert "message = 'invalid_proof_url'" in body
+    assert "message = 'proof_hash_required'" in body
+    assert "message = 'invalid_proof_path'" in body
+    assert "'^[0-9a-f]{64}$'" in body
+
+
+def test_036_hash_trigger_is_created_after_backfill() -> None:
+    """Иначе обнуление legacy-дублей уперлось бы в PROOF_HASH_REQUIRED."""
+    sql = _migration("036")
+    assert sql.index("create trigger proofs_content_hash") > sql.index(
+        "update public.proofs p"
+    )
+    assert sql.index("create trigger proofs_content_hash") > sql.index(
+        "set submission_attempt = greatest(c.submission_attempt, 1)"
+    )
+
+
+def test_036_backfill_registers_every_existing_attempt() -> None:
+    sql = _migration("036")
+    assert "set submission_attempt = greatest(c.submission_attempt, 1)" in sql
+    assert "from public.achievements a ) as computed" in sql
+    assert "from public.achievement_completions c ) as computed" in sql
+    assert "from public.top5_applications a ) as computed" in sql
+    assert "from public.reports r ) as computed" in sql
+    assert "on conflict (submission_type, submitter_id, fingerprint) do nothing" in sql
+
+
+def test_036_client_cannot_forge_registry_or_bypass_rpc() -> None:
+    sql = _migration("036")
+    assert (
+        "revoke all on table public.submission_fingerprints from anon, authenticated"
+        in sql
+    )
+    assert (
+        "grant select, insert, update on table public.submission_fingerprints "
+        "to service_role" in sql
+    )
+    assert (
+        "revoke insert on table public.achievement_completions from anon, authenticated"
+        in sql
+    )
+    assert "revoke insert on table public.proofs from anon, authenticated" in sql
+    assert "grant execute on function public.submit_completion_with_proofs" in sql
+    # Старые клиентские RPC отзываются по фактическим сигнатурам окружения.
+    for name in (
+        "reset_rejected_completion",
+        "set_completion_comment",
+        "remove_completion_proofs",
+    ):
+        assert f"'{name}'" in sql
+    assert "pg_get_function_identity_arguments(p.oid)" in sql
+    assert "notify pgrst, 'reload schema'" in sql
+
+
+def test_036_refresh_helper_is_service_role_only() -> None:
+    body = _latest_function("refresh_legacy_submission_fingerprints")
+    assert "auth.role() <> 'service_role'" in body
+    assert "f.canonical_payload::text like '%legacy-path:%'" in body
+    assert "on conflict (submission_type, submitter_id, fingerprint) do nothing" in body

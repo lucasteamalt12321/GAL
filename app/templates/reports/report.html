@@ -4,7 +4,8 @@
   <h1>Пожаловаться на достижение</h1>
   <p class="muted">
     Жалоба на «<a href="/achievements/{{ achievement.id }}">{{ achievement.title }}</a>».
-    Жалобы рассматривает модератор.
+    Жалобы рассматривает модератор. Абсолютно идентичную жалобу отправить повторно нельзя —
+    измените причину или описание.
   </p>
   <form method="post" action="/achievements/{{ achievement.id }}/report" class="card stack">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">

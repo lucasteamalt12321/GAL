@@ -9,6 +9,7 @@
       <p class="muted">
         Приложите несколько файлов суммарно до {{ max_attachment_bytes // 1048576 }} МБ
         (не более {{ max_files_per_completion }}) или ссылку. Для видео лучше ссылка на YouTube/Диск.
+        Абсолютно идентичная повторная заявка блокируется — измените текст, ссылку или файлы.
       </p>
       <label class="field">
         <span class="field-label">Файлы</span>
@@ -18,7 +19,8 @@
       </label>
       <label class="field">
         <span class="field-label">Ссылка</span>
-        <input type="url" name="external_url" placeholder="https://...">
+        <input type="url" name="external_url" placeholder="https://..."
+               pattern="[hH][tT][tT][pP][sS]?://\S+" title="Ссылка http:// или https:// без пробелов">
       </label>
     </fieldset>
     {% if is_creator %}
