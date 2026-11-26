@@ -16,6 +16,9 @@ from typing import Any
 
 import httpx
 
+# Внешний прокси aw2 обрывает ответы после ~5 с, раньше Supabase-таймаута 6 с.
+os.environ["SUPABASE_TIMEOUT_SECONDS"] = "2.0"
+
 # open-runtimes загружает точку входа как пакет `function.main`, поэтому
 # каталог функции не становится корнем импорта: `from app.main ...` падает
 # с `ModuleNotFoundError: app`. Добавляем каталог адаптера в sys.path явно.
