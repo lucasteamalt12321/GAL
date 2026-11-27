@@ -139,14 +139,14 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D8  | Player Score + Leaderboard        | completed | 8   |
 | D9  | Reports                           | completed | 4   |
 | D10 | Polish + hardening (UI, security, errors) | completed | 1   |
-| D11 | Bugfix по итогам bug-hunt 09-28   | completed | 3   |
+| D11 | Bugfix по итогам bug-hunt 09-28   | completed | 2   |
 | D12 | v1.1: функции, безопасность, CI   | completed | 1   |
-| D13 | v1.2: Bradley–Terry ранкинг       | completed | 5   |
+| D13 | v1.2: Bradley–Terry ранкинг       | completed | 4   |
 | D14 | v1.8: надёжность BT (SE + 95% CI) | completed | 4 |
 | D15 | v1.9: предварительный топ-5       | completed | 4 |
 | D16 | v1.10: видимость доказательств    | completed | 4 |
 | D17 | Bugfix по итогам bug-hunt 11-15   | completed | 1 |
-| D18 | v1.11: заявка топ-5 при прохождении | completed | 3 |
+| D18 | v1.11: заявка топ-5 при прохождении | completed | 2 |
 | D19 | Контент-рефактор: категории и тексты под школьную аудиторию | completed | 1 |
 | D20 | Appwrite-зеркало GAL на self-hosted Functions (без миграции БД) | completed | 1 |
 | D21 | Публичный адрес `gal.ravva.su` для зеркала (DNS + proxy rule + OAuth) | in_progress | 1 |
@@ -155,6 +155,7 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 | D24 | v1.14: заявка в топ-5 при создании достижения (автор) | completed | 1 |
 | D25 | v1.15: технический запрет дублирующихся заявок (отпечаток содержимого + БД-констрейнты) | completed | 1 |
 | D26 | Аудит качества контента и исправление формулировок достижений | completed | 1 |
+| D27 | v1.16: починка отправки прохождения (RPC писал NULL в `proofs.description`) + понятные ошибки и возврат формы | in_progress | 1 |
 
 Примечание к D20: добавлен по уточнению scope от 2026-11-22 («Appwrite — self-hosted, это должно быть зеркало, БД — та же Supabase»); вес D12 уменьшен с 5 до 3 (4 → 3 при добавлении D21) для сохранения суммы 100. Vercel и Supabase остаются основным деплоем и БД соответственно. D21: proxy rule `gal.ravva.su → gal-mirror` создан и verified (22 Nov 2026), DNS резолвится; `APP_URL`/`MIRROR_BASE_URL` функции обновлены на `https://gal.ravva.su`; **OAuth-редирект LTHub проверен end-to-end 2026-11-24** (вход через LTHub на `gal.ravva.su` работает, колбэк 2.71 с после фикса `46480a0`). Остаток D21: **Site URL/Redirect URLs в Supabase Auth исправлены 2026-11-26** (`site_url` = `https://gal-inky.vercel.app` вместо `http://localhost:3000`, allow-list включает `gal-inky.vercel.app/**` и `gal.ravva.su/**` — ссылки восстановления пароля больше не ведут на localhost). Остался **таймаут прокси aw2 (~5 с)** — требует доступа к инфраструктуре вне проекта; из-за него зеркало `gal.ravva.su` отдаёт 503 на страницах с обращением к БД (16×`/leaderboard`, 7×`/achievements` в истории execution'ов — существовало и до hotfix 2026-11-26).
 
@@ -181,3 +182,19 @@ Achievement → Proof → Moderation → Evaluation → Global Rank → Player S
 ## Success Criteria MVP
 
 Пользователь способен полностью пройти цикл: регистрация → создание достижения → proof → модерация → публикация → выполнение другим пользователем → proof → модерация → личная оценка → попарные сравнения → глобальная сила Bradley–Terry → ранг → очки → player leaderboard.
+
+## Примечание к D27 (2026-11-26)
+
+Заведён по обращению владельца («почему? исправь»): при отправке прохождения с файлом приложение показывало «Не удалось отправить заявку. Попробуйте ещё раз.», достижение откатывалось в «Скрыто», и отправить заявку было больше нечем.
+
+**Причина.** RPC `submit_completion_with_proofs` (миграция 036) писал в `proofs.description` значение `nullif(btrim(...), '')` → NULL, а колонка объявлена `NOT NULL DEFAULT ''`. Любая заявка без описания доказательства (обычный случай — форма не спрашивает описание файла) падала с SQLSTATE **23502**, который приложение не распознавало и показывало безликий отказ. Сбой действовал со времени деплоя D25 (25.11) и ломал **все** отправки прохождения, а не только эту.
+
+**Сделано.**
+- `migrations/038_proof_description_not_null.sql` — пустое описание сохраняется пустой строкой; **применена к проде 2026-11-26**, проверена живой отправкой через PostgREST (HTTP 200, `completion_id` получен, `proofs.description = ''`).
+- `app/services/submissions.py` — понятные тексты для ошибок целостности (23502/23514/22P02/22023/23503, `SYSTEM_ONLY`) вместо безликой плашки; `app/services/completions.py` — вызов маппинга и код SQLSTATE в лог.
+- `app/routers/achievements.py` — при сбое заявки форма создания остаётся заполненной (данные не теряются), а не редирект в тупик; `app/services/achievements.py` — откат снимает и отпечаток достижения, иначе повторный отправ того же текста блокировался бы как дубль.
+- Достижение #60 «Программист python» возвращено из `deleted` в `pending` — заявку можно отправить со страницы достижения; тестовые строки E2E-проверки удалены.
+
+**Осталось:** коммит и пуш кода, деплой на Vercel и живая проверка отправки в UI.
+
+**Веса приведены к сумме 100** (до правки было 102 из-за D25/D26): D11 3→2, D13 5→4, D18 3→2.

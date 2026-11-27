@@ -20,6 +20,7 @@ from app.services.submissions import (
     MIGRATION_PENDING_MESSAGE,
     PROOF_REQUIRED_MESSAGE,
     SERVICE_NOT_CONFIGURED_MESSAGE,
+    constraint_error,
     is_already_completed,
     is_duplicate_proof,
     is_duplicate_submission,
@@ -1257,7 +1258,18 @@ def _submit_completion_with_rpc(
             raise CompletionError(
                 "Достижение недоступно для отправки прохождения."
             ) from exc
-        logger.warning("Completion submission RPC failed: %s", exc, exc_info=True)
+        # Ограничения целостности (NOT NULL, CHECK, enum) приходят из БД
+        # SQLSTATE-кодом: без явного текста пользователь видел только
+        # «Не удалось отправить заявку» и не понимал причину отказа.
+        constraint_message = constraint_error(exc)
+        if constraint_message is not None:
+            raise ProofError(constraint_message) from exc
+        logger.warning(
+            "Completion submission RPC failed (code %s): %s",
+            getattr(exc, "code", "?"),
+            exc,
+            exc_info=True,
+        )
         raise CompletionError(
             "Не удалось отправить заявку. Попробуйте ещё раз."
         ) from exc

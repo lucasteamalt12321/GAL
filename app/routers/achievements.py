@@ -103,6 +103,37 @@ def _validate_fields(title: str, description: str, requirements: str) -> str | N
     return None
 
 
+def _rollback_created_achievement(request: Request, achievement_id: int) -> None:
+    """Откатывает только что созданное достижение и его отпечаток.
+
+    Отпечаток (реестр миграции 036) удаляется вместе со строкой: иначе повторная
+    отправка того же текста блокировалась бы как «идентичная заявка», хотя
+    заявки не было — достижение осталось бы неотправленным навсегда.
+    """
+    try:
+        achievements_service.soft_delete_own_pending(request, achievement_id)
+    except achievements_service.ACHIEVEMENT_ERRORS:
+        logger.warning(
+            "Failed to roll back achievement %s without proof",
+            achievement_id,
+            exc_info=True,
+        )
+    achievements_service.drop_submission_fingerprint(achievement_id)
+
+
+def _create_submit_error(reason: str) -> str:
+    """Текст ошибки отправки заявки для формы создания.
+
+    Причина отказа сохраняется, но ограничивается по длине: сообщение из БД
+    может быть техническим, а файл к формам прикладывать всё равно заново.
+    """
+    detail = (reason or "").strip()[:300]
+    head = "Достижение не отправлено"
+    if detail:
+        head = f"{head}: {detail}"
+    return f"{head}. Файл нужно приложить заново — отправьте форму ещё раз."
+
+
 def _parse_top5_claim(
     top5_claim: str, top5_position: str, top5_justification: str
 ) -> tuple[int | None, str, str | None]:
@@ -355,30 +386,41 @@ def create(
             proofs_visible=True,
         )
     except completions_service.CompletionError as exc:
-        try:
-            achievements_service.soft_delete_own_pending(request, item["id"])
-        except achievements_service.ACHIEVEMENT_ERRORS:
-            logger.warning(
-                "Failed to roll back achievement %s without proof",
-                item["id"],
-                exc_info=True,
-            )
-        return RedirectResponse(
-            f"/achievements/{item['id']}?error={quote(str(exc))}", status_code=303
+        _rollback_created_achievement(request, item["id"])
+        return templates.TemplateResponse(
+            request=request,
+            name=CREATE_TEMPLATE,
+            context=_create_context(
+                error=_create_submit_error(str(exc)),
+                title=title,
+                description=description,
+                requirements=requirements,
+                category_id=category_id,
+                external_url=external_url,
+                scale=scale,
+                harder_count=harder_count,
+                **claim_state,
+            ),
         )
     except completions_service.COMPLETION_ERRORS:
-        try:
-            achievements_service.soft_delete_own_pending(request, item["id"])
-        except achievements_service.ACHIEVEMENT_ERRORS:
-            logger.warning(
-                "Failed to roll back achievement %s without proof",
-                item["id"],
-                exc_info=True,
-            )
-        return RedirectResponse(
-            f"/achievements/{item['id']}"
-            f"?error={quote('Достижение не сохранено: доказательство не прикрепилось. Отправьте заявку со страницы достижения.')}",
-            status_code=303,
+        _rollback_created_achievement(request, item["id"])
+        return templates.TemplateResponse(
+            request=request,
+            name=CREATE_TEMPLATE,
+            context=_create_context(
+                error=(
+                    "Достижение не сохранено: доказательство не прикрепилось. "
+                    "Приложите файл или ссылку заново и отправьте форму ещё раз."
+                ),
+                title=title,
+                description=description,
+                requirements=requirements,
+                category_id=category_id,
+                external_url=external_url,
+                scale=scale,
+                harder_count=harder_count,
+                **claim_state,
+            ),
         )
 
     if claim_position is not None:

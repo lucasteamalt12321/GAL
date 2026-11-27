@@ -12,7 +12,6 @@ from __future__ import annotations
 import io
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import unquote
 
 import httpx
 import pytest
@@ -651,6 +650,13 @@ def test_top5_and_report_mappings_use_the_same_message(
 def test_failed_proof_rolls_back_just_created_achievement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Сбой заявки не оставляет пользователя в тупике.
+
+    Достижение откатывается, но форма создания остаётся заполненной: иначе
+    автор попадал на страницу скрытого достижения, где формы отправки нет, и
+    повторить отправку было нечем. Отпечаток достижения тоже снимается —
+    иначе повторный отправ того же текста блокировался бы как дубль.
+    """
     monkeypatch.setattr(
         auth_service,
         "resolve_user",
@@ -681,6 +687,12 @@ def test_failed_proof_rolls_back_just_created_achievement(
         "soft_delete_own_pending",
         lambda _r, achievement_id: rolled_back.append(achievement_id),
     )
+    dropped: list[int] = []
+    monkeypatch.setattr(
+        achievements_service,
+        "drop_submission_fingerprint",
+        lambda achievement_id: dropped.append(achievement_id),
+    )
 
     response = client.post(
         "/achievements/create",
@@ -694,9 +706,46 @@ def test_failed_proof_rolls_back_just_created_achievement(
         follow_redirects=False,
     )
 
-    assert response.status_code == 303
+    assert response.status_code == 200
     assert rolled_back == [42]
-    assert "Не удалось вычислить отпечаток" in unquote(response.headers["location"])
+    assert dropped == [42]
+    body = response.text
+    assert "Не удалось вычислить отпечаток" in body
+    # Поля формы сохранились — пользователь не должен вводить их заново.
+    assert "Моё достижение" in body
+    assert "Требования" in body
+
+
+def test_constraint_errors_are_explained_to_user() -> None:
+    """Ошибки целостности из БД не остаются безликим «Не удалось отправить»."""
+    not_null = APIError(
+        {
+            "message": 'null value in column "description" of relation "proofs"',
+            "code": "23502",
+            "details": None,
+            "hint": None,
+        }
+    )
+    message = submissions_service.constraint_error(not_null)
+    assert message is not None
+    assert "Не удалось отправить заявку" not in message
+
+    assert (
+        submissions_service.constraint_error(
+            APIError(
+                {"message": "boom", "code": "PGRST999", "details": None, "hint": None}
+            )
+        )
+        is None
+    )
+
+
+def test_unknown_database_error_still_gets_generic_text() -> None:
+    """Неизвестный код не должен превращаться в подробности для пользователя."""
+    exc = APIError(
+        {"message": "unexpected", "code": "42P01", "details": None, "hint": None}
+    )
+    assert submissions_service.constraint_error(exc) is None
 
 
 # +--------------------------- UI-подсказки ---------------------------+

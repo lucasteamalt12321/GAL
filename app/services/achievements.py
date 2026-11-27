@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 from fastapi import Request
 from postgrest.exceptions import APIError
@@ -8,6 +10,8 @@ from app.services.submissions import (
     DuplicateSubmissionError,
     is_duplicate_submission,
 )
+
+logger = logging.getLogger(__name__)
 
 ACHIEVEMENT_ERRORS = (
     APIError,
@@ -452,3 +456,29 @@ def soft_delete_own_pending(request: Request, achievement_id: int) -> None:
     )
     if not res.data:
         raise PermissionError("Достижение не найдено или уже рассмотрено.")
+
+
+def drop_submission_fingerprint(achievement_id: int) -> None:
+    """Убирает отпечаток достижения, откатившегося из-за сбоя заявки.
+
+    Реестр отпечатков (миграция 036) не даёт создать два одинаковых
+    достижения. Но если создание откатилось — доказательство не прикрепилось и
+    заявки не существует — отпечаток остался бы блокировать повторную отправку
+    того же текста. Откат удаляет и отпечаток: незавершённая попытка не должна
+    считаться поданной заявкой.
+    """
+    try:
+        service_client = auth_service.new_service_client()
+        (
+            service_client.table("submission_fingerprints")
+            .delete()
+            .eq("submission_type", "achievement")
+            .eq("submission_id", achievement_id)
+            .execute()
+        )
+    except Exception:  # отпечаток чистим best-effort: сбой не должен ломать откат
+        logger.warning(
+            "Failed to drop submission fingerprint of achievement %s",
+            achievement_id,
+            exc_info=True,
+        )

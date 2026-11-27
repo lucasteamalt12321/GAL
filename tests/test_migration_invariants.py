@@ -268,6 +268,22 @@ def test_completion_evaluation_uses_two_evaluations() -> None:
     assert "e.locked = false" not in body
 
 
+def test_submission_rpc_never_writes_null_proof_description() -> None:
+    """Регресс 038: proofs.description NOT NULL, а RPC писал в него NULL.
+
+    Пустое описание доказательства (обычный случай — форма не спрашивает
+    описание файла) превращалось в NULL и вся отправка падала с SQLSTATE 23502.
+    Теперь пустое описание сохраняется пустой строкой.
+    """
+    body = _latest_function("submit_completion_with_proofs")
+
+    assert (
+        "coalesce(nullif(btrim(coalesce(item->>'description', '')), ''), '')" in body
+    ), "описание доказательства должно сохраняться пустой строкой, а не NULL"
+    # Не должно остаться прежней формы, где описание уходит в NULL.
+    assert "nullif(btrim(coalesce(item->>'description', '')), ''), case" not in body
+
+
 def test_top5_completion_claim_column_and_index() -> None:
     # 031: заявка связывается с выполнением через completion_id.
     migration = _collapse(

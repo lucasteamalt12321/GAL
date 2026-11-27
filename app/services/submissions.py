@@ -21,6 +21,17 @@ SERVICE_NOT_CONFIGURED_MESSAGE = (
 MIGRATION_PENDING_MESSAGE = (
     "Обновление базы данных ещё применяется. Повторите отправку чуть позже."
 )
+# Ограничения целостности, которые сервер отдаёт вместо доменной ошибки.
+# Без явного текста пользователь видел безликое «Не удалось отправить заявку»
+# и не понимал, что именно сломалось (так проявился баг с NULL в
+# proofs.description — SQLSTATE 23502).
+CONSTRAINT_ERROR_MESSAGES = {
+    "23502": "Заявка не сохранилась: сервер отклонил данные доказательства.",
+    "23514": "Заявка не прошла проверку сервера.",
+    "22P02": "Некорректный формат доказательства: приложите файл или ссылку заново.",
+    "22023": "Заявка не отправлена: не хватает данных.",
+    "23503": "Достижение больше не существует — обновите страницу.",
+}
 
 
 class DuplicateSubmissionError(Exception):
@@ -65,3 +76,21 @@ def proof_validation_error(exc: BaseException) -> str | None:
         if marker in text:
             return message
     return None
+
+
+def constraint_error(exc: BaseException) -> str | None:
+    """Понятный текст для ошибок целостности, которые поднимает сама БД.
+
+    PostgREST отдаёт их SQLSTATE-кодом (23502 — NOT NULL, 23514 — CHECK и т.п.),
+    поэтому без этой таблицы пользователь получал общий текст отказа.
+    """
+    text = _error_text(exc)
+    code = str(getattr(exc, "code", "") or "")
+    if code == "42501" and "SYSTEM_ONLY" in text:
+        return SERVICE_NOT_CONFIGURED_MESSAGE
+    message = CONSTRAINT_ERROR_MESSAGES.get(code)
+    if message is None:
+        return None
+    if code == "23503" and "ACHIEVEMENT_NOT_FOUND" in text:
+        return None
+    return message
