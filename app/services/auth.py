@@ -16,6 +16,7 @@ from supabase_auth.errors import (
 )
 
 from app.config import get_settings
+from app.supabase_http import new_supabase_httpx_client
 
 SESSION_COOKIE = "gal_session"
 REFRESH_COOKIE = "gal_refresh"
@@ -34,6 +35,10 @@ _RATE_LIMIT_CODES = frozenset(
 
 
 class SupabaseNotConfiguredError(RuntimeError):
+    pass
+
+
+class LoginLookupUnavailableError(RuntimeError):
     pass
 
 
@@ -93,6 +98,9 @@ def _client_options() -> ClientOptions:
     """
     return ClientOptions(
         postgrest_client_timeout=get_settings().supabase_timeout_seconds,
+        # postgrest-py принудительно включает HTTP/2; в open-runtimes такой
+        # соединение зависает до таймаута, хотя HTTP/1.1 отвечает нормально.
+        httpx_client=new_supabase_httpx_client(get_settings().supabase_timeout_seconds),
         # Сервер сам управляет refresh через resolve_user. Фоновый auto-refresh
         # библиотеки запускает недемонический Timer на каждый set_session, который
         # ротирует refresh-токен в выброшенном клиенте: браузер остаётся со старым
@@ -217,11 +225,20 @@ def friendly_auth_error(exc: Exception) -> str:
     маппятся в дружелюбные формулировки, неизвестные — в общий текст.
     """
     code = getattr(exc, "code", None)
+    status = getattr(exc, "status", None)
     raw = getattr(exc, "message", None) or getattr(exc, "msg", None) or str(exc)
     text = (raw or "").lower()
 
+    # GoTrue иногда присылает 5xx/429 с кодом invalid_credentials и текстом
+    # «Invalid login credentials». Сбой сервиса нельзя показывать как ошибку
+    # введённых данных — statuses проверяются раньше любых текстовых эвристик.
+    if isinstance(exc, (httpx.HTTPError, SupabaseNotConfiguredError)) or (
+        isinstance(status, int) and status >= 500
+    ):
+        return "Сервис входа временно недоступен. Попробуйте позже."
     if (
-        code in _RATE_LIMIT_CODES
+        (isinstance(status, int) and status == 429)
+        or code in _RATE_LIMIT_CODES
         or "rate limit" in text
         or "for security purposes" in text
     ):
@@ -251,7 +268,17 @@ def friendly_auth_error(exc: Exception) -> str:
         return "Email не подтверждён. Перейдите по ссылке из письма."
     if code == "signup_disabled":
         return "Регистрация временно отключена. Попробуйте позже."
-    return "Не удалось выполнить запрос. Проверьте данные и попробуйте ещё раз."
+    return "Не удалось выполнить запрос. Попробуйте позже."
+
+
+def is_invalid_credentials_error(exc: Exception) -> bool:
+    if isinstance(exc, AuthInvalidCredentialsError):
+        return True
+    return (
+        isinstance(exc, AuthApiError)
+        and getattr(exc, "code", None) == "invalid_credentials"
+        and getattr(exc, "status", None) in (400, 401)
+    )
 
 
 def ilike_literal(value: str) -> str:
@@ -279,11 +306,40 @@ def username_available(username: str) -> bool:
     return row is None or not row.data
 
 
+def _lthub_email_for_profile(service: Client, profile_id: str) -> str | None:
+    """Служебный email по identity LTHub.
+
+    Сбой запроса — это недоступность сервиса, а не отсутствие identity:
+    тихое None здесь приводило к fallback в Admin API и, при 404, к общему
+    «Неверный email или пароль» для существующего аккаунта.
+    """
+    try:
+        row = (
+            service.table("external_identities")
+            .select("subject")
+            .eq("provider", "lthub")
+            .eq("profile_id", profile_id)
+            .limit(1)
+            .execute()
+        )
+    except PROFILE_ERRORS as exc:
+        raise LoginLookupUnavailableError("LTHub identity lookup failed") from exc
+    if not row.data:
+        return None
+    subject = str(row.data[0].get("subject") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", subject):
+        return None
+    return f"lthub-oauth-{subject}@example.com"
+
+
 def resolve_login_account(identifier: str) -> tuple[str, str] | None:
     """Профиль и email аккаунта по email или никнейму.
 
-    Возвращает пару (profile_id, email) или None, если аккаунт не найден либо
-    service role недоступен. Email не отдаётся клиенту — только серверу.
+    Возвращает пару (profile_id, email) или None, если аккаунт не найден.
+    Сбой lookup отличается от неизвестного ника и выбрасывает
+    LoginLookupUnavailableError, чтобы форма не показывала «неверный пароль»
+    при недоступном Supabase.
+    Email не отдаётся клиенту — только серверу.
     Для входа по email profile_id может быть пустым (профиль не искали).
     """
     value = (identifier or "").strip()
@@ -297,7 +353,7 @@ def resolve_login_account(identifier: str) -> tuple[str, str] | None:
     if "*" in value:
         return None
     if not get_settings().service_role_configured:
-        return None
+        raise LoginLookupUnavailableError("Service role is not configured")
     try:
         service = new_service_client()
         row = (
@@ -307,25 +363,35 @@ def resolve_login_account(identifier: str) -> tuple[str, str] | None:
             .limit(1)
             .execute()
         )
-        if not row.data:
-            return None
-        profile_id = str(row.data[0]["id"])
-        resp = service.auth.admin.get_user_by_id(profile_id)
-        email = resp.user.email or None
-        if not email:
-            return None
-        return profile_id, email
-    except AUTH_ERRORS + PROFILE_ERRORS:
+    except PROFILE_ERRORS as exc:
+        raise LoginLookupUnavailableError("Profile lookup failed") from exc
+    if not row.data:
         return None
+    profile_id = str(row.data[0]["id"])
+    email = _lthub_email_for_profile(service, profile_id)
+    if email:
+        return profile_id, email
+    try:
+        resp = service.auth.admin.get_user_by_id(profile_id)
+    except AuthApiError as exc:
+        if getattr(exc, "status", None) == 404:
+            return None
+        raise LoginLookupUnavailableError("Auth user lookup failed") from exc
+    except AUTH_ERRORS as exc:
+        raise LoginLookupUnavailableError("Auth user lookup failed") from exc
+    email = resp.user.email or None
+    if not email:
+        # Пользователь есть, но email отсутствует — это не «неизвестный аккаунт»,
+        # а неполные данные сервиса; общий текст обвинил бы пользователя.
+        raise LoginLookupUnavailableError("Auth user has no email")
+    return profile_id, email
 
 
 def resolve_login_email(identifier: str) -> str | None:
     """Email для входа по email или никнейму.
 
-    Supabase Auth входит по email; никнейм резолвится в email на сервере через
-    service role, чтобы email не утекал клиенту. Возвращает None, если никнейм
-    не найден или service role недоступен — роут покажет общее «Неверный email
-    или пароль», не раскрывая существование ника.
+    None означает только «аккаунт неизвестен»; недоступность lookup бросает
+    LoginLookupUnavailableError и не подменяется неверными данными.
     """
     account = resolve_login_account(identifier)
     if account is None:

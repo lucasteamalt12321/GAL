@@ -40,6 +40,7 @@ LTHUB_EMAIL_RE = re.compile(
 PASSWORD_OK = "ok"
 PASSWORD_REJECTED = "rejected"
 PASSWORD_UNAVAILABLE = "unavailable"
+PASSWORD_RATE_LIMITED = "rate_limited"
 
 
 class LthubAccountError(Exception):
@@ -107,7 +108,9 @@ def _find_identity(service, subject: str) -> str | None:
     return None
 
 
-def find_identity_by_profile(service, profile_id: str) -> dict | None:
+def find_identity_by_profile(
+    service, profile_id: str, *, strict: bool = False
+) -> dict | None:
     """Identity LTHub по профилю GAL (`subject`, `lthub_login`, `password_synced`)."""
     try:
         res = (
@@ -118,12 +121,18 @@ def find_identity_by_profile(service, profile_id: str) -> dict | None:
             .limit(1)
             .execute()
         )
-    except Exception:  # noqa: BLE001 - сервисный клиент может быть недоступен
+    except auth_service.PROFILE_ERRORS as exc:
+        if strict:
+            raise auth_service.LoginLookupUnavailableError(
+                "LTHub identity lookup failed"
+            ) from exc
         return None
     return _identity_row(res.data)
 
 
-def find_identity_by_subject(service, subject: str) -> dict | None:
+def find_identity_by_subject(
+    service, subject: str, *, strict: bool = False
+) -> dict | None:
     """Identity LTHub по subject (внутренний id пользователя LTHub)."""
     try:
         res = (
@@ -134,7 +143,11 @@ def find_identity_by_subject(service, subject: str) -> dict | None:
             .limit(1)
             .execute()
         )
-    except Exception:  # noqa: BLE001 - сервисный клиент может быть недоступен
+    except auth_service.PROFILE_ERRORS as exc:
+        if strict:
+            raise auth_service.LoginLookupUnavailableError(
+                "LTHub identity lookup failed"
+            ) from exc
         return None
     return _identity_row(res.data)
 
@@ -151,15 +164,17 @@ def _identity_row(data) -> dict | None:
     }
 
 
-def find_identity_for_login(service, *, profile_id: str, email: str) -> dict | None:
+def find_identity_for_login(
+    service, *, profile_id: str, email: str, strict: bool = False
+) -> dict | None:
     """Identity LTHub для входа: по профилю, иначе по служебному email."""
     if profile_id:
-        identity = find_identity_by_profile(service, profile_id)
+        identity = find_identity_by_profile(service, profile_id, strict=strict)
         if identity:
             return identity
     match = LTHUB_EMAIL_RE.match((email or "").strip())
     if match:
-        return find_identity_by_subject(service, match.group(1))
+        return find_identity_by_subject(service, match.group(1), strict=strict)
     return None
 
 
@@ -250,18 +265,25 @@ def verify_password(
         try:
             payload = response.json()
         except ValueError:
-            payload = {}
-        user_id = payload.get("user_id") if isinstance(payload, dict) else None
-        if (
-            expected_subject
-            and user_id is not None
-            and not _subjects_match(str(user_id), expected_subject)
-        ):
+            return PASSWORD_UNAVAILABLE
+        if not isinstance(payload, dict):
+            return PASSWORD_UNAVAILABLE
+        user_id = payload.get("user_id")
+        # 200 без user_id — аномалия ответа, а не подтверждение пароля:
+        # раньше она открывала вход под чужим логином и записывала пароль
+        # в GAL. Недоступность проверки не должна выглядеть как успех.
+        if user_id is None or not str(user_id).strip():
+            return PASSWORD_UNAVAILABLE
+        if not expected_subject:
+            return PASSWORD_UNAVAILABLE
+        if not _subjects_match(str(user_id), expected_subject):
             # Пароль подошёл другому аккаунту LTHub — не пускаем.
             return PASSWORD_REJECTED
         return PASSWORD_OK
-    if response.status_code in (400, 401, 403, 404, 409):
+    if response.status_code == 401:
         return PASSWORD_REJECTED
+    if response.status_code == 429:
+        return PASSWORD_RATE_LIMITED
     return PASSWORD_UNAVAILABLE
 
 

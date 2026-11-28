@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
+import app.routers.auth as auth_router
 from app.config import Settings
 from app.main import app
 from app.services import auth as auth_service
@@ -404,13 +406,83 @@ def test_friendly_auth_error_email_exists() -> None:
     assert "уже зарегистрирован" in auth_service.friendly_auth_error(exc)
 
 
-def test_friendly_auth_error_unknown_is_generic() -> None:
+def test_invalid_credentials_classifier_uses_code_and_status() -> None:
+    from supabase_auth.errors import AuthApiError
+
+    assert auth_service.is_invalid_credentials_error(
+        AuthApiError(
+            message="Invalid login credentials", status=400, code="invalid_credentials"
+        )
+    )
+    assert not auth_service.is_invalid_credentials_error(
+        AuthApiError(message="Invalid gateway", status=503, code="unavailable")
+    )
+
+
+def test_friendly_auth_error_server_failure_is_service_unavailable() -> None:
     from supabase_auth.errors import AuthApiError
 
     exc = AuthApiError(message="something odd", status=500, code="unexpected_failure")
     assert auth_service.friendly_auth_error(exc) == (
-        "Не удалось выполнить запрос. Проверьте данные и попробуйте ещё раз."
+        "Сервис входа временно недоступен. Попробуйте позже."
     )
+
+
+def test_friendly_auth_error_5xx_invalid_credentials_is_service_unavailable() -> None:
+    from supabase_auth.errors import AuthApiError
+
+    exc = AuthApiError(
+        message="Invalid login credentials",
+        status=503,
+        code="invalid_credentials",
+    )
+    assert auth_service.friendly_auth_error(exc) == (
+        "Сервис входа временно недоступен. Попробуйте позже."
+    )
+    assert not auth_service.is_invalid_credentials_error(exc)
+
+
+def test_friendly_auth_error_unknown_429_is_rate_limited() -> None:
+    from supabase_auth.errors import AuthApiError
+
+    exc = AuthApiError(
+        message="Too many attempts", status=429, code="unexpected_failure"
+    )
+    assert "Слишком много попыток" in auth_service.friendly_auth_error(exc)
+
+
+def test_lthub_identity_lookup_failure_is_not_unknown_account(monkeypatch) -> None:
+    import httpx
+
+    class _Row:
+        def __init__(self):
+            self.data = [{"id": "uid-1"}]
+
+    class _ProfileQuery:
+        def select(self, *_a, **_k):
+            return self
+
+        def ilike(self, *_a, **_k):
+            return self
+
+        def limit(self, *_a, **_k):
+            return self
+
+        def execute(self):
+            return _Row()
+
+    class _BrokenIdentities:
+        def select(self, *_a, **_k):
+            raise httpx.ConnectError("database unavailable")
+
+    class _BrokenService:
+        def table(self, name):
+            return _ProfileQuery() if name == "profiles" else _BrokenIdentities()
+
+    monkeypatch.setattr(auth_service, "get_settings", _service_settings)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: _BrokenService())
+    with pytest.raises(auth_service.LoginLookupUnavailableError):
+        auth_service.resolve_login_account("TonyBig")
 
 
 def test_register_invalid_email_shows_error() -> None:
@@ -461,9 +533,10 @@ def test_resolve_login_email_passthrough_and_empty() -> None:
     assert auth_service.resolve_login_email("   ") is None
 
 
-def test_resolve_login_email_username_without_service_role(monkeypatch) -> None:
+def test_resolve_login_email_propagates_missing_service_role(monkeypatch) -> None:
     monkeypatch.setattr(auth_service, "get_settings", lambda: Settings(_env_file=None))
-    assert auth_service.resolve_login_email("TonyBig") is None
+    with pytest.raises(auth_service.LoginLookupUnavailableError):
+        auth_service.resolve_login_email("TonyBig")
 
 
 def test_register_rejects_reserved_lthub_email() -> None:
@@ -504,25 +577,34 @@ def _service_settings() -> Settings:
 
 
 def test_resolve_login_email_username_found(monkeypatch) -> None:
-    captured: dict[str, str] = {}
+    captured: dict = {"tables": []}
 
     class _Row:
-        def __init__(self):
-            self.data = [{"id": "uid-1"}]
+        def __init__(self, data):
+            self.data = data
 
     class _Query:
+        def __init__(self, row):
+            self.row = row
+
         def ilike(self, *_a, **_k):
+            return self
+
+        def eq(self, *_a, **_k):
             return self
 
         def limit(self, *_a, **_k):
             return self
 
         def execute(self):
-            return _Row()
+            return self.row
 
     class _Table:
+        def __init__(self, row):
+            self.row = row
+
         def select(self, *_a, **_k):
-            return _Query()
+            return _Query(self.row)
 
     class _User:
         email = "tonybig11200@gmail.com"
@@ -542,13 +624,113 @@ def test_resolve_login_email_username_found(monkeypatch) -> None:
         auth = _Auth()
 
         def table(self, name):
-            captured["table"] = name
-            return _Table()
+            captured["tables"].append(name)
+            data = [{"id": "uid-1"}] if name == "profiles" else []
+            return _Table(_Row(data))
 
     monkeypatch.setattr(auth_service, "get_settings", _service_settings)
     monkeypatch.setattr(auth_service, "new_service_client", lambda: _Service())
     assert auth_service.resolve_login_email("TonyBig") == "tonybig11200@gmail.com"
-    assert captured == {"uid": "uid-1", "table": "profiles"}
+    assert captured == {
+        "uid": "uid-1",
+        "tables": ["profiles", "external_identities"],
+    }
+
+
+def test_resolve_login_account_uses_lthub_identity_without_admin_lookup(
+    monkeypatch,
+) -> None:
+    captured: dict = {"filters": []}
+
+    class _Row:
+        def __init__(self, data):
+            self.data = data
+
+    class _Query:
+        def __init__(self, row):
+            self.row = row
+
+        def ilike(self, *_a, **_k):
+            return self
+
+        def eq(self, column, value):
+            captured["filters"].append((column, value))
+            return self
+
+        def limit(self, *_a, **_k):
+            return self
+
+        def execute(self):
+            return self.row
+
+    class _Table:
+        def __init__(self, row):
+            self.row = row
+
+        def select(self, *_a, **_k):
+            return _Query(self.row)
+
+    class _Service:
+        def table(self, name):
+            data = [{"id": "uid-1"}] if name == "profiles" else [{"subject": "8"}]
+            return _Table(_Row(data))
+
+    monkeypatch.setattr(auth_service, "get_settings", _service_settings)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: _Service())
+    assert auth_service.resolve_login_account("LucasTeam") == (
+        "uid-1",
+        "lthub-oauth-8@example.com",
+    )
+    assert captured["filters"] == [("provider", "lthub"), ("profile_id", "uid-1")]
+
+
+def test_resolve_login_account_raises_on_auth_service_failure(monkeypatch) -> None:
+    from supabase_auth.errors import AuthApiError
+
+    class _Row:
+        def __init__(self, data):
+            self.data = data
+
+    class _Query:
+        def __init__(self, row):
+            self.row = row
+
+        def ilike(self, *_a, **_k):
+            return self
+
+        def eq(self, *_a, **_k):
+            return self
+
+        def limit(self, *_a, **_k):
+            return self
+
+        def execute(self):
+            return self.row
+
+    class _Table:
+        def __init__(self, row):
+            self.row = row
+
+        def select(self, *_a, **_k):
+            return _Query(self.row)
+
+    class _Admin:
+        def get_user_by_id(self, _uid):
+            raise AuthApiError(
+                message="Service Unavailable", status=503, code="unavailable"
+            )
+
+    class _Service:
+        auth = SimpleNamespace(admin=_Admin())
+
+        def table(self, name):
+            data = [{"id": "uid-1"}] if name == "profiles" else []
+            return _Table(_Row(data))
+
+    monkeypatch.setattr(auth_service, "get_settings", _service_settings)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: _Service())
+    with pytest.raises(auth_service.LoginLookupUnavailableError):
+        auth_service.resolve_login_account("TonyBig")
 
 
 def test_resolve_login_email_username_not_found(monkeypatch) -> None:
@@ -625,7 +807,118 @@ def test_login_unknown_username_generic_error(monkeypatch) -> None:
     assert "Неверный email или пароль" in resp.text
 
 
-def test_resolve_login_email_swallows_service_failure(monkeypatch) -> None:
+def test_login_lookup_failure_is_not_reported_as_wrong_password(monkeypatch) -> None:
+    client.cookies.clear()
+
+    def _unavailable(_identifier):
+        raise auth_service.LoginLookupUnavailableError("database unavailable")
+
+    monkeypatch.setattr(auth_service, "resolve_login_account", _unavailable)
+    resp = client.post(
+        "/auth/login", data={"email": "LucasTeam", "password": "secret1"}
+    )
+    assert resp.status_code == 200
+    assert "Сервис входа временно недоступен" in resp.text
+    assert "Неверный email или пароль" not in resp.text
+
+
+def test_login_supabase_failure_does_not_fall_back_to_lthub(monkeypatch) -> None:
+    from supabase_auth.errors import AuthApiError
+
+    client.cookies.clear()
+
+    class _AuthStub:
+        def sign_in_with_password(self, _payload):
+            raise AuthApiError(
+                message="Service Unavailable", status=503, code="unavailable"
+            )
+
+    class _ClientStub:
+        auth = _AuthStub()
+
+    def _unexpected_fallback(**_kwargs):
+        raise AssertionError("LTHub fallback must not mask a Supabase outage")
+
+    monkeypatch.setattr(
+        auth_service,
+        "resolve_login_account",
+        lambda _ident: ("uid-1", "lthub-oauth-8@example.com"),
+    )
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    monkeypatch.setattr(
+        auth_router, "_sign_in_with_lthub_password", _unexpected_fallback
+    )
+    resp = client.post(
+        "/auth/login", data={"email": "LucasTeam", "password": "secret1"}
+    )
+    assert resp.status_code == 200
+    assert "Сервис входа временно недоступен" in resp.text
+    assert "Неверный email или пароль" not in resp.text
+
+
+def test_login_supabase_503_with_credentials_code_is_service_unavailable(
+    monkeypatch,
+) -> None:
+    from supabase_auth.errors import AuthApiError
+
+    client.cookies.clear()
+
+    class _AuthStub:
+        def sign_in_with_password(self, _payload):
+            raise AuthApiError(
+                message="Invalid login credentials",
+                status=503,
+                code="invalid_credentials",
+            )
+
+    def _unexpected_fallback(**_kwargs):
+        raise AssertionError("LTHub fallback must not mask a Supabase outage")
+
+    monkeypatch.setattr(
+        auth_service,
+        "resolve_login_account",
+        lambda _ident: ("uid-1", "lthub-oauth-8@example.com"),
+    )
+    monkeypatch.setattr(
+        auth_service, "new_anon_client", lambda: SimpleNamespace(auth=_AuthStub())
+    )
+    monkeypatch.setattr(
+        auth_router, "_sign_in_with_lthub_password", _unexpected_fallback
+    )
+    resp = client.post(
+        "/auth/login", data={"email": "LucasTeam", "password": "secret1"}
+    )
+    assert resp.status_code == 200
+    assert "Сервис входа временно недоступен" in resp.text
+    assert "Неверный email или пароль" not in resp.text
+
+
+def test_login_httpx_failure_is_service_unavailable(monkeypatch) -> None:
+    import httpx
+
+    client.cookies.clear()
+
+    class _AuthStub:
+        def sign_in_with_password(self, _payload):
+            raise httpx.ReadTimeout("upstream timed out")
+
+    monkeypatch.setattr(
+        auth_service,
+        "resolve_login_account",
+        lambda _ident: ("uid-1", "lthub-oauth-8@example.com"),
+    )
+    monkeypatch.setattr(
+        auth_service, "new_anon_client", lambda: SimpleNamespace(auth=_AuthStub())
+    )
+    resp = client.post(
+        "/auth/login", data={"email": "LucasTeam", "password": "secret1"}
+    )
+    assert resp.status_code == 200
+    assert "Сервис входа временно недоступен" in resp.text
+    assert "Неверный email или пароль" not in resp.text
+
+
+def test_resolve_login_email_propagates_service_failure(monkeypatch) -> None:
     import httpx
 
     class _BrokenService:
@@ -634,16 +927,20 @@ def test_resolve_login_email_swallows_service_failure(monkeypatch) -> None:
 
     monkeypatch.setattr(auth_service, "get_settings", _service_settings)
     monkeypatch.setattr(auth_service, "new_service_client", lambda: _BrokenService())
-    assert auth_service.resolve_login_email("TonyBig") is None
+    with pytest.raises(auth_service.LoginLookupUnavailableError):
+        auth_service.resolve_login_email("TonyBig")
 
 
-def test_resolve_login_email_returns_none_without_auth_email(monkeypatch) -> None:
+def test_resolve_login_email_raises_without_auth_email(monkeypatch) -> None:
     class _Row:
         def __init__(self):
             self.data = [{"id": "uid-1"}]
 
     class _Query:
         def ilike(self, *_a, **_k):
+            return self
+
+        def eq(self, *_a, **_k):
             return self
 
         def limit(self, *_a, **_k):
@@ -671,7 +968,8 @@ def test_resolve_login_email_returns_none_without_auth_email(monkeypatch) -> Non
 
     monkeypatch.setattr(auth_service, "get_settings", _service_settings)
     monkeypatch.setattr(auth_service, "new_service_client", lambda: _Service())
-    assert auth_service.resolve_login_email("TonyBig") is None
+    with pytest.raises(auth_service.LoginLookupUnavailableError):
+        auth_service.resolve_login_email("TonyBig")
 
 
 def test_login_wrong_password_does_not_leak_resolved_email(monkeypatch) -> None:
@@ -697,6 +995,9 @@ def test_login_wrong_password_does_not_leak_resolved_email(monkeypatch) -> None:
         lambda _ident: ("uid-1", resolved_email),
     )
     monkeypatch.setattr(auth_service, "new_anon_client", lambda: _ClientStub())
+    monkeypatch.setattr(
+        auth_router.lthub_accounts, "find_identity_for_login", lambda *_a, **_k: None
+    )
 
     resp = client.post(
         "/auth/login",

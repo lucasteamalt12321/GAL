@@ -68,6 +68,35 @@ def test_verify_password_ok(monkeypatch) -> None:
     assert captured["json"] == {"login": "lucasteam", "password": "LucasTeam1"}
 
 
+def test_verify_password_unavailable_on_incomplete_200_response(monkeypatch) -> None:
+    monkeypatch.setattr(lthub_accounts, "get_settings", lambda: _settings())
+    for payload in ({}, {"user_id": None}, {"user_id": ""}):
+        monkeypatch.setattr(
+            lthub_accounts.httpx,
+            "post",
+            lambda *_a, _payload=payload, **_k: _Response(200, _payload),
+        )
+        assert (
+            lthub_accounts.verify_password(
+                "lucasteam", "LucasTeam1", expected_subject="8"
+            )
+            == lthub_accounts.PASSWORD_UNAVAILABLE
+        )
+
+
+def test_verify_password_unavailable_without_expected_subject(monkeypatch) -> None:
+    monkeypatch.setattr(lthub_accounts, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        lthub_accounts.httpx,
+        "post",
+        lambda *_a, **_k: _Response(200, {"user_id": 8}),
+    )
+    assert (
+        lthub_accounts.verify_password("lucasteam", "LucasTeam1")
+        == lthub_accounts.PASSWORD_UNAVAILABLE
+    )
+
+
 def test_verify_password_rejects_foreign_account(monkeypatch) -> None:
     monkeypatch.setattr(lthub_accounts, "get_settings", lambda: _settings())
     monkeypatch.setattr(
@@ -91,6 +120,32 @@ def test_verify_password_rejected_on_401(monkeypatch) -> None:
     assert (
         lthub_accounts.verify_password("lucasteam", "wrong")
         == lthub_accounts.PASSWORD_REJECTED
+    )
+
+
+def test_verify_password_unavailable_on_missing_endpoint(monkeypatch) -> None:
+    monkeypatch.setattr(lthub_accounts, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        lthub_accounts.httpx,
+        "post",
+        lambda *_a, **_k: _Response(404, {"error": "Not found"}),
+    )
+    assert (
+        lthub_accounts.verify_password("lucasteam", "secret")
+        == lthub_accounts.PASSWORD_UNAVAILABLE
+    )
+
+
+def test_verify_password_reports_rate_limit(monkeypatch) -> None:
+    monkeypatch.setattr(lthub_accounts, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        lthub_accounts.httpx,
+        "post",
+        lambda *_a, **_k: _Response(429, {"error": "Too many attempts"}),
+    )
+    assert (
+        lthub_accounts.verify_password("lucasteam", "secret")
+        == lthub_accounts.PASSWORD_RATE_LIMITED
     )
 
 
@@ -322,6 +377,88 @@ def test_login_reports_lthub_unavailable(monkeypatch) -> None:
     )
     assert resp.status_code == 200
     assert "LTHub" in resp.text
+    assert "Неверный email или пароль" not in resp.text
+    assert "gal_session=" not in resp.headers.get("set-cookie", "")
+
+
+def test_login_unknown_verify_result_is_service_unavailable(monkeypatch) -> None:
+    client.cookies.clear()
+    _prepare_login(
+        monkeypatch,
+        identity=_lthub_identity(),
+        verify_result="unexpected-result",
+        mirror_calls=[],
+    )
+    resp = client.post(
+        "/auth/login", data={"email": "lucasteam", "password": "LucasTeam1"}
+    )
+    assert resp.status_code == 200
+    assert "Сервис входа временно недоступен" in resp.text
+    assert "Неверный email или пароль" not in resp.text
+    assert "gal_session=" not in resp.headers.get("set-cookie", "")
+
+
+def test_login_reports_lthub_rate_limit(monkeypatch) -> None:
+    client.cookies.clear()
+    mirror_calls: list[tuple] = []
+    _prepare_login(
+        monkeypatch,
+        identity=_lthub_identity(),
+        verify_result=lthub_accounts.PASSWORD_RATE_LIMITED,
+        mirror_calls=mirror_calls,
+    )
+    resp = client.post(
+        "/auth/login",
+        data={"email": "lucasteam", "password": "secret"},
+    )
+    assert resp.status_code == 200
+    assert "Слишком много попыток" in resp.text
+    assert "Неверный email или пароль" not in resp.text
+    assert mirror_calls == []
+
+
+def test_login_reports_identity_lookup_failure(monkeypatch) -> None:
+    client.cookies.clear()
+    _prepare_login(
+        monkeypatch,
+        identity=_lthub_identity(),
+        verify_result=lthub_accounts.PASSWORD_OK,
+        mirror_calls=[],
+    )
+
+    def _broken_lookup(*_args, **_kwargs):
+        raise auth_router.auth_service.LoginLookupUnavailableError("database down")
+
+    monkeypatch.setattr(
+        auth_router.lthub_accounts, "find_identity_for_login", _broken_lookup
+    )
+    resp = client.post(
+        "/auth/login",
+        data={"email": "lucasteam", "password": "secret"},
+    )
+    assert resp.status_code == 200
+    assert "Сервис входа временно недоступен" in resp.text
+    assert "Неверный email или пароль" not in resp.text
+
+
+def test_login_reports_password_mirror_failure(monkeypatch) -> None:
+    client.cookies.clear()
+    _prepare_login(
+        monkeypatch,
+        identity=_lthub_identity(),
+        verify_result=lthub_accounts.PASSWORD_OK,
+        mirror_calls=[],
+    )
+    monkeypatch.setattr(
+        auth_router.lthub_accounts, "mirror_password", lambda *_a: False
+    )
+    resp = client.post(
+        "/auth/login",
+        data={"email": "lucasteam", "password": "secret"},
+    )
+    assert resp.status_code == 200
+    assert "Не удалось синхронизировать пароль" in resp.text
+    assert "Неверный email или пароль" not in resp.text
     assert "gal_session=" not in resp.headers.get("set-cookie", "")
 
 

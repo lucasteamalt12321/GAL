@@ -19,6 +19,7 @@ from supabase_auth.errors import (
 )
 
 from app.config import Settings
+from app.database import connection as database
 from app.main import app
 from app.services import auth as auth_service
 from app.services import completions as completions_service
@@ -203,7 +204,33 @@ def test_client_options_disable_auto_refresh(monkeypatch) -> None:
     # Фоновый auto-refresh библиотеки ротировал refresh-токен в выброшенном
     # клиенте и разлогинивал пользователя; сервер управляет refresh сам.
     _patch_settings(monkeypatch)
-    assert auth_service._client_options().auto_refresh_token is False
+    options = auth_service._client_options()
+    try:
+        assert options.auto_refresh_token is False
+        assert options.httpx_client is not None
+        assert options.httpx_client.timeout.read == Settings().supabase_timeout_seconds
+        assert options.httpx_client._transport._pool._http2 is False
+    finally:
+        if options.httpx_client is not None:
+            options.httpx_client.close()
+
+
+def test_database_client_options_disable_http2(monkeypatch) -> None:
+    monkeypatch.setattr(
+        database,
+        "get_settings",
+        lambda: Settings(
+            supabase_url="https://test.supabase.co", supabase_anon_key="anon"
+        ),
+    )
+    options = database._client_options()
+    try:
+        assert options.httpx_client is not None
+        assert options.httpx_client._transport._pool._http2 is False
+        assert options.httpx_client.timeout.read == Settings().supabase_timeout_seconds
+    finally:
+        if options.httpx_client is not None:
+            options.httpx_client.close()
 
 
 # --- LTHub: поиск только по детерминированному email ------------------------

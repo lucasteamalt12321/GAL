@@ -4,6 +4,7 @@ from supabase import Client, ClientOptions, create_client
 
 from app.config import get_settings
 from app.services.auth import SupabaseNotConfiguredError
+from app.supabase_http import new_supabase_httpx_client
 
 __all__ = ["SupabaseNotConfiguredError", "get_public_client", "get_service_client"]
 
@@ -11,6 +12,7 @@ __all__ = ["SupabaseNotConfiguredError", "get_public_client", "get_service_clien
 def _client_options() -> ClientOptions:
     return ClientOptions(
         postgrest_client_timeout=get_settings().supabase_timeout_seconds,
+        httpx_client=new_supabase_httpx_client(get_settings().supabase_timeout_seconds),
         auto_refresh_token=False,
     )
 

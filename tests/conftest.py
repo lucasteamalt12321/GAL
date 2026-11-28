@@ -47,6 +47,24 @@ def _service_client_without_network(monkeypatch):
                 }
             )
 
+    class _IdentitiesTable:
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            raise APIError(
+                {
+                    "code": "42P01",
+                    "message": "relation public.external_identities does not exist",
+                }
+            )
+
     class _Pre036ServiceClient:
         def rpc(self, name, params=None):
             if name != "submit_completion_with_proofs":
@@ -54,9 +72,11 @@ def _service_client_without_network(monkeypatch):
             return _RpcResult()
 
         def table(self, name):
-            if name != "submission_fingerprints":
-                raise AssertionError(f"unexpected table {name}")
-            return _FingerprintsTable()
+            if name == "submission_fingerprints":
+                return _FingerprintsTable()
+            if name == "external_identities":
+                return _IdentitiesTable()
+            raise AssertionError(f"unexpected table {name}")
 
     monkeypatch.setattr(auth_service, "new_service_client", _Pre036ServiceClient)
 

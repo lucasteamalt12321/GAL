@@ -61,7 +61,16 @@ async def login(request: Request) -> HTMLResponse:
     identifier = (await body_field(request, "email")).strip()
     password = await body_field(request, "password")
     target = _safe_next(await body_field(request, "next"))
-    account = auth_service.resolve_login_account(identifier)
+    try:
+        account = auth_service.resolve_login_account(identifier)
+    except auth_service.LoginLookupUnavailableError:
+        return _page(
+            request,
+            "auth/login.html",
+            error="Сервис входа временно недоступен. Попробуйте позже.",
+            email=identifier,
+            next=target,
+        )
     if account is None:
         return _page(
             request,
@@ -72,7 +81,7 @@ async def login(request: Request) -> HTMLResponse:
         )
     profile_id, email = account
     session, error = _sign_in(email, password)
-    if session is None:
+    if session is None and error is None:
         session, error = _sign_in_with_lthub_password(
             profile_id=profile_id, email=email, password=password
         )
@@ -100,12 +109,12 @@ def _sign_in(email: str, password: str) -> tuple[object | None, str | None]:
         client = auth_service.new_anon_client()
         res = client.auth.sign_in_with_password({"email": email, "password": password})
     except auth_service.AUTH_ERRORS as exc:
-        message = str(exc).lower()
-        if "invalid" in message or "credentials" in message:
+        if auth_service.is_invalid_credentials_error(exc):
             return None, None
         return None, _error_message(exc)
     if res.session is None:
-        return None, "Не удалось получить сессию."
+        # Ответ сервиса без сессии — сбой, а не ошибка введённых данных.
+        return None, "Сервис входа временно недоступен. Попробуйте позже."
     return res.session, None
 
 
@@ -120,10 +129,13 @@ def _sign_in_with_lthub_password(
     try:
         service = auth_service.new_service_client()
     except auth_service.AUTH_ERRORS:
-        return None, None
-    identity = lthub_accounts.find_identity_for_login(
-        service, profile_id=profile_id, email=email
-    )
+        return None, "Сервис входа временно недоступен. Попробуйте позже."
+    try:
+        identity = lthub_accounts.find_identity_for_login(
+            service, profile_id=profile_id, email=email, strict=True
+        )
+    except auth_service.LoginLookupUnavailableError:
+        return None, "Сервис входа временно недоступен. Попробуйте позже."
     if not identity:
         return None, None
     login = identity.get("lthub_login") or ""
@@ -133,14 +145,25 @@ def _sign_in_with_lthub_password(
         login, password, expected_subject=subject or None
     )
     if result == lthub_accounts.PASSWORD_OK:
-        lthub_accounts.mirror_password(service, target_profile, subject, password)
+        if not lthub_accounts.mirror_password(
+            service, target_profile, subject, password
+        ):
+            return (
+                None,
+                "Не удалось синхронизировать пароль с Supabase. Попробуйте позже.",
+            )
         return _sign_in(email, password)
+    if result == lthub_accounts.PASSWORD_RATE_LIMITED:
+        return None, "Слишком много попыток входа в LTHub. Попробуйте позже."
     if result == lthub_accounts.PASSWORD_UNAVAILABLE:
         return (
             None,
             "LTHub сейчас недоступен. Попробуйте позже или войдите через LTHub.",
         )
-    return None, None
+    if result == lthub_accounts.PASSWORD_REJECTED:
+        return None, None
+    # Неизвестный исход проверки — сбой сервиса, а не неверный пароль.
+    return None, "Сервис входа временно недоступен. Попробуйте позже."
 
 
 @router.get("/register", response_class=HTMLResponse, include_in_schema=False)
