@@ -486,3 +486,123 @@ def test_036_refresh_helper_is_service_role_only() -> None:
     assert "auth.role() <> 'service_role'" in body
     assert "f.canonical_payload::text like '%legacy-path:%'" in body
     assert "on conflict (submission_type, submitter_id, fingerprint) do nothing" in body
+
+
+# +------------------------ миграция 039 (D28) ------------------------+
+
+
+def test_039_accepts_comment_without_proofs() -> None:
+    """Заявка живёт, если есть хотя бы файл, ссылка или комментарий."""
+    body = _latest_function("submit_completion_with_proofs")
+
+    assert "left(coalesce(p_comment, ''), 2000)" in body
+    assert "regexp_replace" in body and "'[[:space:]]'" in body
+    assert "v_has_comment := nullif(" in body
+    assert "if jsonb_array_length(p_proofs) = 0 and not v_has_comment then" in body
+    # Отказ остался прежним маркером: приложение маппит его в понятный текст.
+    assert "message = 'proof_required'" in body
+
+
+def test_039_keeps_submission_rpc_service_only_and_atomic() -> None:
+    body = _latest_function("submit_completion_with_proofs")
+
+    assert "auth.role() <> 'service_role'" in body
+    assert "pg_advisory_xact_lock" in body
+    assert "delete from public.proofs p where p.completion_id = v_completion_id" in body
+    assert "register_submission_fingerprint(" in body
+    assert "return query select v_completion_id, v_attempt" in body
+
+
+def test_039_does_not_touch_creator_proof_invariant() -> None:
+    """Публикация по-прежнему требует доказательство автора (миграция 013)."""
+    sql = _migration("039")
+
+    # 039 переопределяет только RPC отправки: схема, RLS и триггеры не трогаем.
+    for forbidden in ("alter table", "drop trigger", "drop policy", "create policy"):
+        assert forbidden not in sql, forbidden
+    assert (
+        "create or replace function public.enforce_creator_proof_on_publish" not in sql
+    )
+    assert "begin" in sql and "commit" in sql
+    assert "revoke execute on function public.submit_completion_with_proofs" in sql
+    assert ") to service_role" in sql
+
+    guard = _latest_function("enforce_creator_proof_on_publish")
+    assert "public.proofs" in guard
+
+
+# +------------------------ миграция 040 (D29) ------------------------+
+
+
+def test_040_player_search_is_literal_case_insensitive_and_public() -> None:
+    sql = _migration("040")
+
+    assert "security definer" in sql
+    assert "set search_path = public" in sql
+    assert "strpos(lower(r.username), lower(btrim(p_query)))" in sql
+    assert "strpos(lower(coalesce(r.display_name, '')), lower(btrim(p_query)))" in sql
+    assert "order by f.score desc, f.username asc" in sql
+    assert "limit least(greatest(p_limit, 1), 100)" in sql
+    assert "count(*) over () as total_count" in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to anon, authenticated" in sql
+    assert "notify pgrst, 'reload schema'" in sql
+
+
+def test_040_only_adds_search_rpc_for_pre_migration_fallback() -> None:
+    sql = _migration("040")
+
+    assert "create or replace function public.player_leaderboard_search_page(" in sql
+    assert "create or replace function public.player_leaderboard()" not in sql
+    assert "c.status = 'approved'" in sql
+    assert "a.ranking_status = 'ranked'" in sql
+    assert "round((1000.0 / a.rank)::numeric, 2)" in sql
+
+
+# +------------------------ миграция 041 (D30) ------------------------+
+
+
+def test_041_player_scores_use_global_bt_rating_scale() -> None:
+    body = _latest_function("player_leaderboard_scores")
+
+    assert "security definer" in body
+    assert "set search_path = public" in body
+    assert "max(a.bt_rating) over () as max_bt_rating" in body
+    assert "a.status = 'published'" in body
+    assert "a.ranking_status = 'ranked'" in body
+    assert "a.rank is not null" in body
+    assert "a.bt_rating is not null" in body
+    assert "c.status = 'approved'" in body
+    assert "1000.0 * power(10.0, (e.bt_rating - e.max_bt_rating) / 400.0)" in body
+    assert "round(sum(s.points), 2)" in body
+    assert "count(*)::integer" in body
+
+
+def test_041_leaderboard_rpcs_share_scores_and_keep_contracts() -> None:
+    legacy = _latest_function("player_leaderboard")
+    page = _latest_function("player_leaderboard_page")
+    search = _latest_function("player_leaderboard_search_page")
+
+    for body in (legacy, page, search):
+        assert "from public.player_leaderboard_scores() s" in body
+        assert "security definer" in body
+        assert "set search_path = public" in body
+
+    assert "total_count bigint" in page
+    assert "count(*) over () as total_count" in page
+    assert "total_count bigint" in search
+    assert "count(*) over () as total_count" in search
+    assert "limit least(greatest(p_limit, 1), 100)" in search
+    assert "strpos(lower(s.username), lower(btrim(p_query)))" in search
+    assert (
+        "strpos(lower(coalesce(s.display_name, '')), lower(btrim(p_query)))" in search
+    )
+
+
+def test_041_internal_score_helper_is_not_publicly_executable() -> None:
+    sql = _migration("041")
+
+    assert "revoke all on function public.player_leaderboard_scores()" in sql
+    assert "from public, anon, authenticated, service_role" in sql
+    assert "grant execute on function public.player_leaderboard_scores()" not in sql
+    assert "notify pgrst, 'reload schema'" in sql

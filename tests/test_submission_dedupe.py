@@ -207,7 +207,7 @@ def test_duplicate_detectors_read_only_their_own_errors() -> None:
 @pytest.mark.parametrize(
     ("marker", "message"),
     [
-        ("PROOF_REQUIRED", submissions_service.PROOF_REQUIRED_MESSAGE),
+        ("PROOF_REQUIRED", submissions_service.SUBMISSION_CONTENT_REQUIRED_MESSAGE),
         ("PROOF_HASH_REQUIRED", submissions_service.PROOF_HASH_REQUIRED_MESSAGE),
         ("INVALID_PROOF_PATH", submissions_service.INVALID_PROOF_PATH_MESSAGE),
         ("INVALID_PROOF_URL", submissions_service.INVALID_PROOF_URL_MESSAGE),
@@ -290,7 +290,7 @@ def test_rpc_duplicate_cleans_uploads_and_uses_clear_message(
 @pytest.mark.parametrize(
     ("marker", "message"),
     [
-        ("PROOF_REQUIRED", submissions_service.PROOF_REQUIRED_MESSAGE),
+        ("PROOF_REQUIRED", submissions_service.SUBMISSION_CONTENT_REQUIRED_MESSAGE),
         ("PROOF_HASH_REQUIRED", submissions_service.PROOF_HASH_REQUIRED_MESSAGE),
         ("INVALID_PROOF_PATH", submissions_service.INVALID_PROOF_PATH_MESSAGE),
         ("INVALID_PROOF_URL", submissions_service.INVALID_PROOF_URL_MESSAGE),
@@ -333,8 +333,156 @@ def test_submission_without_proof_is_rejected_before_any_rpc(
             uploads=[],
         )
 
-    assert str(excinfo.value) == submissions_service.PROOF_REQUIRED_MESSAGE
+    assert str(excinfo.value) == submissions_service.SUBMISSION_CONTENT_REQUIRED_MESSAGE
     assert service.rpc_calls == []
+
+
+# +------------------- D28: файл ИЛИ ссылка ИЛИ комментарий -------------------+
+
+
+def test_comment_only_submission_is_sent_without_uploads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _ServiceClient(rpc_result=[{"completion_id": 8, "attempt_no": 1}])
+    user_client = _UserClient()
+
+    result = _submit(
+        monkeypatch,
+        service,
+        user_client,
+        description="",
+        external_url="",
+        uploads=[],
+        comment="Сдал проект в курсе, скриншот в ЛК.",
+    )
+
+    assert result == {"id": 8, "attempt_no": 1}
+    params = service.rpc_calls[0]
+    assert params["p_proofs"] == []
+    assert params["p_comment"] == "Сдал проект в курсе, скриншот в ЛК."
+    assert user_client.bucket.uploads == []
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"external_url": "https://example.org/run", "uploads": []},
+        {"external_url": "", "uploads": [_upload()]},
+        {"external_url": "", "uploads": [], "comment": "текст"},
+        {"external_url": "", "uploads": [_upload()], "comment": "текст"},
+    ],
+    ids=["link", "file", "comment", "file_and_comment"],
+)
+def test_any_single_content_kind_is_accepted(
+    monkeypatch: pytest.MonkeyPatch, kwargs: dict
+) -> None:
+    service = _ServiceClient(rpc_result=[{"completion_id": 8, "attempt_no": 1}])
+    _submit(
+        monkeypatch,
+        service,
+        _UserClient(),
+        description="",
+        **{"external_url": "", "uploads": [], **kwargs},
+    )
+
+    assert len(service.rpc_calls) == 1
+
+
+def test_creator_still_needs_file_or_link(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Комментарий автора не доказывает прохождение: публикация невозможна."""
+    service = _ServiceClient()
+
+    with pytest.raises(completions_service.ProofError) as excinfo:
+        _submit(
+            monkeypatch,
+            service,
+            _UserClient(),
+            description="",
+            external_url="",
+            uploads=[],
+            comment="я автор, поверьте на слово",
+            require_proof=True,
+        )
+
+    assert str(excinfo.value) == submissions_service.CREATOR_PROOF_REQUIRED_MESSAGE
+    assert service.rpc_calls == []
+
+
+def test_creator_with_comment_and_file_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _ServiceClient(rpc_result=[{"completion_id": 8, "attempt_no": 1}])
+
+    _submit(
+        monkeypatch,
+        service,
+        _UserClient(),
+        description="",
+        external_url="https://example.org/run",
+        uploads=[],
+        comment="ссылка на коммит",
+        require_proof=True,
+    )
+
+    assert service.rpc_calls[0]["p_comment"] == "ссылка на коммит"
+
+
+def test_legacy_comment_only_submission_keeps_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _ServiceClient(missing_table=True)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: service)
+    monkeypatch.setattr(completions_service, "get_user_completion", lambda *_: None)
+    created: dict = {}
+
+    def _create_completion(_request, achievement_id, user_id, **kwargs):
+        created.update({"achievement_id": achievement_id, **kwargs})
+        return {"id": 42, "status": "pending", "comment": kwargs.get("comment", "")}
+
+    monkeypatch.setattr(completions_service, "create_completion", _create_completion)
+    comments: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        completions_service,
+        "_set_completion_comment",
+        lambda _client, cid, text: comments.append((cid, text)),
+    )
+    user_client = _UserClient()
+    monkeypatch.setattr(
+        auth_service, "user_client_from_request", lambda _request: user_client
+    )
+
+    completion = completions_service.submit_completion(
+        _request(),
+        achievement_id=ACHIEVEMENT_ID,
+        description="",
+        external_url="",
+        uploads=[],
+        comment="описание прохождения без файлов",
+    )
+
+    assert completion["id"] == 42
+    assert created["comment"] == "описание прохождения без файлов"
+    assert user_client.bucket.uploads == []
+
+
+def test_legacy_empty_submission_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = _ServiceClient(missing_table=True)
+    monkeypatch.setattr(auth_service, "new_service_client", lambda: service)
+    monkeypatch.setattr(
+        auth_service, "user_client_from_request", lambda _request: _UserClient()
+    )
+
+    with pytest.raises(completions_service.ProofError) as excinfo:
+        completions_service.submit_completion(
+            _request(),
+            achievement_id=ACHIEVEMENT_ID,
+            description="",
+            external_url="",
+            uploads=[],
+            comment="   ",
+        )
+
+    assert str(excinfo.value) == submissions_service.SUBMISSION_CONTENT_REQUIRED_MESSAGE
 
 
 def test_missing_service_key_fails_fast(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -504,6 +652,31 @@ def test_lost_rpc_response_after_commit_is_reconciled(
 
     assert result == {"id": 11, "attempt_no": 3}
     assert user_client.bucket.removed == [["u/5/old.png"]]
+
+
+def test_lost_rpc_response_after_comment_only_commit_is_reconciled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _ServiceClient(rpc_error=httpx.ConnectError("response lost"))
+    user_client = _UserClient()
+
+    def _commit_then_lose_response() -> None:
+        service.state = {"id": 12, "submission_attempt": 1, "status": "pending"}
+
+    service.rpc_hook = _commit_then_lose_response
+
+    result = _submit(
+        monkeypatch,
+        service,
+        user_client,
+        description="",
+        external_url="",
+        uploads=[],
+        comment="Прохождение без файлов и ссылки",
+    )
+
+    assert result == {"id": 12, "attempt_no": 1}
+    assert user_client.bucket.removed == []
 
 
 def test_lost_rpc_response_before_commit_removes_orphan_upload(

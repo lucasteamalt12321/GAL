@@ -164,17 +164,24 @@ def list_page(
     request: Request,
     category: str | None = None,
     sort: str = achievements_service.SORT_RANK,
+    rating: str = achievements_service.RATING_ALL,
     q: str | None = None,
     page: int = 1,
     info: str | None = None,
 ) -> HTMLResponse:
     if sort not in achievements_service.ALLOWED_SORTS:
         sort = achievements_service.SORT_RANK
+    if rating not in achievements_service.ALLOWED_RATINGS:
+        rating = achievements_service.RATING_ALL
     query = (q or "").strip()[:100]
     page = max(1, page)
     categories = achievements_service.list_categories()
     items, total = achievements_service.list_achievements(
-        category_slug=category, sort=sort, page=page, query=query or None
+        category_slug=category,
+        sort=sort,
+        page=page,
+        query=query or None,
+        rated_only=rating == achievements_service.RATING_RATED,
     )
     active = next((c for c in categories if c["slug"] == category), None)
     pages = max(1, math.ceil(total / achievements_service.PAGE_SIZE))
@@ -192,6 +199,7 @@ def list_page(
             "active_category": active,
             "category_missing": bool(category) and active is None,
             "sort": sort,
+            "rating": rating,
             "query": query,
             "page": page,
             "pages": pages,
@@ -384,6 +392,9 @@ def create(
             uploads=uploads,
             harder_count=parsed_harder,
             proofs_visible=True,
+            # Создание достижений: автор публикуется только с доказательством,
+            # поэтому комментарий сам по себе заявку не заменяет.
+            require_proof=True,
         )
     except completions_service.CompletionError as exc:
         _rollback_created_achievement(request, item["id"])
@@ -611,6 +622,9 @@ def complete(
             # Верификация создателя всегда публична; обычный пользователь
             # может скрыть доказательство от остальных.
             proofs_visible=is_creator or hide_proofs != "on",
+            # Автор обязан приложить файл или ссылку: комментарий не даёт
+            # доказать прохождение, и достижение не опубликуется.
+            require_proof=is_creator,
         )
     except completions_service.CompletionError as exc:
         return RedirectResponse(

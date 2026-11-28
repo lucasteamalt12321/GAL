@@ -21,16 +21,24 @@
          aria-label="Поиск достижений по названию">
   {% if active_category %}<input type="hidden" name="category" value="{{ active_category.slug }}">{% endif %}
   <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="rating" value="{{ rating }}">
   <button type="submit" class="btn">Найти</button>
-  {% if query %}<a class="btn" href="/achievements?sort={{ sort }}{% if active_category %}&category={{ active_category.slug }}{% endif %}">Сбросить</a>{% endif %}
+  {% if query %}<a class="btn" href="{{ request.url.remove_query_params('q').include_query_params(rating=rating, sort=sort, page=1) }}">Сбросить</a>{% endif %}
 </form>
 
-<div class="chips">
+<div class="chips" aria-label="Фильтр достижений по наличию оценки">
+  <a class="chip {% if rating == 'all' %}chip-active{% endif %}"
+     href="{{ request.url.include_query_params(rating='all', page=1) }}">Все</a>
+  <a class="chip {% if rating == 'rated' %}chip-active{% endif %}"
+     href="{{ request.url.include_query_params(rating='rated', page=1) }}">Только оценённые</a>
+</div>
+
+<div class="chips" aria-label="Категории достижений">
   <a class="chip {% if not active_category %}chip-active{% endif %}"
-     href="/achievements?sort={{ sort }}">Все</a>
+     href="{{ request.url.remove_query_params('category').include_query_params(rating=rating, sort=sort, page=1) }}">Все категории</a>
   {% for c in categories %}
     <a class="chip {% if active_category and active_category.slug == c.slug %}chip-active{% endif %}"
-       href="/achievements?category={{ c.slug }}&sort={{ sort }}">{{ c.name }}</a>
+       href="{{ request.url.include_query_params(category=c.slug, rating=rating, sort=sort, page=1) }}">{{ c.name }}</a>
   {% endfor %}
 </div>
 
@@ -74,6 +82,7 @@
   <section class="placeholder">
     <p>
       {% if query %}По запросу «{{ query }}» ничего не найдено.
+      {% elif rating == 'rated' %}Пока нет оценённых достижений{% if active_category %} в категории «{{ active_category.name }}»{% endif %}. Номер появится после второй оценки.
       {% else %}Пока нет опубликованных достижений{% if active_category %} в категории «{{ active_category.name }}»{% endif %}.{% endif %}
     </p>
   </section>

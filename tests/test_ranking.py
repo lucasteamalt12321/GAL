@@ -102,22 +102,28 @@ def test_eligible_keeps_order_and_fields() -> None:
 # --- player_score ------------------------------------------------------------
 
 
-def test_player_score_rank_1() -> None:
-    assert player_score(1) == 1000.0
+def test_player_score_max_rating_gives_1000() -> None:
+    assert player_score(1280.0, 1280.0) == 1000.0
 
 
-def test_player_score_rank_2() -> None:
-    assert player_score(2) == 500.0
+def test_player_score_400_rating_gap_gives_100() -> None:
+    assert player_score(880.0, 1280.0) == 100.0
 
 
-def test_player_score_rank_3() -> None:
-    assert player_score(3) == 333.33
+def test_player_score_800_rating_gap_gives_10() -> None:
+    assert player_score(480.0, 1280.0) == 10.0
 
 
-def test_player_score_none_is_zero() -> None:
-    assert player_score(None) == 0.0
+def test_player_score_rounds_to_two_decimals() -> None:
+    assert player_score(1273.0, 1280.0) == 960.51
 
 
-def test_player_score_zero_or_negative_is_zero() -> None:
-    assert player_score(0) == 0.0
-    assert player_score(-5) == 0.0
+def test_player_score_missing_rating_or_max_is_zero() -> None:
+    assert player_score(None, 1280.0) == 0.0
+    assert player_score(1280.0, None) == 0.0
+    assert player_score(None, None) == 0.0
+
+
+def test_player_score_accepts_zero_and_negative_ratings() -> None:
+    assert player_score(0.0, 400.0) == 100.0
+    assert player_score(-400.0, 1000.0) == 0.32

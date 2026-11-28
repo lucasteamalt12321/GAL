@@ -1,81 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Рейтинг{% endblock %}
+{% block title %}Игроки{% endblock %}
 {% block content %}
-  <h1>Рейтинг</h1>
+  <h1>Игроки</h1>
   <p class="muted">
-    Место определяется силой Bradley–Terry: она оценивается по попарным сравнениям
-    из личных шкал участников. BT-рейтинг 1000 — средний уровень; разница 400
-    очков означает примерно десятикратное превосходство в шансах быть сложнее.
-    «±» и 95% ДИ показывают точность оценки: чем больше сравнений, тем интервал уже.
-  </p>
-  <p class="muted">
-    «?» — у достижения пока одна оценка: его позиция предварительная (по силе BT
-    и среднему месту) и не занимает номер в рейтинге. Номер появится после
-    второй оценки. «*» — временное место в топ-5: его вручную выставляет
-    модератор, и оно исчезнет после третьей обычной оценки, когда место
-    пересчитают по постоянному рейтингу.
+    Очки считаются по BT-рейтингу: лучшее достижение даёт 1000 очков,
+    остальные — меньше в зависимости от разницы в рейтинге. Игроки отсортированы по сумме очков.
   </p>
 
-  <section class="leaderboard-section">
-    <h2>Топ достижений</h2>
-    {% if achievements %}
-      <div class="table-scroll" tabindex="0" role="region" aria-label="Топ достижений">
-        <table class="leaderboard-table">
-          <caption class="visually-hidden">Достижения, отсортированные по силе Bradley–Terry</caption>
-          <thead>
-            <tr>
-              <th scope="col">#</th>
-              <th scope="col">Достижение</th>
-              <th scope="col">Категория</th>
-              <th scope="col">BT-рейтинг</th>
-              <th scope="col">Сравнений</th>
-              <th scope="col">Оценок</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for a in achievements %}
-              <tr>
-                <td class="lb-rank">
-                  {% if a.rank is not none %}#{{ a.rank }}{% if a.is_temporary %}<span title="Временное место в топ-5">*</span>{% endif %}{% else %}<span class="lb-rank-unknown" title="Предварительное место: нужна вторая оценка">?</span>{% endif %}
-                </td>
-                <td><a href="/achievements/{{ a.id }}">{{ a.title }}</a></td>
-                <td>{{ a.category.name if a.category else '—' }}</td>
-                <td>
-                  {{ "%.0f"|format(a.bt_rating) if a.bt_rating|default(none, true) is not none else '—' }}
-                  {% set ci = a.bt_rating_se|rating_ci(
-                       a.bt_rating_ci_low,
-                       a.bt_rating_ci_high,
-                       a.bt_comparisons|default(0, true)) %}
-                  {% if ci %}<span class="lb-ci">{{ ci }}</span>{% endif %}
-                </td>
-                <td>{{ a.bt_comparisons|default(0, true) }}</td>
-                <td>{{ a.evaluation_count }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <p class="result-count muted">Всего оценённых достижений: {{ total }}</p>
-      {% if pages > 1 %}
-        <nav class="pagination" aria-label="Страницы рейтинга достижений">
-          {% if page > 1 %}
-            <a class="btn" href="{{ request.url.include_query_params(page=page-1) }}">← Назад</a>
-          {% endif %}
-          <span class="muted">Страница {{ page }} из {{ pages }}</span>
-          {% if page < pages %}
-            <a class="btn" href="{{ request.url.include_query_params(page=page+1) }}">Вперёд →</a>
-          {% endif %}
-        </nav>
-      {% endif %}
-    {% else %}
-      <p class="muted">Пока нет оценённых достижений — рейтинг появится после первой оценки.</p>
+  <form method="get" action="/leaderboard" class="search-form" role="search">
+    <input type="search" name="q" value="{{ query }}" placeholder="Поиск по имени или нику"
+           maxlength="100" aria-label="Поиск игроков по имени или нику">
+    <button type="submit" class="btn">Найти</button>
+    {% if query %}
+      <a class="btn" href="{{ request.url.remove_query_params('q').include_query_params(players_page=1) }}">Сбросить</a>
     {% endif %}
-  </section>
+  </form>
 
   <section class="leaderboard-section">
-    <h2>Топ игроков</h2>
     {% if players %}
-      <div class="table-scroll" tabindex="0" role="region" aria-label="Топ игроков">
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Игроки">
         <table class="leaderboard-table">
           <caption class="visually-hidden">Игроки, отсортированные по сумме очков</caption>
           <thead>
@@ -89,7 +32,7 @@
           <tbody>
             {% for p in players %}
               <tr>
-                <td class="lb-rank">{{ (players_page - 1) * 25 + loop.index }}</td>
+                <td class="lb-rank">{{ (page - 1) * page_size + loop.index }}</td>
                 <td><a href="/users/{{ p.username }}">{{ p.display_name or p.username }}</a></td>
                 <td class="lb-score">{{ p.score }}</td>
                 <td>{{ p.achievement_count }}</td>
@@ -98,20 +41,25 @@
           </tbody>
         </table>
       </div>
-      <p class="result-count muted">Всего игроков: {{ players_total }}</p>
-      {% if players_pages > 1 %}
-        <nav class="pagination" aria-label="Страницы рейтинга игроков">
-          {% if players_page > 1 %}
-            <a class="btn" href="{{ request.url.include_query_params(players_page=players_page-1) }}">← Назад</a>
+      <p class="result-count muted">
+        {% if query %}Найдено{% else %}Всего{% endif %} игроков: {{ total }}
+      </p>
+      {% if pages > 1 %}
+        <nav class="pagination" aria-label="Страницы игроков">
+          {% if page > 1 %}
+            <a class="btn" href="{{ request.url.include_query_params(players_page=page-1) }}">← Назад</a>
           {% endif %}
-          <span class="muted">Страница {{ players_page }} из {{ players_pages }}</span>
-          {% if players_page < players_pages %}
-            <a class="btn" href="{{ request.url.include_query_params(players_page=players_page+1) }}">Вперёд →</a>
+          <span class="muted">Страница {{ page }} из {{ pages }}</span>
+          {% if page < pages %}
+            <a class="btn" href="{{ request.url.include_query_params(players_page=page+1) }}">Вперёд →</a>
           {% endif %}
         </nav>
       {% endif %}
     {% else %}
-      <p class="muted">Пока нет очков. Очки начисляются за подтверждённые выполнения ранжированных достижений (1000 / rank).</p>
+      <p class="muted">
+        {% if query %}По запросу «{{ query }}» игроки не найдены.
+        {% else %}Пока нет игроков с очками.{% endif %}
+      </p>
     {% endif %}
   </section>
 {% endblock %}

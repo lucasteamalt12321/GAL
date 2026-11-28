@@ -73,6 +73,8 @@ def test_nav_hides_moderator_links(monkeypatch) -> None:
     assert "Жалобы" not in resp.text
     assert "Модерация" not in resp.text
     assert "Настройки" in resp.text
+    assert 'href="/leaderboard">Игроки</a>' in resp.text
+    assert 'href="/leaderboard">Рейтинг</a>' not in resp.text
 
 
 def test_nav_shows_moderator_links(monkeypatch) -> None:

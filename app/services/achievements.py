@@ -47,7 +47,10 @@ PROFILE_SELECT = "id,username,display_name,avatar_url,role,created_at"
 # Вьюха эффективного топа (миграция 027). До неё каталог работает по таблице,
 # поэтому все обращения к ней терпимы к отсутствию отношения.
 VIEW_NAME = "public_achievements"
-VIEW_SELECT = "*"
+VIEW_SELECT = (
+    "id,title,status,ranking_status,rank,is_temporary,evaluation_count,"
+    "average_position,sort_strength,rank_order,created_at,category"
+)
 VIEW_RANK_FIELDS = (
     "rank",
     "permanent_rank",
@@ -86,6 +89,9 @@ FETCH_BATCH = 1000
 SORT_RANK = "rank"
 SORT_NEW = "new"
 ALLOWED_SORTS = (SORT_RANK, SORT_NEW)
+RATING_ALL = "all"
+RATING_RATED = "rated"
+ALLOWED_RATINGS = (RATING_ALL, RATING_RATED)
 CREATOR_VISIBLE_STATUSES = ("published", "pending")
 
 
@@ -123,6 +129,7 @@ def list_achievements(
     page: int = 1,
     limit: int = PAGE_SIZE,
     query: str | None = None,
+    rated_only: bool = False,
 ) -> tuple[list[dict], int]:
     """Возвращает (страница достижений, всего найдено).
 
@@ -146,6 +153,8 @@ def list_achievements(
             request = request.eq("status", "published")
         if category_id is not None:
             request = request.eq("category_id", category_id)
+        if rated_only:
+            request = request.not_.is_("rank", None)
         if query:
             request = request.ilike("title", f"%{auth_service.ilike_literal(query)}%")
         return request

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
+from html import unescape
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +12,7 @@ from app.main import app
 from app.services import achievements as achievements_service
 from app.services import auth as auth_service
 from app.services import completions as completions_service
+from app.services import rankings as rankings_service
 
 client = TestClient(app)
 
@@ -253,11 +257,12 @@ def test_profile_shows_completed_achievements(monkeypatch) -> None:
             }
         ],
     )
+    monkeypatch.setattr(rankings_service, "max_ranked_bt_rating", lambda: 1523.4)
     resp = client.get("/users/alice")
     assert resp.status_code == 200
     assert "Water" in resp.text
     assert "#2" in resp.text
-    assert "500.00" in resp.text
+    assert "100.00" in resp.text
     assert 'href="https://example.org/video"' in resp.text
     assert "Видео" in resp.text
 
@@ -312,11 +317,13 @@ def test_profile_score_ignores_temporary_places(monkeypatch) -> None:
         ],
     )
 
+    monkeypatch.setattr(rankings_service, "max_ranked_bt_rating", lambda: 1523.4)
+
     resp = client.get("/users/alice")
 
     assert resp.status_code == 200
-    # 1000/2, временное #1 не добавляет очков и не подменяет постоянное место.
-    assert "500.00" in resp.text
+    # Разница 400 BT-пунктов даёт 100 очков; временное #1 не добавляет очки.
+    assert "100.00" in resp.text
     assert "1000.00" not in resp.text
 
 
@@ -360,11 +367,14 @@ def test_profile_score_counts_permanent_rank_with_temporary_overlay(
         ],
     )
 
+    monkeypatch.setattr(rankings_service, "max_ranked_bt_rating", lambda: 1500.0)
+
     resp = client.get("/users/alice")
 
     assert resp.status_code == 200
-    # 1000/8 = 125.00 по permanent_rank, а не 1000/1 по временному месту.
-    assert "125.00" in resp.text
+    # Постоянное ranked-достижение с временным слоем даёт 100 очков:
+    # 1100 против глобального максимума 1500, независимо от display_rank #1.
+    assert "100.00" in resp.text
     assert "1000.00" not in resp.text
 
 
@@ -389,16 +399,31 @@ def test_missing_view_detection_ignores_column_errors() -> None:
     assert achievements_service._is_missing_view(column) is False
 
 
+class _NotFilter:
+    def __init__(self, query: _PagedQuery) -> None:
+        self.query = query
+
+    def is_(self, field: str, value: object) -> _PagedQuery:
+        assert field == "rank" and value is None
+        self.query.rated_only = True
+        return self.query
+
+
 class _PagedQuery:
     def __init__(self, rows: list[dict]) -> None:
         self.rows = rows
         self.select_arg = ""
         self.start = 0
         self.end = 0
+        self.rated_only = False
 
     def select(self, select: str, **_kwargs):
         self.select_arg = select
         return self
+
+    @property
+    def not_(self) -> _NotFilter:
+        return _NotFilter(self)
 
     def eq(self, *_args):
         return self
@@ -415,9 +440,12 @@ class _PagedQuery:
         return self
 
     def execute(self):
+        rows = self.rows
+        if self.rated_only:
+            rows = [row for row in rows if row.get("rank") is not None]
         if self.select_arg == "id":
-            return SimpleNamespace(data=[], count=len(self.rows))
-        return SimpleNamespace(data=self.rows[self.start : self.end + 1], count=None)
+            return SimpleNamespace(data=[], count=len(rows))
+        return SimpleNamespace(data=rows[self.start : self.end + 1], count=None)
 
 
 class _PagedClient:
@@ -450,6 +478,114 @@ def test_catalog_reads_past_postgrest_page_limit(monkeypatch) -> None:
     assert total == 1001
     assert len(page) == 17
     assert page[-1]["id"] == 1
+
+
+def test_catalog_defaults_to_all_ratings_and_rank_sort(monkeypatch) -> None:
+    captured: list[dict] = []
+    monkeypatch.setattr(achievements_service, "list_categories", list)
+    monkeypatch.setattr(
+        achievements_service,
+        "list_achievements",
+        lambda **kwargs: captured.append(kwargs) or ([], 0),
+    )
+
+    resp = client.get("/achievements")
+
+    assert resp.status_code == 200
+    assert captured == [
+        {
+            "category_slug": None,
+            "sort": "rank",
+            "page": 1,
+            "query": None,
+            "rated_only": False,
+        }
+    ]
+    assert 'name="rating" value="all"' in resp.text
+    assert 'class="chip chip-active"' in resp.text
+    assert "Только оценённые" in resp.text
+
+
+def test_catalog_normalizes_invalid_rating(monkeypatch) -> None:
+    captured: list[dict] = []
+    monkeypatch.setattr(achievements_service, "list_categories", list)
+    monkeypatch.setattr(
+        achievements_service,
+        "list_achievements",
+        lambda **kwargs: captured.append(kwargs) or ([], 0),
+    )
+
+    resp = client.get("/achievements?rating=unexpected")
+
+    assert resp.status_code == 200
+    assert captured[0]["rated_only"] is False
+    assert 'name="rating" value="all"' in resp.text
+
+
+def test_catalog_links_preserve_search_rating_category_and_sort(monkeypatch) -> None:
+    monkeypatch.setattr(
+        achievements_service,
+        "list_categories",
+        lambda: [{"id": 1, "name": "Chess", "slug": "chess"}],
+    )
+    monkeypatch.setattr(achievements_service, "list_achievements", lambda **_: ([], 50))
+
+    resp = client.get(
+        "/achievements?category=chess&sort=new&rating=rated&q=water&page=2"
+    )
+
+    assert resp.status_code == 200
+    queries = [
+        parse_qs(urlsplit(unescape(link)).query)
+        for link in re.findall(r'href="([^"]+)"', resp.text)
+    ]
+    assert {
+        "category": ["chess"],
+        "sort": ["new"],
+        "rating": ["rated"],
+        "page": ["1"],
+    } in queries
+    assert {
+        "q": ["water"],
+        "sort": ["new"],
+        "rating": ["rated"],
+        "page": ["1"],
+    } in queries
+
+
+def test_catalog_rated_filter_runs_before_pagination(monkeypatch) -> None:
+    rows = [
+        {
+            "id": i,
+            "rank": None if i == 2 else i,
+            "ranking_status": "unknown" if i in (2, 3) else "ranked",
+            "sort_strength": float(i),
+            "average_position": 1.0,
+            "rank_order": float(i),
+            "created_at": "",
+        }
+        for i in range(1, 27)
+    ]
+    monkeypatch.setattr(
+        achievements_service.auth_service,
+        "new_anon_client",
+        lambda: _PagedClient(rows),
+    )
+
+    first_page, total = achievements_service.list_achievements(
+        limit=24, rated_only=True
+    )
+    second_page, second_total = achievements_service.list_achievements(
+        page=2, limit=24, rated_only=True
+    )
+
+    assert total == second_total == 25
+    assert len(first_page) == 24
+    assert [row["id"] for row in second_page] == [1]
+    assert all(row["rank"] is not None for row in first_page)
+    temporary = next(row for row in first_page if row["id"] == 3)
+    assert temporary["ranking_status"] == "unknown"
+    assert temporary["rank"] == 3
 
 
 def test_create_page_blocked_without_evaluation(monkeypatch) -> None:

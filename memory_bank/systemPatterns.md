@@ -116,7 +116,9 @@ gal/
    (030: адресное удаление не-eligible строк + upsert по achievement_id,
    а не очистка всего кэша — stale payload не стирает свежие строки)
 9. Общий display_rank = ranked + временные; permanent_rank не меняется
-10. Очки игроков выводятся только из permanent_rank (1000/rank), временные #N* не учитываются
+10. Очки игроков считаются по BT-рейтингу относительно глобального максимума:
+    round(1000 * 10^((bt_rating - max_bt_rating) / 400), 2); максимум даёт 1000,
+    временные #N* и неранжированные достижения не учитываются
 ```
 
 Пересчёт запускается после оценки, модерации и принятия жалобы; запись
@@ -154,9 +156,9 @@ gal/
 
 ### 8. Публичные страницы
 
-- `/users/{username}` — без авторизации: профиль (avatar, display_name, role, дата регистрации), очки `sum(1000/permanent_rank)` без временных мест, число пройденных, пройденные достижения (approved + published, с доказательствами) и созданные (для чужих — только published).
+- `/users/{username}` — без авторизации: профиль (avatar, display_name, role, дата регистрации), очки по той же BT-относительной формуле, что и в лидерборде, без временных мест, число пройденных, пройденные достижения (approved + published, с доказательствами) и созданные (для чужих — только published).
 - `/achievements/{id}` — место и BT-сила/рейтинг, прошедшие пользователи с доказательствами, форма «Отправить прохождение» (для авторизованного без своей заявки; для гостя — вход).
-- `/leaderboard` — топ достижений и игроков. В достижения входят ranked (с номером) и опубликованные с одной оценкой: их позиция предварительная (BT, затем среднее место) и выводится как «?», не занимая номер в нумерации.
+- `/leaderboard` — вкладка «Игроки»: поиск по `username`/`display_name`, пагинация по 25, порядок `score DESC, username ASC`; achievement leaderboard остаётся сервисом для главной.
 
 ### 9. Защита от идентичных заявок (D25/036)
 
@@ -173,5 +175,5 @@ Achievement → Creator Proof → Moderation → Published
    → User Completion → Completion Proof → Moderation
    → Personal Evaluation → Pairwise Comparisons
    → Bradley–Terry Strength → Global Rank
-   → 1000 / Rank → Player Leaderboard
+   → BT-relative Player Score → Player Leaderboard
 ```

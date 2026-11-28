@@ -14,12 +14,13 @@ from supabase import Client
 from app.config import get_settings
 from app.services import auth as auth_service
 from app.services.submissions import (
+    CREATOR_PROOF_REQUIRED_MESSAGE,
     DUPLICATE_PROOF_MESSAGE,
     DUPLICATE_SUBMISSION_MESSAGE,
     INVALID_PROOF_URL_MESSAGE,
     MIGRATION_PENDING_MESSAGE,
-    PROOF_REQUIRED_MESSAGE,
     SERVICE_NOT_CONFIGURED_MESSAGE,
+    SUBMISSION_CONTENT_REQUIRED_MESSAGE,
     constraint_error,
     is_already_completed,
     is_duplicate_proof,
@@ -1176,7 +1177,7 @@ def _reconcile_submission(
     stored_paths = (
         _service_proof_paths(service_client, completion_id) if applied else set()
     )
-    if applied and uploaded_paths and set(uploaded_paths).issubset(stored_paths):
+    if applied and (not uploaded_paths or set(uploaded_paths).issubset(stored_paths)):
         logger.warning(
             "RPC response lost after commit; reconciled completion %s attempt %s",
             completion_id,
@@ -1317,6 +1318,30 @@ def _submit_completion_with_rpc(
     return {"id": completion_id, "attempt_no": row.get("attempt_no")}
 
 
+def _check_submission_content(
+    *,
+    has_url: bool,
+    has_files: bool,
+    comment: str,
+    require_proof: bool = False,
+) -> None:
+    """Правило приёма заявки: файл, ссылка или комментарий — хотя бы одно.
+
+    Для автора собственного достижения (require_proof) комментарий не заменяет
+    доказательство: публикация без approved-прохождения автора с proof
+    запрещена триггером enforce_creator_proof_on_publish (миграция 013).
+    """
+    if has_url or has_files:
+        return
+    if comment and not require_proof:
+        return
+    raise ProofError(
+        CREATOR_PROOF_REQUIRED_MESSAGE
+        if require_proof
+        else SUBMISSION_CONTENT_REQUIRED_MESSAGE
+    )
+
+
 def submit_completion(
     request: Request,
     *,
@@ -1328,6 +1353,7 @@ def submit_completion(
     harder_count: int | None = None,
     proofs_visible: bool = True,
     comment: str = "",
+    require_proof: bool = False,
 ) -> dict:
     user = request.state.user
     if user is None:
@@ -1340,10 +1366,12 @@ def submit_completion(
 
     external_url = (external_url or "").strip()
     files = _attachment_files(uploads) + _attachment_files([uploaded])
-    if not external_url and not files:
-        # Раньше здесь создавалась пустая заявка legacy-INSERT; после 036 такой
-        # путь невозможен, да и пользователю он просто не нужен.
-        raise ProofError(PROOF_REQUIRED_MESSAGE)
+    _check_submission_content(
+        has_url=bool(external_url),
+        has_files=bool(files),
+        comment=comment,
+        require_proof=require_proof,
+    )
 
     result = _submit_completion_with_rpc(
         request,
@@ -1369,6 +1397,7 @@ def submit_completion(
         harder_count=harder_count,
         proofs_visible=proofs_visible,
         comment=comment,
+        require_proof=require_proof,
     )
 
 
@@ -1383,6 +1412,7 @@ def _submit_completion_legacy(
     harder_count: int | None = None,
     proofs_visible: bool = True,
     comment: str = "",
+    require_proof: bool = False,
 ) -> dict:
     user = request.state.user
     if user is None:
@@ -1396,6 +1426,15 @@ def _submit_completion_legacy(
         raise ProofError(
             f"Комментарий слишком длинный: максимум {MAX_COMMENT_LENGTH} символов."
         )
+
+    external_url = (external_url or "").strip()
+    files = _attachment_files(uploads) + _attachment_files([uploaded])
+    _check_submission_content(
+        has_url=bool(external_url),
+        has_files=bool(files),
+        comment=comment,
+        require_proof=require_proof,
+    )
 
     existing = get_user_completion(request, achievement_id)
 
@@ -1453,13 +1492,23 @@ def _submit_completion_legacy(
         # 035 не применена), комментарий допишется через RPC ниже.
         comment_stored = (completion.get("comment") or "").strip() == comment
 
-    external_url = (external_url or "").strip()
-    files = _attachment_files(uploads) + _attachment_files([uploaded])
-    if not external_url and not files:
-        already_pending = completion.get("status") == "pending" or (
-            existing is not None and existing["status"] == "rejected"
-        )
-        if already_pending:
+    if external_url or files:
+        try:
+            attach_proofs(
+                request,
+                completion_id=completion["id"],
+                achievement_id=achievement_id,
+                description=description,
+                external_url=external_url,
+                uploads=files,
+            )
+        except CompletionError as exc:
+            logger.warning(
+                "Proof attach failed for completion %s: %s",
+                completion["id"],
+                str(exc),
+                exc_info=True,
+            )
             try:
                 client.rpc(
                     "remove_empty_pending_completion",
@@ -1471,34 +1520,7 @@ def _submit_completion_legacy(
                     completion["id"],
                     exc_info=True,
                 )
-        raise ProofError("Приложите файл или укажите ссылку на доказательство.")
-
-    try:
-        attach_proofs(
-            request,
-            completion_id=completion["id"],
-            achievement_id=achievement_id,
-            description=description,
-            external_url=external_url,
-            uploads=files,
-        )
-    except CompletionError as exc:
-        logger.warning(
-            "Proof attach failed for completion %s: %s",
-            completion["id"],
-            str(exc),
-            exc_info=True,
-        )
-        try:
-            client.rpc(
-                "remove_empty_pending_completion",
-                {"p_completion_id": completion["id"]},
-            ).execute()
-        except COMPLETION_ERRORS:
-            logger.debug(
-                "Failed to clean empty completion %s", completion["id"], exc_info=True
-            )
-        raise
+            raise
 
     if not comment_stored:
         # Заявка уже существовала: комментарий пишется (или очищается) через

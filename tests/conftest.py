@@ -85,6 +85,7 @@ def _service_client_without_network(monkeypatch):
 def _landing_without_network(monkeypatch):
     from app import main as main_module
     from app.services import completions as completions_service
+    from app.services import rankings as rankings_service
 
     monkeypatch.setattr(
         main_module.rankings_service,
@@ -96,6 +97,7 @@ def _landing_without_network(monkeypatch):
         "player_leaderboard",
         lambda **_: ([], 0),
     )
+    monkeypatch.setattr(rankings_service, "max_ranked_bt_rating", lambda: 1000.0)
     # Публичные списки прошедших читаются через RPC; в тестах без реальной
     # сети по умолчанию пусты. Конкретные тесты переопределяют их сами.
     monkeypatch.setattr(

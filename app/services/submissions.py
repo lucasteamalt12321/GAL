@@ -6,6 +6,17 @@ DUPLICATE_PROOF_MESSAGE = (
     "измените набор файлов или ссылок."
 )
 PROOF_REQUIRED_MESSAGE = "Приложите файл или укажите ссылку на доказательство."
+# Правило отправки (D28): достаточно хотя бы одного из трёх — файл(ы), ссылка
+# или комментарий. Комментарий тоже считается содержанием заявки.
+SUBMISSION_CONTENT_REQUIRED_MESSAGE = (
+    "Приложите файл, укажите ссылку или напишите комментарий — нужно хотя бы одно."
+)
+# Автор своего достижения отправляет заявку с доказательством: без файла или
+# ссылки публикация невозможна (enforce_creator_proof_on_publish, миграция 013).
+CREATOR_PROOF_REQUIRED_MESSAGE = (
+    "Приложите файл или укажите ссылку на доказательство: без них достижение "
+    "нельзя отправить на модерацию."
+)
 PROOF_HASH_REQUIRED_MESSAGE = (
     "Не удалось вычислить отпечаток файла. Загрузите доказательство заново."
 )
@@ -68,7 +79,8 @@ def proof_validation_error(exc: BaseException) -> str | None:
     """Возвращает понятный текст для ошибок проверки доказательства RPC."""
     text = _error_text(exc)
     for marker, message in (
-        ("PROOF_REQUIRED", PROOF_REQUIRED_MESSAGE),
+        # БД отвечает PROOF_REQUIRED, когда нет ни доказательств, ни комментария.
+        ("PROOF_REQUIRED", SUBMISSION_CONTENT_REQUIRED_MESSAGE),
         ("PROOF_HASH_REQUIRED", PROOF_HASH_REQUIRED_MESSAGE),
         ("INVALID_PROOF_PATH", INVALID_PROOF_PATH_MESSAGE),
         ("INVALID_PROOF_URL", INVALID_PROOF_URL_MESSAGE),

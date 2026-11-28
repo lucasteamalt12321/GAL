@@ -67,11 +67,12 @@ def compute_ranks(candidates: Iterable[RankCandidate]) -> dict[int, int]:
     return {c.id: i + 1 for i, c in enumerate(ordered)}
 
 
-def player_score(rank: int | None) -> float:
-    """Очки игрока за достижение с данным рангом: 1000 / rank.
+def player_score(bt_rating: float | None, max_bt_rating: float | None) -> float:
+    """Очки за достижение относительно лучшего BT-рейтинга.
 
-    `unknown`/без ранга или rank <= 0 дают 0 очков (Score policy MVP).
+    Максимум даёт 1000 очков; разница в 400 рейтинга соответствует
+    десятикратной разнице в награде. Без рейтинга достижение не даёт очков.
     """
-    if rank is None or rank <= 0:
+    if bt_rating is None or max_bt_rating is None:
         return 0.0
-    return round(1000.0 / float(rank), 2)
+    return round(1000.0 * 10 ** ((float(bt_rating) - float(max_bt_rating)) / 400.0), 2)

@@ -31,3 +31,6 @@ appwrite/build/
 .vscode/
 *.swp
 .DS_Store
+
+# local Windows ACL recovery reports
+/acl-recovery/

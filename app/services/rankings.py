@@ -6,8 +6,9 @@ Achievement leaderboard читает вьюху ``public.public_achievements``: 
 миграции 027 вьюхи нет — тогда используется прежний запрос к ``achievements``.
 
 Player leaderboard использует security definer функцию
-public.player_leaderboard_page() (агрегат по approved completions, недоступным
-публично под RLS).
+public.player_leaderboard_search_page() (агрегат по approved completions,
+недоступным публично под RLS). До миграции 040 поиск и пагинация выполняются
+в Python поверх legacy RPC player_leaderboard().
 """
 
 from __future__ import annotations
@@ -39,10 +40,8 @@ MIN_EVALUATIONS = 1
 
 VIEW_NAME = "public_achievements"
 VIEW_SELECT = (
-    "id,title,ranking_status,average_position,permanent_rank,rank,is_temporary,"
-    "in_leaderboard,evaluation_count,bt_strength,bt_rating,bt_comparisons,"
-    "bt_rating_se,bt_rating_ci_low,bt_rating_ci_high,sort_strength,"
-    "category,creator"
+    "id,title,rank,is_temporary,evaluation_count,bt_rating,bt_comparisons,"
+    "bt_rating_se,bt_rating_ci_low,bt_rating_ci_high,category"
 )
 
 
@@ -80,7 +79,7 @@ def is_missing_public_view(exc: APIError) -> bool:
 
 
 def _is_missing_function(exc: APIError) -> bool:
-    """RPC player_leaderboard_page появляется только в миграции 013."""
+    """RPC поиска игроков появляется только в миграции 040."""
     code = str(getattr(exc, "code", "") or "").upper()
     text = _error_text(exc)
     if code == "PGRST202" or "pgrst202" in text:
@@ -175,31 +174,67 @@ def leaderboard_achievements(
     return res.data or [], total
 
 
-def player_leaderboard(
-    *, page: int = 1, limit: int = PAGE_SIZE
-) -> tuple[list[dict], int]:
-    """Возвращает (страница игроков, всего игроков).
+def max_ranked_bt_rating() -> float | None:
+    """Максимальный BT-рейтинг среди достижений, дающих очки."""
+    client = auth_service.new_anon_client()
+    res = (
+        client.table("achievements")
+        .select("bt_rating")
+        .eq("status", "published")
+        .eq("ranking_status", "ranked")
+        .not_.is_("rank", None)
+        .not_.is_("bt_rating", None)
+        .order("bt_rating", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        return None
+    return float(res.data[0]["bt_rating"])
 
-    На БД с миграцией 013 доступна постраничная RPC; до её применения
-    используем старую функцию и режем результат на сервере.
-    """
+
+def player_leaderboard(
+    *, page: int = 1, limit: int = PAGE_SIZE, query: str | None = None
+) -> tuple[list[dict], int]:
+    """Возвращает (страница игроков, всего найденных игроков)."""
     client = auth_service.new_anon_client()
     page = max(1, page)
     offset = (page - 1) * limit
+    search = (query or "").strip()[:100]
+    params = {"p_limit": limit, "p_offset": offset, "p_query": search}
     try:
-        res = client.rpc(
-            "player_leaderboard_page",
-            {"p_limit": limit, "p_offset": offset},
-        ).execute()
+        res = client.rpc("player_leaderboard_search_page", params).execute()
     except APIError as exc:
         if not _is_missing_function(exc):
             raise
-        # Только отсутствие новой функции даёт откат к старой; прочие
-        # ошибки БД не должны маскироваться сменой запроса.
         res = client.rpc("player_leaderboard").execute()
         rows = res.data or []
+        if search:
+            needle = search.casefold()
+            rows = [
+                row
+                for row in rows
+                if needle in (row.get("username") or "").casefold()
+                or needle in (row.get("display_name") or "").casefold()
+            ]
+        rows.sort(
+            key=lambda row: (
+                -float(row.get("score") or 0),
+                (row.get("username") or "").casefold(),
+            )
+        )
         total = len(rows)
         return rows[offset : offset + limit], total
     rows = res.data or []
-    total = int(rows[0].get("total_count") or 0) if rows else 0
+    # total_count приходит только со строкой: за пределами выборки нужен
+    # отдельный запрос, иначе несуществующая страница сбросится до первой.
+    if not rows and offset:
+        count_res = client.rpc(
+            "player_leaderboard_search_page",
+            {**params, "p_limit": 1, "p_offset": 0},
+        ).execute()
+        count_rows = count_res.data or []
+        total = int(count_rows[0].get("total_count") or 0) if count_rows else 0
+    else:
+        total = int(rows[0].get("total_count") or 0) if rows else 0
     return rows, total

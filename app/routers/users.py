@@ -3,6 +3,8 @@ from fastapi.responses import HTMLResponse
 
 from app.services import achievements as achievements_service
 from app.services import completions as completions_service
+from app.services import rankings as rankings_service
+from app.services.ranking import player_score as achievement_score
 from app.templating import templates
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -39,15 +41,21 @@ def profile(request: Request, username: str, info: str | None = None) -> HTMLRes
         request, profile_row["id"]
     )
     # Временное место топ-5 не даёт постоянных очков: считаем только
-    # permanent_rank. Чисто временные строки имеют permanent_rank=None и
-    # отсеиваются сами; ranked-достижение с временным слоем сохраняет свой
-    # permanent_rank и должно давать очки. До миграции 027 RPC не возвращает
-    # новые поля — тогда rank и есть постоянное место.
-    ranked = [row for row in completed if row.get("permanent_rank", row.get("rank"))]
+    # опубликованные ranked-достижения с permanent_rank и BT-рейтингом.
+    # Чисто временные строки имеют permanent_rank=None и отсеиваются сами;
+    # ranked-достижение с временным слоем сохраняет permanent_rank и должно
+    # давать очки. До миграции 027 RPC не возвращает новые поля — тогда rank
+    # и ranking_status отсутствуют, поэтому используем прежний fallback.
+    ranked = [
+        row
+        for row in completed
+        if row.get("permanent_rank", row.get("rank"))
+        and row.get("ranking_status", "ranked") == "ranked"
+        and row.get("bt_rating") is not None
+    ]
+    max_bt_rating = rankings_service.max_ranked_bt_rating()
     player_score = round(
-        sum(
-            1000.0 / float(row.get("permanent_rank", row.get("rank"))) for row in ranked
-        ),
+        sum(achievement_score(row.get("bt_rating"), max_bt_rating) for row in ranked),
         2,
     )
     return templates.TemplateResponse(

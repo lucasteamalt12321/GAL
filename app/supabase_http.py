@@ -11,9 +11,18 @@ from urllib.parse import parse_qsl, urlencode
 import httpx
 
 _TABLE_BATCH_SIZE = 1
-_RPC_BATCH_SIZE = 2
+_RPC_BATCH_SIZE = 1
 _MAX_WORKERS = 4
 _CONTENT_RANGE_RE = re.compile(r"^\d+-\d+/(\d+|\*)$")
+_READ_ONLY_RPCS = frozenset(
+    {
+        "achievement_completers",
+        "user_completed_achievements",
+        "player_leaderboard",
+        "player_leaderboard_page",
+        "player_leaderboard_search_page",
+    }
+)
 logger = logging.getLogger(__name__)
 
 
@@ -94,7 +103,11 @@ class SupabaseBatchingTransport(httpx.BaseTransport):
         for attempt in range(2):
             try:
                 return self._request_once(request, url, content, headers)
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            except (
+                httpx.TimeoutException,
+                httpx.NetworkError,
+                httpx.ProtocolError,
+            ) as exc:
                 page_offset = (
                     next((value for key, value in params if key == "offset"), None)
                     if params is not None
@@ -109,8 +122,18 @@ class SupabaseBatchingTransport(httpx.BaseTransport):
                     attempt + 1,
                     type(exc).__name__,
                 )
-                if attempt:
+                if attempt or not self._can_retry(request):
                     raise
+
+    @staticmethod
+    def _can_retry(request: httpx.Request) -> bool:
+        if request.method in {"GET", "HEAD"}:
+            return True
+        return (
+            request.method == "POST"
+            and request.url.path.startswith("/rest/v1/rpc/")
+            and request.url.path.rsplit("/", 1)[-1] in _READ_ONLY_RPCS
+        )
 
     def _request_once(
         self,
@@ -131,12 +154,20 @@ class SupabaseBatchingTransport(httpx.BaseTransport):
             try:
                 for chunk in response.iter_bytes():
                     body.extend(chunk)
-            except (httpx.TimeoutException, httpx.NetworkError):
+                    if self._has_complete_json(body):
+                        break
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.ProtocolError):
                 if not self._has_complete_json(body):
                     logger.warning(
-                        "Supabase response incomplete (%s, bytes=%s)",
+                        "Supabase response incomplete (%s, bytes=%s, status=%s, "
+                        "content_length=%s, transfer_encoding=%s, "
+                        "content_encoding=%s)",
                         request.url.path,
                         len(body),
+                        response.status_code,
+                        response.headers.get("content-length"),
+                        response.headers.get("transfer-encoding"),
+                        response.headers.get("content-encoding"),
                     )
                     raise
             headers = dict(response.headers)

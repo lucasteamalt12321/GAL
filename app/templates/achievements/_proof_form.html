@@ -9,6 +9,12 @@
       <p class="muted">
         Приложите несколько файлов суммарно до {{ max_attachment_bytes // 1048576 }} МБ
         (не более {{ max_files_per_completion }}) или ссылку. Для видео лучше ссылка на YouTube/Диск.
+        {% if is_creator %}
+        Автору нужны файлы или ссылка: без реального доказательства достижение
+        не опубликуешь.
+        {% else %}
+        Достаточно чего-то одного: файлов, ссылки или комментария.
+        {% endif %}
         Абсолютно идентичная повторная заявка блокируется — измените текст, ссылку или файлы.
       </p>
       <label class="field">
@@ -36,7 +42,7 @@
     <label class="field">
       <span class="field-label">Комментарий к прохождению</span>
       <textarea name="comment" rows="3" maxlength="{{ max_comment_length }}"
-                placeholder="Что доказывают приложенные файлы"></textarea>
+                placeholder="Что доказывают файлы или ссылка; можно описать прохождение словами"></textarea>
       <span class="muted">Комментарий относится ко всей заявке: его видят модераторы, а остальные пользователи — если доказательства не скрыты.</span>
     </label>
     <button type="submit" class="btn btn-primary">{{ submit_label|default("Отправить на модерацию") }}</button>

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 from types import SimpleNamespace
+from urllib.parse import unquote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -378,3 +379,80 @@ def test_proof_form_offers_multiple_files_and_comment(
     assert "multiple" in body
     assert 'name="comment"' in body
     assert "16 МБ" in body
+
+
+def _patch_complete_route(monkeypatch: pytest.MonkeyPatch, item: dict) -> _Client:
+    """Заглушки для POST /achievements/5/complete без обращений в сеть."""
+    fake = _Client()
+    monkeypatch.setattr(auth_service, "resolve_user", lambda _request: USER)
+    monkeypatch.setattr(auth_service, "user_client_from_request", lambda _r: fake)
+    monkeypatch.setattr(achievements_service, "get_achievement", lambda *_: item)
+    monkeypatch.setattr(evaluation_service, "list_user_scale", lambda _r: [])
+    monkeypatch.setattr(completions_service, "get_user_completion", lambda *_: None)
+    monkeypatch.setattr(
+        completions_service, "create_completion", lambda *_a, **_k: {"id": 7}
+    )
+    return fake
+
+
+def test_complete_endpoint_accepts_comment_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D28: комментарий без файлов и ссылки — самодостаточная заявка."""
+    fake = _patch_complete_route(monkeypatch, _achievement())
+
+    response = client.post(
+        "/achievements/5/complete",
+        data={"comment": "Собираю пьесу по нотам уже месяц, файлов нет"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/achievements/5?info=submitted"
+    assert fake.bucket.uploads == []
+    assert (
+        "set_completion_comment",
+        {
+            "p_completion_id": 7,
+            "p_comment": "Собираю пьесу по нотам уже месяц, файлов нет",
+        },
+    ) in fake.rpcs
+
+
+def test_complete_endpoint_rejects_totally_empty_submission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _patch_complete_route(monkeypatch, _achievement())
+
+    response = client.post(
+        "/achievements/5/complete",
+        data={"comment": "   "},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    location = unquote(response.headers["location"])
+    assert "error=" in location
+    assert "нужно хотя бы одно" in location
+    assert fake.rpcs == []
+
+
+def test_complete_endpoint_requires_real_proof_from_creator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Автору комментария недостаточно: без файла или ссылки публикация невозможна."""
+    item = _achievement()
+    item["creator_id"] = USER.id
+    fake = _patch_complete_route(monkeypatch, item)
+
+    response = client.post(
+        "/achievements/5/complete",
+        data={"comment": "я автор, поверьте"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    location = unquote(response.headers["location"])
+    assert "error=" in location
+    assert "нельзя отправить на модерацию" in location
+    assert fake.rpcs == []

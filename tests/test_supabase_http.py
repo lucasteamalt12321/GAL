@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 
 from app.supabase_http import (
     SupabaseBatchingTransport,
@@ -137,18 +138,30 @@ def test_rpc_pages_are_batched_and_query_is_preserved() -> None:
     assert response.status_code == 200
     assert len(response.json()) == 25
     assert calls == [
-        (0, 2, "user"),
-        (2, 2, "user"),
-        (4, 2, "user"),
-        (6, 2, "user"),
-        (8, 2, "user"),
-        (10, 2, "user"),
-        (12, 2, "user"),
-        (14, 2, "user"),
-        (16, 2, "user"),
-        (18, 2, "user"),
-        (20, 2, "user"),
-        (22, 2, "user"),
+        (0, 1, "user"),
+        (1, 1, "user"),
+        (2, 1, "user"),
+        (3, 1, "user"),
+        (4, 1, "user"),
+        (5, 1, "user"),
+        (6, 1, "user"),
+        (7, 1, "user"),
+        (8, 1, "user"),
+        (9, 1, "user"),
+        (10, 1, "user"),
+        (11, 1, "user"),
+        (12, 1, "user"),
+        (13, 1, "user"),
+        (14, 1, "user"),
+        (15, 1, "user"),
+        (16, 1, "user"),
+        (17, 1, "user"),
+        (18, 1, "user"),
+        (19, 1, "user"),
+        (20, 1, "user"),
+        (21, 1, "user"),
+        (22, 1, "user"),
+        (23, 1, "user"),
         (24, 1, "user"),
     ]
 
@@ -198,6 +211,87 @@ def test_timeout_is_retried_once() -> None:
     assert calls == 2
 
 
+def test_local_protocol_error_is_retried_for_read_rpc() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.LocalProtocolError("incomplete response", request=request)
+        return httpx.Response(200, json=[{"username": "user-1"}])
+
+    inner = httpx.Client(transport=httpx.MockTransport(handler))
+    transport = SupabaseBatchingTransport(2, client=inner)
+    with httpx.Client(
+        transport=transport, base_url="https://test.supabase.co"
+    ) as client:
+        response = client.post(
+            "/rest/v1/rpc/player_leaderboard_page",
+            json={"p_limit": 1, "p_offset": 0},
+        )
+
+    assert response.json() == [{"username": "user-1"}]
+    assert calls == 2
+
+
+def test_partial_remote_protocol_error_is_retried_for_get() -> None:
+    calls = 0
+
+    class PartialStream(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b'[{"id":'
+            raise httpx.RemoteProtocolError("peer closed early")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                200,
+                headers={"transfer-encoding": "chunked"},
+                stream=PartialStream(),
+            )
+        return httpx.Response(200, json=[{"id": 1}])
+
+    inner = httpx.Client(transport=httpx.MockTransport(handler))
+    transport = SupabaseBatchingTransport(2, client=inner)
+    with httpx.Client(
+        transport=transport, base_url="https://test.supabase.co"
+    ) as client:
+        response = client.get(
+            "/rest/v1/profiles",
+            params={"select": "id", "limit": 1, "offset": 0},
+        )
+
+    assert response.json() == [{"id": 1}]
+    assert calls == 2
+
+
+def test_protocol_error_is_not_retried_for_write_rpc() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.LocalProtocolError("incomplete response", request=request)
+
+    inner = httpx.Client(transport=httpx.MockTransport(handler))
+    transport = SupabaseBatchingTransport(2, client=inner)
+    with (
+        httpx.Client(
+            transport=transport, base_url="https://test.supabase.co"
+        ) as client,
+        pytest.raises(httpx.LocalProtocolError),
+    ):
+        client.post(
+            "/rest/v1/rpc/submit_evaluation",
+            json={"p_achievement_id": 1, "p_harder_count": 0},
+        )
+
+    assert calls == 1
+
+
 def test_http_error_is_not_retried() -> None:
     calls = 0
 
@@ -220,11 +314,11 @@ def test_http_error_is_not_retried() -> None:
     assert calls == 1
 
 
-def test_complete_json_is_accepted_when_final_chunk_times_out() -> None:
+def test_complete_json_stops_reading_before_stream_terminator() -> None:
     class MissingTerminator(httpx.SyncByteStream):
         def __iter__(self):
             yield b'[{"id": 1}]'
-            raise httpx.ReadTimeout("missing final chunk")
+            raise AssertionError("stream was read after complete JSON")
 
     inner = httpx.Client(
         transport=httpx.MockTransport(

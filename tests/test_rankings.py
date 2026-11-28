@@ -15,6 +15,7 @@ client = TestClient(app)
 # исходную функцию, сохранённую до применения autouse-фикстуры.
 _real_leaderboard_achievements = rankings_service.leaderboard_achievements
 _real_player_leaderboard = rankings_service.player_leaderboard
+_real_max_ranked_bt_rating = rankings_service.max_ranked_bt_rating
 
 
 class _FakeQuery:
@@ -127,11 +128,21 @@ def _preliminary(aid: int, strength: float) -> dict:
     return row
 
 
+class _RecordingNot:
+    def __init__(self, query: "_RecordingQuery") -> None:
+        self.query = query
+
+    def is_(self, *args):
+        self.query.calls.append(("is", *args))
+        return self.query
+
+
 class _RecordingQuery:
     def __init__(self, rows: list[dict]) -> None:
         self.rows = rows
         self.calls: list[tuple] = []
         self.count = len(rows)
+        self.not_ = _RecordingNot(self)
 
     def select(self, *args, **kwargs):
         self.calls.append(("select", args, kwargs))
@@ -186,43 +197,49 @@ def _players() -> list[dict]:
     ]
 
 
-def test_leaderboard_renders_rows(monkeypatch) -> None:
-    monkeypatch.setattr(
-        rankings_service,
-        "leaderboard_achievements",
-        lambda **_: ([_achievement(1, 1, 1.0, 5), _achievement(2, 2, 2.33, 3)], 2),
-    )
-    monkeypatch.setattr(
-        rankings_service, "player_leaderboard", lambda **_: (_players(), 2)
-    )
-    resp = client.get("/leaderboard")
+def test_leaderboard_renders_players_with_search(monkeypatch) -> None:
+    captured: list[dict] = []
+
+    def _players_page(**kwargs):
+        captured.append(kwargs)
+        return _players(), 2
+
+    monkeypatch.setattr(rankings_service, "player_leaderboard", _players_page)
+    resp = client.get("/leaderboard?q=  ALI  ")
     assert resp.status_code == 200
     body = resp.text
-    assert "Рейтинг" in body
-    assert "Топ достижений" in body
-    assert "Achievement 1" in body
-    assert "Alice" in body
+    assert 'href="/leaderboard">Игроки</a>' in body
+    assert "<h1>Игроки</h1>" in body
+    assert 'name="q" value="ALI"' in body
+    assert 'href="/users/alice"' in body
     assert "1500.0" in body
-    assert "1200" in body
-    assert "± 18 · 95% ДИ 1165–1235" in body
+    assert "Топ достижений" not in body
+    assert "Achievement 1" not in body
+    assert captured == [{"page": 1, "query": "ALI"}]
 
 
-def test_leaderboard_omits_interval_without_enough_data(monkeypatch) -> None:
+def test_leaderboard_empty_state(monkeypatch) -> None:
+    captured: list[dict] = []
     monkeypatch.setattr(
         rankings_service,
-        "leaderboard_achievements",
-        lambda **_: (
-            [_achievement(1, 1, se=None, ci_low=None, ci_high=None, comparisons=1)],
-            1,
-        ),
+        "player_leaderboard",
+        lambda **kwargs: captured.append(kwargs) or ([], 0),
     )
-    monkeypatch.setattr(
-        rankings_service, "player_leaderboard", lambda **_: (_players(), 2)
-    )
+
     resp = client.get("/leaderboard")
+
     assert resp.status_code == 200
-    assert "± " not in resp.text
-    assert "1165" not in resp.text
+    assert "Пока нет игроков с очками" in resp.text
+    assert captured == [{"page": 1, "query": None}]
+
+
+def test_leaderboard_search_empty_state(monkeypatch) -> None:
+    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: ([], 0))
+
+    resp = client.get("/leaderboard?q=nobody")
+
+    assert resp.status_code == 200
+    assert "По запросу «nobody» игроки не найдены" in resp.text
 
 
 def test_leaderboard_service_falls_back_before_migration(monkeypatch) -> None:
@@ -275,22 +292,33 @@ class _RpcQuery:
 
 
 class _RpcClient:
-    def __init__(self, error_for: dict[str, Exception]) -> None:
+    def __init__(
+        self,
+        error_for: dict[str, Exception],
+        data_for: dict[str, list[dict]] | None = None,
+    ) -> None:
         self.error_for = error_for
+        self.data_for = data_for or {}
         self.calls: list[str] = []
+        self.params: dict[str, dict] = {}
 
-    def rpc(self, name: str, _params: dict | None = None):
+    def rpc(self, name: str, params: dict | None = None):
         self.calls.append(name)
+        self.params[name] = params or {}
         error = self.error_for.get(name)
         if error is not None:
             return _RpcQuery(error)
-        return SimpleNamespace(execute=lambda: SimpleNamespace(data=[], count=None))
+        return SimpleNamespace(
+            execute=lambda: SimpleNamespace(
+                data=self.data_for.get(name, []), count=None
+            )
+        )
 
 
 def _missing_function() -> APIError:
     return APIError(
         {
-            "message": "Could not find the function public.player_leaderboard_page",
+            "message": "Could not find the function public.player_leaderboard_search_page",
             "code": "PGRST202",
             "details": None,
             "hint": None,
@@ -299,14 +327,14 @@ def _missing_function() -> APIError:
 
 
 def test_player_leaderboard_falls_back_when_rpc_missing(monkeypatch) -> None:
-    fake = _RpcClient({"player_leaderboard_page": _missing_function()})
+    fake = _RpcClient({"player_leaderboard_search_page": _missing_function()})
     monkeypatch.setattr(auth_service, "new_anon_client", lambda: fake)
 
     rows, total = _real_player_leaderboard()
 
     assert rows == []
     assert total == 0
-    assert fake.calls == ["player_leaderboard_page", "player_leaderboard"]
+    assert fake.calls == ["player_leaderboard_search_page", "player_leaderboard"]
 
 
 def test_player_leaderboard_propagates_other_rpc_errors(monkeypatch) -> None:
@@ -318,12 +346,76 @@ def test_player_leaderboard_propagates_other_rpc_errors(monkeypatch) -> None:
             "hint": None,
         }
     )
-    fake = _RpcClient({"player_leaderboard_page": broken})
+    fake = _RpcClient({"player_leaderboard_search_page": broken})
     monkeypatch.setattr(auth_service, "new_anon_client", lambda: fake)
 
     with pytest.raises(APIError):
         _real_player_leaderboard()
-    assert fake.calls == ["player_leaderboard_page"]
+    assert fake.calls == ["player_leaderboard_search_page"]
+
+
+def test_player_leaderboard_uses_search_rpc_and_total_count(monkeypatch) -> None:
+    rows = [{**_players()[0], "total_count": 7}]
+    fake = _RpcClient({}, {"player_leaderboard_search_page": rows})
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: fake)
+
+    page, total = _real_player_leaderboard(page=2, query="  Alice  ")
+
+    assert page == rows
+    assert total == 7
+    assert fake.params["player_leaderboard_search_page"] == {
+        "p_limit": 25,
+        "p_offset": 25,
+        "p_query": "Alice",
+    }
+
+
+def test_player_leaderboard_recovers_total_past_last_page(monkeypatch) -> None:
+    class _OutOfRangeClient(_RpcClient):
+        def rpc(self, name: str, params: dict | None = None):
+            self.calls.append(name)
+            self.params[name] = params or {}
+            rows = [] if params and params["p_offset"] else [{"total_count": 80}]
+            return SimpleNamespace(execute=lambda: SimpleNamespace(data=rows))
+
+    fake = _OutOfRangeClient({})
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: fake)
+
+    rows, total = _real_player_leaderboard(page=4)
+
+    assert rows == []
+    assert total == 80
+    assert fake.params["player_leaderboard_search_page"] == {
+        "p_limit": 1,
+        "p_offset": 0,
+        "p_query": "",
+    }
+
+
+def test_player_leaderboard_fallback_searches_literally_and_sorts(monkeypatch) -> None:
+    rows = [
+        {"username": "zoe", "display_name": "Alice", "score": 100},
+        {"username": "alice", "display_name": "ALICE", "score": 100},
+        {"username": "percent", "display_name": "100%", "score": 200},
+        {"username": "underscore", "display_name": "a_b", "score": 300},
+        {"username": "other", "display_name": "Other", "score": 400},
+    ]
+    fake = _RpcClient(
+        {"player_leaderboard_search_page": _missing_function()},
+        {"player_leaderboard": rows},
+    )
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: fake)
+
+    page, total = _real_player_leaderboard(query="ALICE", limit=1)
+
+    assert [row["username"] for row in page] == ["alice"]
+    assert total == 2
+    page, total = _real_player_leaderboard(query="%", limit=1)
+    assert [row["username"] for row in page] == ["percent"]
+    assert total == 1
+    page, total = _real_player_leaderboard(query="a_b")
+    assert [row["username"] for row in page] == ["underscore"]
+    assert total == 1
 
 
 def test_leaderboard_service_uses_view_after_migration(monkeypatch) -> None:
@@ -353,71 +445,6 @@ def test_leaderboard_service_propagates_other_storage_errors(monkeypatch) -> Non
     assert fake_client.selects == ["id", rankings_service.VIEW_SELECT]
 
 
-def test_leaderboard_survives_missing_uncertainty_columns(monkeypatch) -> None:
-    row = _achievement(1, 1)
-    for key in ("bt_rating_se", "bt_rating_ci_low", "bt_rating_ci_high"):
-        row.pop(key)
-    monkeypatch.setattr(
-        rankings_service, "leaderboard_achievements", lambda **_: ([row], 1)
-    )
-    monkeypatch.setattr(
-        rankings_service, "player_leaderboard", lambda **_: (_players(), 2)
-    )
-    resp = client.get("/leaderboard")
-    assert resp.status_code == 200
-    assert "Achievement 1" in resp.text
-
-
-def test_leaderboard_empty_state(monkeypatch) -> None:
-    monkeypatch.setattr(
-        rankings_service, "leaderboard_achievements", lambda **_: ([], 0)
-    )
-    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: ([], 0))
-    resp = client.get("/leaderboard")
-    assert resp.status_code == 200
-    assert "Пока нет оценённых достижений" in resp.text
-    assert "Пока нет очков" in resp.text
-
-
-def test_leaderboard_interleaves_preliminary_without_renumbering(monkeypatch) -> None:
-    rows = [
-        _preliminary(31, 1.25),
-        _achievement(46, 1, 1.5, 2),
-        _preliminary(36, -0.38),
-        _achievement(33, 2, 2.0, 2),
-        _achievement(35, 3, 3.0, 3),
-    ]
-    monkeypatch.setattr(
-        rankings_service, "leaderboard_achievements", lambda **_: (rows, len(rows))
-    )
-    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: ([], 0))
-    resp = client.get("/leaderboard")
-    assert resp.status_code == 200
-    body = resp.text
-    # Шаблон сохраняет порядок сервиса: предварительные строки стоят выше
-    # или ниже оценённых, но не сдвигают их номера.
-    assert body.index("Achievement 31") < body.index("Achievement 46")
-    assert body.index("Achievement 36") < body.index("Achievement 33")
-    assert "#1" in body
-    assert "#2" in body
-    assert "#3" in body
-    assert "#None" not in body
-    assert "lb-rank-unknown" in body
-
-
-def test_leaderboard_marks_temporary_rank(monkeypatch) -> None:
-    row = _achievement(5, 3, avg=1.0, count=1)
-    row["is_temporary"] = True
-    monkeypatch.setattr(
-        rankings_service, "leaderboard_achievements", lambda **_: ([row], 1)
-    )
-    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: ([], 0))
-    resp = client.get("/leaderboard")
-    assert resp.status_code == 200
-    assert '#3<span title="Временное место в топ-5">*</span>' in resp.text
-    assert "«*» — временное место в топ-5" in resp.text
-
-
 def test_leaderboard_service_keeps_single_evaluation_rows(monkeypatch) -> None:
     rows = [_preliminary(31, 1.25)]
     fake = _RecordingClient(rows)
@@ -438,57 +465,56 @@ def test_leaderboard_service_keeps_single_evaluation_rows(monkeypatch) -> None:
     )
 
 
-def test_leaderboard_keeps_service_order(monkeypatch) -> None:
-    rows = [
-        {
-            "username": "low",
-            "display_name": "Low",
-            "score": 500.0,
-            "achievement_count": 1,
-        },
-        {
-            "username": "high",
-            "display_name": "High",
-            "score": 2500.0,
-            "achievement_count": 3,
-        },
-    ]
-    monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: (rows, 2))
-    monkeypatch.setattr(
-        rankings_service, "leaderboard_achievements", lambda **_: ([], 0)
-    )
-    resp = client.get("/leaderboard")
-    assert resp.status_code == 200
-    body = resp.text
-    assert body.index("Low") < body.index("High")
+def test_leaderboard_pagination_preserves_search(monkeypatch) -> None:
+    captured: list[dict] = []
 
+    def _players_page(**kwargs):
+        captured.append(kwargs)
+        return _players(), 80
 
-def test_leaderboard_pagination_links(monkeypatch) -> None:
-    monkeypatch.setattr(
-        rankings_service,
-        "leaderboard_achievements",
-        lambda **_: ([_achievement(1, 1)], 80),
-    )
-    monkeypatch.setattr(
-        rankings_service, "player_leaderboard", lambda **_: (_players(), 80)
-    )
-    resp = client.get("/leaderboard?page=2&players_page=2")
+    monkeypatch.setattr(rankings_service, "player_leaderboard", _players_page)
+
+    resp = client.get("/leaderboard?players_page=2&q=ali")
+
     assert resp.status_code == 200
     assert "Страница 2 из 4" in resp.text
-    assert "page=3" in resp.text
     assert "players_page=3" in resp.text
+    assert "q=ali" in resp.text
+    assert captured == [{"page": 2, "query": "ali"}]
 
 
 def test_leaderboard_out_of_range_redirects(monkeypatch) -> None:
-    monkeypatch.setattr(
-        rankings_service, "leaderboard_achievements", lambda **_: ([], 0)
-    )
     monkeypatch.setattr(rankings_service, "player_leaderboard", lambda **_: ([], 0))
 
-    resp = client.get("/leaderboard?page=2", follow_redirects=False)
-    assert resp.status_code == 303
-    assert "page=1" in resp.headers["location"]
+    resp = client.get("/leaderboard?players_page=3&q=ali", follow_redirects=False)
 
-    resp = client.get("/leaderboard?players_page=3", follow_redirects=False)
     assert resp.status_code == 303
     assert "players_page=1" in resp.headers["location"]
+    assert "q=ali" in resp.headers["location"]
+
+
+def test_max_ranked_bt_rating_queries_only_eligible_achievements(
+    monkeypatch,
+) -> None:
+    fake = _RecordingClient([{"bt_rating": 1280.0282}])
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: fake)
+
+    assert _real_max_ranked_bt_rating() == 1280.0282
+    assert fake.query.calls == [
+        ("select", ("bt_rating",), {}),
+        ("eq", "status", "published"),
+        ("eq", "ranking_status", "ranked"),
+        ("is", "rank", None),
+        ("is", "bt_rating", None),
+        ("order", ("bt_rating",), {"desc": True}),
+        ("limit", 1),
+    ]
+
+
+def test_max_ranked_bt_rating_returns_none_without_eligible_achievements(
+    monkeypatch,
+) -> None:
+    fake = _RecordingClient([])
+    monkeypatch.setattr(auth_service, "new_anon_client", lambda: fake)
+
+    assert _real_max_ranked_bt_rating() is None
